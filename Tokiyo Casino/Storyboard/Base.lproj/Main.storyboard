@@ -488,6 +488,9 @@
                                                         <buttonConfiguration key="configuration" style="filled" title="Bet" cornerStyle="capsule">
                                                             <color key="baseBackgroundColor" red="0.94901967050000002" green="0.64313727620000005" blue="0.24313727020000001" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
                                                         </buttonConfiguration>
+                                                        <connections>
+                                                            <action selector="betButtonTapped:" destination="zBi-JU-8yu" eventType="touchUpInside" id="Ogi-pe-LJL"/>
+                                                        </connections>
                                                     </button>
                                                 </subviews>
                                             </stackView>
@@ -542,13 +545,13 @@
                     </view>
                     <navigationItem key="navigationItem" id="aqw-h7-fsw"/>
                     <connections>
-                        <outlet property="betCashOutButton" destination="Lku-GC-RRX" id="G5E-IN-QJW"/>
+                        <outlet property="betButton" destination="Lku-GC-RRX" id="YCU-ix-4SG"/>
                         <outlet property="betTextField" destination="iDg-st-9IW" id="grC-uc-o3a"/>
                         <outlet property="collectionView" destination="8kA-wD-ETW" id="ZLM-uA-UpO"/>
                         <outlet property="imageBackButton" destination="fAt-UY-mu5" id="ihl-nc-hdR"/>
-                        <outlet property="mineSlider" destination="fxS-bv-lVz" id="18z-yZ-o7O"/>
-                        <outlet property="minusButtonImageView" destination="1js-Er-n0T" id="YgM-Qr-2zM"/>
-                        <outlet property="plusButtonImageView" destination="ylh-nn-oq9" id="2fS-Nh-tjq"/>
+                        <outlet property="mineCountSlider" destination="fxS-bv-lVz" id="Gk3-tZ-HBg"/>
+                        <outlet property="minusImageView" destination="1js-Er-n0T" id="2dn-Gy-ZuS"/>
+                        <outlet property="plusImageView" destination="ylh-nn-oq9" id="TZV-Un-cRl"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="ADg-cq-8B6" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>

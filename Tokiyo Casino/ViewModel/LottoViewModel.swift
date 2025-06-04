@@ -6,304 +6,153 @@
 //
 
 import Foundation
-import CoreData
-
-enum LottoBetError: Error {
-    case empty
-    case belowMinimum
-    case insufficientFunds
-
-    var message: String {
-        switch self {
-        case .empty:
-            return "Please enter a bet amount!"
-        case .belowMinimum:
-            return "Minimum bet is 100 coins!"
-        case .insufficientFunds:
-            return "You don't have enough coins!"
-        }
-    }
-}
-
-/// Result of validating a bet
-struct LottoBetValidationResult {
-    let isValid: Bool
-    let clampedAmount: Int
-    let error: LottoBetError?
-}
-
-struct LottoCellData {
-    var state: CellState
-}
 
 class LottoViewModel {
-    
-    // MARK: - Properties
-    var onUpdate: (() -> Void)?
-    
+        
+    // MARK: – Board Configuration
     let totalRows = 6
     let totalColumns = 4
+    let totalCells: Int
     
-    // Flat array used by the collection view (24 cells)
-    var cells: [LottoCellData] = []
+    /// How many mines the player chose (4…16)
+    private(set) var mineCount: Int = 4
     
-    // 2D array for full board outcomes
-    var board: [[CellState]] = []
+    /// Flat array of length 24. Before reveal: all .normal.
+    /// After generating board: each index is either .mine or .diamond (hidden until tapped).
+    private(set) var board: [CellState]
     
-    // Game state
-    private(set) var currentBetAmount: Int = 100
-    var numberOfMines: Int = 4
-    var currentMultiplier: Double = 1.0
-    var gameOver: Bool = false
-    var gameStarted: Bool = false
-    var revealedDiamonds: Int = 0
-    var totalSafeCells: Int { return (totalRows * totalColumns) - numberOfMines }
+    /// Tracks whether a given index has already been revealed.
+    var revealed: [Bool]
     
-    var totalCoins: Int64 {
-        return CoinsManager.shared.userStats?.totalCoins ?? 0
-    }
+    /// Count of diamonds found so far in the current round.
+    private(set) var diamondsFound: Int = 0
     
-    // Multiplier calculation based on mines and revealed diamonds
+    /// Has the player hit a mine or cashed out? If true, no further taps should do anything.
+    private(set) var gameOver: Bool = false
+    
+    
+    // MARK: – Multipliers Lookup
+    ///
+    /// For a given mineCount (4, 6, 8, …, 16), this array
+    /// shows the multiplier for each diamond the player uncovers.
+    /// E.g. `baseMultipliers[4] = [1.15, 1.35, 1.6, …]`.
     private let baseMultipliers: [Int: [Double]] = [
-        4: [1.15, 1.35, 1.6, 1.9, 2.25, 2.7, 3.2, 3.8, 4.5, 5.4, 6.5, 7.8, 9.4, 11.3, 13.6, 16.3, 19.6, 23.5, 28.2, 33.9],
-        6: [1.25, 1.6, 2.0, 2.5, 3.2, 4.0, 5.0, 6.3, 7.9, 9.9, 12.4, 15.5, 19.4, 24.3, 30.4, 38.0, 47.5, 59.4],
-        8: [1.4, 1.9, 2.6, 3.5, 4.8, 6.5, 8.8, 11.9, 16.1, 21.8, 29.5, 39.9, 54.0, 73.1, 98.9, 133.9],
-        10: [1.6, 2.4, 3.6, 5.4, 8.1, 12.2, 18.3, 27.4, 41.1, 61.7, 92.5, 138.8, 208.2, 312.3],
-        12: [1.8, 3.0, 5.0, 8.3, 13.9, 23.1, 38.5, 64.2, 107.0, 178.3, 297.2, 495.3],
-        14: [2.1, 3.9, 7.3, 13.6, 25.4, 47.4, 88.5, 165.2, 308.4, 575.8],
-        16: [2.5, 5.2, 10.8, 22.5, 46.9, 97.7, 203.5, 424.1]
+        4:  [1.15, 1.35, 1.60, 1.90, 2.25, 2.70, 3.20, 3.80,
+             4.50, 5.40, 6.50, 7.80, 9.40, 11.30, 13.60, 16.30,
+             19.60, 23.50, 28.2, 33.9],
+        6:  [1.25, 1.60, 2.00, 2.50, 3.20, 4.00, 5.00, 6.30,
+             7.90, 9.90, 12.4, 15.5, 19.4, 24.3, 30.4, 38.0,
+             47.5, 59.4],
+        8:  [1.40, 1.90, 2.60, 3.50, 4.80, 6.50, 8.80, 11.9,
+             16.1, 21.8, 29.5, 39.9, 54.0, 73.1, 98.9, 133.9],
+        10: [1.60, 2.40, 3.60, 5.40, 8.10, 12.2, 18.3, 27.4,
+             41.1, 61.7, 92.5, 138.8, 208.2, 312.3],
+        12: [1.80, 3.00, 5.00, 8.30, 13.9, 23.1, 38.5, 64.2,
+             107.0, 178.3, 297.2, 495.3],
+        14: [2.10, 3.90, 7.30, 13.6, 25.4, 47.4, 88.5, 165.2,
+             308.4, 575.8],
+        16: [2.50, 5.20, 10.8, 22.5, 46.9, 97.7, 203.5, 424.1]
     ]
     
-    // MARK: - Init
+    
+    // MARK: – Initialization
     init() {
-        // Initialize the flat cells array with .normal state
-        let totalCount = totalRows * totalColumns
-        cells = Array(repeating: LottoCellData(state: .normal), count: totalCount)
-        observeCoinsChange()
+        totalCells = totalRows * totalColumns
+        board = Array(repeating: .normal, count: totalCells)
+        revealed = Array(repeating: false, count: totalCells)
     }
     
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-    
-    // MARK: - Observe Coin Updates
-    private func observeCoinsChange() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(coinsDidChange),
-            name: CoinsManager.coinsDidChangeNotification,
-            object: nil
-        )
-    }
-    
-    @objc private func coinsDidChange() {
-        // If bet is now more than available coins, clamp it
-        if Int64(currentBetAmount) > totalCoins {
-            currentBetAmount = max(100, Int(totalCoins))
-            onUpdate?()
-        }
-    }
-    
-    var numberOfCells: Int {
-        return cells.count
-    }
-    
-    func cellData(at index: Int) -> LottoCellData? {
-        guard index >= 0 && index < cells.count else { return nil }
-        return cells[index]
-    }
-    
-    // MARK: - Bet Management
-    func increaseBet() {
-        let next = currentBetAmount + 100
-        if Int64(next) <= totalCoins {
-            currentBetAmount = next
-        } else {
-            currentBetAmount = Int(totalCoins)
-        }
-        onUpdate?()
-    }
-    
-    func decreaseBet() {
-        currentBetAmount = max(100, currentBetAmount - 100)
-        onUpdate?()
-    }
-    
-    func validateBetInput(_ text: String?) -> LottoBetValidationResult {
-        guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !t.isEmpty else {
-            return LottoBetValidationResult(isValid: false,
-                                           clampedAmount: currentBetAmount,
-                                           error: .empty)
-        }
-        
-        guard let value = Int(t) else {
-            currentBetAmount = 100
-            return LottoBetValidationResult(isValid: false,
-                                           clampedAmount: 100,
-                                           error: .belowMinimum)
-        }
-        
-        if value < 100 {
-            currentBetAmount = 100
-            return LottoBetValidationResult(isValid: false,
-                                           clampedAmount: 100,
-                                           error: .belowMinimum)
-        }
-        
-        if Int64(value) > totalCoins {
-            let clamped = Int(totalCoins)
-            currentBetAmount = clamped
-            return LottoBetValidationResult(isValid: false,
-                                           clampedAmount: clamped,
-                                           error: .insufficientFunds)
-        }
-        
-        currentBetAmount = value
-        return LottoBetValidationResult(isValid: true,
-                                       clampedAmount: value,
-                                       error: nil)
-    }
-    
-    // MARK: - Game Setup
-    func generateBoard() {
-        board = []
-        
-        // Create flat array for easier mine placement
-        var flatBoard = Array(repeating: CellState.diamond, count: totalRows * totalColumns)
-        
-        // Place mines randomly
-        var minePositions = Set<Int>()
-        while minePositions.count < numberOfMines {
-            let randomPosition = Int.random(in: 0..<(totalRows * totalColumns))
-            minePositions.insert(randomPosition)
-        }
-        
-        // Set mines in flat board
-        for position in minePositions {
-            flatBoard[position] = .mine
-        }
-        
-        // Convert flat board to 2D array
-        for row in 0..<totalRows {
-            var boardRow: [CellState] = []
-            for col in 0..<totalColumns {
-                let index = row * totalColumns + col
-                boardRow.append(flatBoard[index])
-            }
-            board.append(boardRow)
-        }
-        
-        print("DEBUG: Generated board with \(numberOfMines) mines")
-    }
-    
-    func startGame(completion: @escaping (Result<Void, Error>) -> Void) {
-        // Deduct bet first
-        CoinsManager.shared.deductCoins(amount: Int64(currentBetAmount)) { [weak self] result in
-            guard let self = self else { return }
-            
-            switch result {
-            case .success():
-                self.generateBoard()
-                self.currentMultiplier = 1.0
-                self.gameOver = false
-                self.gameStarted = true
-                self.revealedDiamonds = 0
-                
-                // Reset flat cells array to all normal
-                let totalCount = self.totalRows * self.totalColumns
-                self.cells = Array(repeating: LottoCellData(state: .normal), count: totalCount)
-                completion(.success(()))
-                
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
-    }
-    
-    // MARK: - Game Actions
-    func revealCell(at index: Int) -> CellState {
-        guard index >= 0 && index < cells.count && !gameOver else { return .normal }
-        
-        let row = index / totalColumns
-        let col = index % totalColumns
-        let cellOutcome = board[row][col]
-        
-        cells[index].state = cellOutcome
-        
-        if cellOutcome == .diamond {
-            revealedDiamonds += 1
-            updateMultiplier()
-        } else if cellOutcome == .mine {
-            gameOver = true
-            revealAllMines()
-        }
-        
-        return cellOutcome
-    }
-    
-    private func updateMultiplier() {
-        if let multipliers = baseMultipliers[numberOfMines], revealedDiamonds > 0 && revealedDiamonds <= multipliers.count {
-            currentMultiplier = multipliers[revealedDiamonds - 1]
-        }
-    }
-    
-    func revealAllMines() {
-        for row in 0..<totalRows {
-            for col in 0..<totalColumns {
-                let index = row * totalColumns + col
-                if board[row][col] == .mine {
-                    cells[index].state = .mine
-                }
-            }
-        }
-    }
-    
-    func isGameWon() -> Bool {
-        return revealedDiamonds == totalSafeCells && !gameOver
-    }
-    
-    func cashOut(completion: @escaping (Result<(finalAmount: Double, netGain: Double), Error>) -> Void) {
-        let finalAmount = Double(currentBetAmount) * currentMultiplier
-        let netGain = finalAmount - Double(currentBetAmount)
-        
-        gameOver = true
-        
-        // Add winnings
-        CoinsManager.shared.addCoins(amount: Int64(finalAmount)) { result in
-            switch result {
-            case .success():
-                completion(.success((finalAmount: finalAmount, netGain: netGain)))
-            case .failure(let error):
-                completion(.failure(error))
-            }
-        }
-    }
-    
-    // MARK: - Calculations
-    func finalAmount() -> Double {
-        return Double(currentBetAmount) * currentMultiplier
-    }
-    
-    func netGain() -> Double {
-        return finalAmount() - Double(currentBetAmount)
-    }
-    
-    func nextMultiplier() -> Double? {
-        if let multipliers = baseMultipliers[numberOfMines], revealedDiamonds < multipliers.count {
-            return multipliers[revealedDiamonds]
-        }
-        return nil
-    }
-    
-    // MARK: - Reset Game
-    func resetGame() {
-        currentMultiplier = 1.0
+    /// Call this once the user taps “Bet” and the coins have been deducted.
+    func startNewRound(mines: Int) {
+        mineCount = max(4, min(mines, 16))   // clamp 4…16
+        generateBoard()
+        diamondsFound = 0
         gameOver = false
-        gameStarted = false
-        revealedDiamonds = 0
-        let totalCount = totalRows * totalColumns
-        cells = Array(repeating: LottoCellData(state: .normal), count: totalCount)
-        board = []
+        revealed = Array(repeating: false, count: totalCells)
+    }
+    
+    /// Randomly place `mineCount` mines among 24 cells.
+    /// The remaining cells become diamonds.
+    private func generateBoard() {
+        // 1. Start with an array of 24 “.diamond”
+        var temp = Array(repeating: CellState.diamond, count: totalCells)
+        
+        // 2. Randomly pick `mineCount` distinct indices to become .mine
+        var indices = Array(0..<totalCells)
+        indices.shuffle()
+        let mineIndices = Array(indices.prefix(mineCount))
+        
+        for idx in mineIndices {
+            temp[idx] = .mine
+        }
+        
+        board = temp
+    }
+    
+    /// Returns the state at a given index (only valid after `startNewRound`).
+    func cellState(at index: Int) -> CellState {
+        guard index >= 0 && index < totalCells else { return .normal }
+        return board[index]
+    }
+    
+    /// Reveal the tapped cell at `index`. Returns a tuple:
+    ///   ( newState, gameEnded: Bool, diamondsSoFar: Int, currentMultiplier: Double? )
+    ///
+    /// - If the tapped cell is a diamond:
+    ///     • increments `diamondsFound`
+    ///     • looks up `currentMultiplier = baseMultipliers[mineCount]?[diamondsFound–1]`
+    ///     • returns `( .diamond, false, diamondsFound, currentMultiplier )`
+    ///
+    /// - If it’s a mine:
+    ///     • sets `gameOver = true`
+    ///     • returns `( .mine, true, diamondsFound, nil )`
+    ///
+    func revealCell(at index: Int) -> (newState: CellState, gameEnded: Bool, diamondsSoFar: Int, currentMultiplier: Double?) {
+        guard !gameOver, index >= 0, index < totalCells, !revealed[index] else {
+            return (.normal, gameOver, diamondsFound, nil)
+        }
+        
+        revealed[index] = true
+        let state = board[index]
+        
+        switch state {
+        case .diamond:
+            diamondsFound += 1
+            
+            // Look up the multiplier for this diamond‐count
+            let multipliers = baseMultipliers[mineCount] ?? []
+            let idx = diamondsFound - 1   // zero‐based index
+            let multiplier = (idx < multipliers.count) ? multipliers[idx] : multipliers.last
+            
+            return (.diamond, false, diamondsFound, multiplier)
+            
+        case .mine:
+            gameOver = true
+            return (.mine, true, diamondsFound, nil)
+            
+        case .normal:
+            // We never store “.normal” in `board` after `generateBoard`.
+            return (.normal, gameOver, diamondsFound, nil)
+        }
+    }
+    
+    /// Reveal all cells’ true states. Caller should iterate 0..<totalCells and call:
+    ///    let finalState = viewModel.cellState(at: idx)
+    /// to display diamonds/mines.
+    func revealAll() {
+        gameOver = true
+    }
+    
+    /// Compute the final payout if the player cashes out immediately after their last tap.
+    /// - Parameter bet: the original bet amount.
+    /// - Parameter finalMultiplier: the last multiplier obtained (from `revealCell`).
+    ///
+    /// If `finalMultiplier == nil` (meaning the user tapped a mine), returns 0.
+    /// Otherwise, payout = bet × finalMultiplier.
+    func finalPayout(bet: Int, finalMultiplier: Double?) -> Int {
+        guard let mult = finalMultiplier else {
+            return 0
+        }
+        return Int(round(Double(bet) * mult))
     }
 }
