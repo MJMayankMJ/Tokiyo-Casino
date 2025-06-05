@@ -28,7 +28,7 @@ class LottoViewModel {
     private(set) var diamondsFound: Int = 0
     
     /// Has the player hit a mine or cashed out? If true, no further taps should do anything.
-    private(set) var gameOver: Bool = false
+    var gameOver: Bool = false
     
     
     // MARK: – Multipliers Lookup
@@ -140,8 +140,10 @@ class LottoViewModel {
     ///    let finalState = viewModel.cellState(at: idx)
     /// to display diamonds/mines.
     func revealAll() {
-        gameOver = true
-    }
+            gameOver = true
+            // Mark every index “revealed = true” so that the collection view will display diamonds/mines everywhere.
+            revealed = Array(repeating: true, count: totalCells)
+        }
     
     /// Compute the final payout if the player cashes out immediately after their last tap.
     /// - Parameter bet: the original bet amount.

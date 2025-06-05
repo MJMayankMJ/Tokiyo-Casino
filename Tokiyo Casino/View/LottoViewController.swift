@@ -339,26 +339,29 @@ extension LottoViewController: UICollectionViewDataSource {
 
 extension LottoViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        print("⇢ [didSelectItemAt] index = \(indexPath.item), isRoundActive = \(isRoundActive)")
-        guard isRoundActive else {
-            print("   → Ignoring tap because round is not active.")
-            return
-        }
-        
+        guard isRoundActive else { return }
+
         let idx = indexPath.item
         let (newState, ended, diamondsSoFar, currentMultiplier) = viewModel.revealCell(at: idx)
-        
+
+        // 1) Immediately update just that one cell so the user sees the bomb or diamond.
         if let cell = collectionView.cellForItem(at: indexPath) as? Cell {
             cell.configureCell(state: newState)
         }
-        
+
+        // 2) If it was a bomb → schedule the full reveal + alert with delays.
         if ended {
-            hitMineGameOver()
+            // Let the bomb’s shake animation finish
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.revealAllThenGameOver()
+            }
             return
         }
-        
+
+        // 3) Normal diamond case: update multiplier & enable “Cash Out” if first diamond
         if newState == .diamond {
             lastMultiplier = currentMultiplier
+
             if diamondsSoFar == 1 {
                 let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
                 betButton.setTitle(title, for: .normal)
@@ -368,6 +371,46 @@ extension LottoViewController: UICollectionViewDelegate {
                 betButton.setTitle(title, for: .normal)
             }
         }
+    }
+
+    /// After hitting a bomb, reveal the entire board with a cross‐fade and then show “Game Over”.
+    private func revealAllThenGameOver() {
+        // 1) Tell the view model to reveal every cell
+        viewModel.revealAll()
+        // (No need to set `viewModel.currentMultiplier`—that property does not exist.)
+
+        // 2) Cross‐fade the collection view so the user sees all diamonds/mines briefly
+        UIView.transition(with: self.collectionView,
+                          duration: 0.5,
+                          options: .transitionCrossDissolve,
+                          animations: {
+            self.collectionView.reloadData()
+        }, completion: { _ in
+            // 3) After the cross‐fade finishes, show the “Game Over” alert
+            self.showGameOverAlertAfterBomb()
+        })
+    }
+
+    /// Presents the “Game Over” alert after the board has been fully revealed.
+    private func showGameOverAlertAfterBomb() {
+        let title = "Game Over"
+        let msg = "You hit a mine after collecting \(viewModel.diamondsFound) diamond(s)."
+
+        let alert = UIAlertController(title: title,
+                                      message: msg,
+                                      preferredStyle: .alert)
+
+        let homeAction = UIAlertAction(title: "Home", style: .default) { _ in
+            self.resetToHome()
+        }
+        let replayAction = UIAlertAction(title: "Replay", style: .default) { _ in
+            self.replayRound()
+        }
+        alert.addAction(homeAction)
+        alert.addAction(replayAction)
+        present(alert, animated: true)
+
+        isRoundActive = false
     }
 }
 
