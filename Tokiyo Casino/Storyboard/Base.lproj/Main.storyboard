@@ -514,9 +514,9 @@
                                 </constraints>
                             </view>
                             <collectionView clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="scaleToFill" dataMode="prototypes" translatesAutoresizingMaskIntoConstraints="NO" id="8kA-wD-ETW">
-                                <rect key="frame" x="15" y="152" width="363" height="480"/>
+                                <rect key="frame" x="15" y="152" width="363" height="500"/>
                                 <color key="backgroundColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
-                                <collectionViewFlowLayout key="collectionViewLayout" automaticEstimatedItemSize="YES" minimumLineSpacing="10" minimumInteritemSpacing="10" id="Fwo-yC-vgg">
+                                <collectionViewFlowLayout key="collectionViewLayout" minimumLineSpacing="10" minimumInteritemSpacing="10" id="Fwo-yC-vgg">
                                     <size key="itemSize" width="128" height="128"/>
                                     <size key="headerReferenceSize" width="0.0" height="0.0"/>
                                     <size key="footerReferenceSize" width="0.0" height="0.0"/>
@@ -532,7 +532,7 @@
                             <constraint firstItem="kJj-r5-dbr" firstAttribute="top" secondItem="z66-b1-8gu" secondAttribute="top" constant="20" id="4Jw-dp-DQ8"/>
                             <constraint firstItem="J6U-E2-xK8" firstAttribute="leading" secondItem="z66-b1-8gu" secondAttribute="leading" id="DWG-eP-wgJ"/>
                             <constraint firstItem="J6U-E2-xK8" firstAttribute="trailing" secondItem="z66-b1-8gu" secondAttribute="trailing" id="Dis-mB-v4T"/>
-                            <constraint firstItem="MCb-cQ-YhV" firstAttribute="top" secondItem="8kA-wD-ETW" secondAttribute="bottom" constant="20" id="Pn0-d9-r0t"/>
+                            <constraint firstItem="MCb-cQ-YhV" firstAttribute="top" secondItem="8kA-wD-ETW" secondAttribute="bottom" id="Pn0-d9-r0t"/>
                             <constraint firstItem="MCb-cQ-YhV" firstAttribute="trailing" secondItem="z66-b1-8gu" secondAttribute="trailing" id="TDf-hE-DY2"/>
                             <constraint firstItem="8kA-wD-ETW" firstAttribute="top" secondItem="kJj-r5-dbr" secondAttribute="bottom" constant="20" id="cAU-YR-efp"/>
                             <constraint firstItem="kJj-r5-dbr" firstAttribute="centerX" secondItem="wKu-f5-NfL" secondAttribute="centerX" id="fcf-TV-Pzk"/>

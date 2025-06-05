@@ -12,23 +12,12 @@ class LottoViewController: UIViewController {
     // MARK: – IBOutlets
     
     @IBOutlet weak var imageBackButton: UIImageView!
-    
-    // “−” and “+” image views that now adjust the **bet amount** by ±100.
     @IBOutlet weak var minusImageView: UIImageView!
     @IBOutlet weak var plusImageView: UIImageView!
-    
     @IBOutlet weak var mineCountSlider: UISlider!
-    
-//    @IBOutlet weak var mineCountLabel: UILabel!
-    
     @IBOutlet weak var collectionView: UICollectionView!
-    
     @IBOutlet weak var betTextField: UITextField!
-    
     @IBOutlet weak var betButton: UIButton!
-    
-//    @IBOutlet weak var coinTotalLabel: UILabel!
-    
     
     // MARK: – Internal Properties
     
@@ -40,7 +29,6 @@ class LottoViewController: UIViewController {
     // Spacing for grid cells
     private let cellSpacing: CGFloat = 8
     
-    
     // MARK: – Lifecycle
     
     override func viewDidLoad() {
@@ -50,6 +38,7 @@ class LottoViewController: UIViewController {
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.isScrollEnabled = false
+        
         let nib = UINib(nibName: "Cell", bundle: nil)
         collectionView.register(nib, forCellWithReuseIdentifier: "Cell")
         collectionView.backgroundColor = .clear
@@ -61,20 +50,10 @@ class LottoViewController: UIViewController {
         mineCountSlider.isContinuous = true
         mineCountSlider.addTarget(self, action: #selector(sliderValueChanged(_:)), for: .valueChanged)
         
-        // Initialize mine‐count label
-        //updateMineCountLabel(to: Int(mineCountSlider.value))
-        
         // Bet button initial title
         betButton.setTitle("Bet", for: .normal)
         betButton.isEnabled = true
         
-        // Coin label
-        //coinTotalLabel.text = "\(CoinsManager.shared.userStats?.totalCoins ?? 0)"
-//        NotificationCenter.default.addObserver(self,
-//                                               selector: #selector(coinsDidChange),
-//                                               name: CoinsManager.coinsDidChangeNotification,
-//                                               object: nil)
-//        
         // Tap gestures
         imageBackButton.isUserInteractionEnabled = true
         let backTap = UITapGestureRecognizer(target: self, action: #selector(didTapBack))
@@ -95,21 +74,36 @@ class LottoViewController: UIViewController {
         betTextField.text = "100"
     }
     
-//    deinit {
-//        NotificationCenter.default.removeObserver(self,
-//                                                  name: CoinsManager.coinsDidChangeNotification,
-//                                                  object: nil)
-//    }
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        
+        // Print the final collectionView bounds after layout
+        print("🔍 [viewDidLayoutSubviews] collectionView.bounds = \(collectionView.bounds)")
+        
+        // Calculate total required height for 6 rows + spacing
+        let totalRows = CGFloat(viewModel.totalRows)    // 6
+        let totalColumns = CGFloat(viewModel.totalColumns) // 4
+        let totalVSpacing = cellSpacing * (totalRows - 1)  // e.g. 8 * 5 = 40
+        let totalHSpacing = cellSpacing * (totalColumns - 1) // e.g. 8 * 3 = 24
+        
+        let adjustedH = collectionView.bounds.height - totalVSpacing
+        let adjustedW = collectionView.bounds.width - totalHSpacing
+        
+        let cellHeight = adjustedH / totalRows
+        let cellWidth = adjustedW / totalColumns
+        
+        print("🔍 [viewDidLayoutSubviews] totalRows = \(totalRows), totalVSpacing = \(totalVSpacing)")
+        print("🔍 [viewDidLayoutSubviews] adjustedH = \(adjustedH), cellHeight = \(cellHeight)")
+        print("🔍 [viewDidLayoutSubviews] totalColumns = \(totalColumns), totalHSpacing = \(totalHSpacing)")
+        print("🔍 [viewDidLayoutSubviews] adjustedW = \(adjustedW), cellWidth = \(cellWidth)")
+    }
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-       // coinTotalLabel.text = "\(CoinsManager.shared.userStats?.totalCoins ?? 0)"
     }
-    
     
     // MARK: – IBActions & Tap Handlers
     
-    /// Back arrow tapped → pop VC.
     @objc private func didTapBack() {
         UIView.animate(withDuration: 0.08, animations: {
             self.imageBackButton.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
@@ -139,35 +133,26 @@ class LottoViewController: UIViewController {
         betTextField.text = "\(newVal)"
     }
     
-    // Slider dragged → snap to nearest multiple of 2 between 4…16.
     @objc private func sliderValueChanged(_ sender: UISlider) {
-        // Round to nearest multiple of 2
         let raw = Int(round(sender.value / 2)) * 2
         let clamped = max(4, min(raw, 16))
         sender.setValue(Float(clamped), animated: false)
-        //updateMineCountLabel(to: clamped)
     }
     
-//    private func updateMineCountLabel(to count: Int) {
-//        //mineCountLabel.text = "Mines: \(count)"
-//    }
-    
-    /// Bet / Cash Out tapped
     @IBAction func betButtonTapped(_ sender: UIButton) {
         view.endEditing(true)
         
         if !isRoundActive {
-            // → “Bet” behavior
             guard let betText = betTextField.text,
                   let betValue = Int(betText),
                   betValue >= 100 else {
-                // Must be at least 100
+                print("❗️ [betButtonTapped] Invalid bet text: '\(betTextField.text ?? "")'")
                 return
             }
             
-            // Check if user has enough coins
             let available = Int(CoinsManager.shared.userStats?.totalCoins ?? 0)
             guard betValue <= available else {
+                print("❗️ [betButtonTapped] Insufficient coins (have \(available), tried \(betValue))")
                 let alert = UIAlertController(title: "Insufficient Coins",
                                               message: "You only have \(available) coins.",
                                               preferredStyle: .alert)
@@ -176,14 +161,16 @@ class LottoViewController: UIViewController {
                 return
             }
             
-            // Deduct coins immediately
+            print("✅ [betButtonTapped] Deducting \(betValue) coins…")
             CoinsManager.shared.deductCoins(amount: Int64(betValue)) { result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success():
+                        print("✅ [betButtonTapped] Deducted successfully. beginRound()")
                         self.currentBet = betValue
                         self.beginRound()
                     case .failure(let error):
+                        print("❗️ [betButtonTapped] DeductCoins failed: \(error.localizedDescription)")
                         let alert = UIAlertController(title: "Error",
                                                       message: error.localizedDescription,
                                                       preferredStyle: .alert)
@@ -194,50 +181,47 @@ class LottoViewController: UIViewController {
             }
             
         } else {
-            // → “Cash Out” behavior
+            print("ℹ️ [betButtonTapped] Cash Out pressed")
             cashOutRound()
         }
     }
     
-    
     // MARK: – Game Flow
     
     private func beginRound() {
+        print("⇢ [beginRound] Round is starting…")
         isRoundActive = true
         lastMultiplier = nil
         
-        // Disable controls
         mineCountSlider.isEnabled = false
         betTextField.isEnabled = false
         minusImageView.isUserInteractionEnabled = false
         plusImageView.isUserInteractionEnabled = false
         
-        // Start VM
         let chosenMines = Int(mineCountSlider.value)
         viewModel.startNewRound(mines: chosenMines)
+        print("⇢ [beginRound] New board with \(chosenMines) mines generated.")
         
-        // Reload all cells to “.normal” initial state
         collectionView.reloadData()
+        print("⇢ [beginRound] collectionView.reloadData() called")
         
-        // Now set button title to “Tap a Cell…” and disable it until first diamond tapped
         betButton.setTitle("Tap a Cell", for: .normal)
         betButton.isEnabled = false
     }
     
     private func cashOutRound() {
-        // Reveal all cells
+        print("⇢ [cashOutRound] Revealing all…")
         viewModel.revealAll()
         collectionView.reloadData()
         
-        // Compute final payout
         let payout = viewModel.finalPayout(bet: currentBet, finalMultiplier: lastMultiplier)
         let netGain = payout - currentBet
         
+        print("⇢ [cashOutRound] payout = \(payout), netGain = \(netGain)")
         if payout > currentBet {
             CoinsManager.shared.addCoins(amount: Int64(payout)) { _ in }
         }
         
-        // Fancy alert
         let title = "You Cashed Out!"
         let msg = """
                   Bet: \(currentBet)
@@ -263,7 +247,7 @@ class LottoViewController: UIViewController {
     }
     
     private func hitMineGameOver() {
-        // Reveal all cells
+        print("⇢ [hitMineGameOver] Hit a mine after \(viewModel.diamondsFound) diamonds.")
         viewModel.revealAll()
         collectionView.reloadData()
         
@@ -272,7 +256,6 @@ class LottoViewController: UIViewController {
         let alert = UIAlertController(title: title,
                                       message: msg,
                                       preferredStyle: .alert)
-        
         let homeAction = UIAlertAction(title: "Home", style: .default) { _ in
             self.resetToHome()
         }
@@ -287,7 +270,7 @@ class LottoViewController: UIViewController {
     }
     
     private func resetToHome() {
-        // Re‐enable controls, clear states
+        print("⇢ [resetToHome] Resetting to initial state.")
         mineCountSlider.isEnabled = true
         betTextField.isEnabled = true
         minusImageView.isUserInteractionEnabled = true
@@ -297,7 +280,6 @@ class LottoViewController: UIViewController {
         betButton.isEnabled = true
         collectionView.reloadData()
         
-        // Reset bet field to minimum 100 if empty or invalid
         let text = Int(betTextField.text ?? "") ?? 0
         if text < 100 {
             betTextField.text = "100"
@@ -305,7 +287,7 @@ class LottoViewController: UIViewController {
     }
     
     private func replayRound() {
-        // Deduct the same bet again
+        print("⇢ [replayRound] Deducting same bet again (\(currentBet)).")
         let betValue = currentBet
         CoinsManager.shared.deductCoins(amount: Int64(betValue)) { result in
             DispatchQueue.main.async {
@@ -313,6 +295,7 @@ class LottoViewController: UIViewController {
                 case .success():
                     self.beginRound()
                 case .failure(let error):
+                    print("❗️ [replayRound] DeductCoins failed: \(error.localizedDescription)")
                     let alert = UIAlertController(title: "Error",
                                                   message: error.localizedDescription,
                                                   preferredStyle: .alert)
@@ -322,13 +305,6 @@ class LottoViewController: UIViewController {
             }
         }
     }
-    
-    
-    // MARK: – Notification
-    
-//    @objc private func coinsDidChange() {
-//        coinTotalLabel.text = "\(CoinsManager.shared.userStats?.totalCoins ?? 0)"
-//    }
 }
 
 
@@ -344,7 +320,6 @@ extension LottoViewController: UICollectionViewDataSource {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "Cell", for: indexPath) as! Cell
         
         if isRoundActive {
-            // If revealed, show diamond or mine. Otherwise normal.
             if viewModel.revealed[indexPath.item] {
                 let state = viewModel.cellState(at: indexPath.item)
                 cell.configureCell(state: state)
@@ -352,7 +327,6 @@ extension LottoViewController: UICollectionViewDataSource {
                 cell.configureCell(state: .normal)
             }
         } else {
-            // No game active → all cells normal
             cell.configureCell(state: .normal)
         }
         
@@ -365,33 +339,31 @@ extension LottoViewController: UICollectionViewDataSource {
 
 extension LottoViewController: UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard isRoundActive else { return }
+        print("⇢ [didSelectItemAt] index = \(indexPath.item), isRoundActive = \(isRoundActive)")
+        guard isRoundActive else {
+            print("   → Ignoring tap because round is not active.")
+            return
+        }
         
         let idx = indexPath.item
         let (newState, ended, diamondsSoFar, currentMultiplier) = viewModel.revealCell(at: idx)
         
-        // Immediately update just that one cell
         if let cell = collectionView.cellForItem(at: indexPath) as? Cell {
             cell.configureCell(state: newState)
         }
         
         if ended {
-            // Hit a mine → game over
             hitMineGameOver()
             return
         }
         
-        // If tapped a diamond
         if newState == .diamond {
             lastMultiplier = currentMultiplier
-            
-            // If this is the first diamond, enable “Cash Out”
             if diamondsSoFar == 1 {
                 let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
                 betButton.setTitle(title, for: .normal)
                 betButton.isEnabled = true
             } else {
-                // Update button title to show the updated multiplier
                 let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
                 betButton.setTitle(title, for: .normal)
             }
@@ -418,6 +390,15 @@ extension LottoViewController: UICollectionViewDelegateFlowLayout {
         
         let cellWidth = adjustedWidth / totalColumns
         let cellHeight = adjustedHeight / totalRows
+        
+        // Print out each calculation for debugging:
+        print("⇢ [sizeForItemAt \(indexPath.item)]")
+        print("     collectionView.bounds.width = \(collectionView.bounds.width)")
+        print("     collectionView.bounds.height = \(collectionView.bounds.height)")
+        print("     totalHorizontalSpacing = \(totalHorizontalSpacing)")
+        print("     totalVerticalSpacing = \(totalVerticalSpacing)")
+        print("     adjustedWidth = \(adjustedWidth), adjustedHeight = \(adjustedHeight)")
+        print("     cellWidth = \(cellWidth), cellHeight = \(cellHeight)")
         
         return CGSize(width: cellWidth, height: cellHeight)
     }
