@@ -17,15 +17,6 @@ enum CellState {
     case mine     // tapped, turned out to be a mine  (dark tile + bomb image)
 }
 
-/// A single grid cell (6×4 board).
-/// In Storyboard, this should be a UICollectionViewCell subclass
-/// with a xib/nib (e.g. “Cell.xib”) that has:
-///   • tileImageView (UIImageView)
-///   • centerImageView (UIImageView)
-///
-/// The images named in `K.*` are assumed to exist in Assets:
-///   • K.lightTile, K.darkTile
-///   • K.diamondPNG, K.bombPNG
 class Cell: UICollectionViewCell {
     @IBOutlet weak var tileImageView: UIImageView!
     @IBOutlet weak var centerImageView: UIImageView!
