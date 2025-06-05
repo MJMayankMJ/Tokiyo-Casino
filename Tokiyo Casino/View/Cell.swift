@@ -25,6 +25,10 @@ class Cell: UICollectionViewCell {
         super.awakeFromNib()
         configureCell(state: .normal)
         
+        // Rounded corners on the tile
+        tileImageView.layer.cornerRadius = 10
+        tileImageView.layer.masksToBounds = true
+        
         // subtle drop shadow for depth
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOffset = CGSize(width: 0, height: 2)
@@ -44,13 +48,11 @@ class Cell: UICollectionViewCell {
         case .normal:
             tileImageView.image = UIImage(named: K.lightTile)
             centerImageView.isHidden = true
-            backgroundColor = UIColor.systemGray5
             
         case .diamond:
             tileImageView.image = UIImage(named: K.darkTile)
             centerImageView.isHidden = false
             centerImageView.image = UIImage(named: K.diamondPNG)
-            backgroundColor = UIColor.systemGreen.withAlphaComponent(0.3)
             
             // small pop animation
             UIView.animate(withDuration: 0.2, animations: {
@@ -65,7 +67,6 @@ class Cell: UICollectionViewCell {
             tileImageView.image = UIImage(named: K.darkTile)
             centerImageView.isHidden = false
             centerImageView.image = UIImage(named: K.bombPNG)
-            backgroundColor = UIColor.systemRed.withAlphaComponent(0.3)
             
             // shake animation
             let animation = CAKeyframeAnimation(keyPath: "transform.translation.x")
