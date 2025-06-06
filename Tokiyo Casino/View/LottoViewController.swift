@@ -15,7 +15,9 @@ class LottoViewController: UIViewController {
     @IBOutlet weak var imageBackButton: UIImageView!
     @IBOutlet weak var minusImageView: UIImageView!
     @IBOutlet weak var plusImageView: UIImageView!
-    @IBOutlet weak var mineCountSlider: UISlider!
+
+    @IBOutlet private weak var mineCountSlider: UISlider!
+
     @IBOutlet weak var collectionView: UICollectionView!
     @IBOutlet weak var betTextField: UITextField!
     @IBOutlet weak var betButton: UIButton!
@@ -30,12 +32,19 @@ class LottoViewController: UIViewController {
     // Spacing for grid cells
     private let cellSpacing: CGFloat = 8
 
+    // build these subviews/layers at runtime
+    private let gradientLayer = CAGradientLayer()
+    private let safeLabel = UILabel()
+    private let riskyLabel = UILabel()
+    private let minValueLabel = UILabel()
+    private let maxValueLabel = UILabel()
+    private let thumbValueLabel = UILabel()
+
     // MARK: – Lifecycle
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        // CollectionView setup
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.isScrollEnabled = false
@@ -44,18 +53,19 @@ class LottoViewController: UIViewController {
         collectionView.register(nib, forCellWithReuseIdentifier: "Cell")
         collectionView.backgroundColor = .clear
 
-        // Slider: min = 4, max = 16, initial = 4
+        // ─── SLIDER: min = 4, max = 16, initial = 4 ───
         mineCountSlider.minimumValue = 4
         mineCountSlider.maximumValue = 16
         mineCountSlider.value = 4
         mineCountSlider.isContinuous = true
         mineCountSlider.addTarget(self, action: #selector(sliderValueChanged(_:)), for: .valueChanged)
 
-        // Bet button initial title
+        configureCustomSliderUI()
+
         betButton.setTitle("Bet", for: .normal)
         betButton.isEnabled = true
 
-        // Tap gestures
+        // ─── Tap gestures ─────────────────────────────────────
         imageBackButton.isUserInteractionEnabled = true
         let backTap = UITapGestureRecognizer(target: self, action: #selector(didTapBack))
         imageBackButton.addGestureRecognizer(backTap)
@@ -68,7 +78,7 @@ class LottoViewController: UIViewController {
         let plusTap = UITapGestureRecognizer(target: self, action: #selector(didTapPlus))
         plusImageView.addGestureRecognizer(plusTap)
 
-        // Keyboard accessory to dismiss
+        // ─── Keyboard accessory to dismiss ─────────────────────
         betTextField.addCancelButtonOnKeyboard()
 
         // Ensure betTextField starts with “100” by default
@@ -78,30 +88,120 @@ class LottoViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
 
-        // Print the final collectionView bounds after layout
-        print("🔍 [viewDidLayoutSubviews] collectionView.bounds = \(collectionView.bounds)")
-
-        // Calculate total required height for 6 rows + spacing
-        let totalRows = CGFloat(viewModel.totalRows)    // 6
-        let totalColumns = CGFloat(viewModel.totalColumns) // 4
-        let totalVSpacing = cellSpacing * (totalRows - 1)  // e.g. 8 * 5 = 40
-        let totalHSpacing = cellSpacing * (totalColumns - 1) // e.g. 8 * 3 = 24
-
-        let adjustedH = collectionView.bounds.height - totalVSpacing
-        let adjustedW = collectionView.bounds.width - totalHSpacing
-
-        let cellHeight = adjustedH / totalRows
-        let cellWidth = adjustedW / totalColumns
-
-        print("🔍 [viewDidLayoutSubviews] totalRows = \(totalRows), totalVSpacing = \(totalVSpacing)")
-        print("🔍 [viewDidLayoutSubviews] adjustedH = \(adjustedH), cellHeight = \(cellHeight)")
-        print("🔍 [viewDidLayoutSubviews] totalColumns = \(totalColumns), totalHSpacing = \(totalHSpacing)")
-        print("🔍 [viewDidLayoutSubviews] adjustedW = \(adjustedW), cellWidth = \(cellWidth)")
+        // Each time the layout updates, we must adjust:
+        // 1) The gradient layer’s frame (so it always sits exactly behind the slider’s track)
+        // 2) The positions of our “Safe”/“Risky”/min/max labels
+        // 3) The position of the thumbValueLabel over the thumb
+        layoutCustomSliderUI()
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
     }
+
+    private func configureCustomSliderUI() {
+        // 1) Make the native slider track “invisible” so our gradient shows through
+        mineCountSlider.minimumTrackTintColor = .clear
+        mineCountSlider.maximumTrackTintColor = .clear
+
+        // 2) Add our gradient layer underneath the slider’s track
+        gradientLayer.colors = [
+            UIColor.systemGreen.cgColor,
+            UIColor.systemYellow.cgColor,
+            UIColor.systemRed.cgColor
+        ]
+        gradientLayer.startPoint = CGPoint(x: 0, y: 0.5)
+        gradientLayer.endPoint   = CGPoint(x: 1, y: 0.5)
+        gradientLayer.cornerRadius = 4 // make track slightly rounded
+        mineCountSlider.layer.insertSublayer(gradientLayer, at: 0)
+
+        // 3) Set SF Symbol “bomb.fill” as the thumb image
+        if let bombImage = UIImage(systemName: "bomb.fill") {
+            mineCountSlider.setThumbImage(bombImage, for: .normal)
+        }
+
+        safeLabel.text = "💣 Easy"
+        safeLabel.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        safeLabel.textColor = .black
+        safeLabel.sizeToFit()
+        mineCountSlider.addSubview(safeLabel)
+
+        riskyLabel.text = "💣💣💣 Hard"
+        riskyLabel.font = UIFont.systemFont(ofSize: 12, weight: .semibold)
+        riskyLabel.textColor = .black
+        riskyLabel.sizeToFit()
+        mineCountSlider.addSubview(riskyLabel)
+
+        minValueLabel.text = "4"
+        minValueLabel.font = UIFont.systemFont(ofSize: 12, weight: .regular)
+        minValueLabel.textColor = .black
+        minValueLabel.sizeToFit()
+        mineCountSlider.addSubview(minValueLabel)
+
+        maxValueLabel.text = "16"
+        maxValueLabel.font = UIFont.systemFont(ofSize: 12, weight: .regular)
+        maxValueLabel.textColor = .black
+        maxValueLabel.sizeToFit()
+        mineCountSlider.addSubview(maxValueLabel)
+
+        // ─── Build the “callout” label above the thumb ───────
+        thumbValueLabel.textAlignment = .center
+        thumbValueLabel.font = UIFont.systemFont(ofSize: 12, weight: .bold)
+        thumbValueLabel.textColor = .white
+        thumbValueLabel.backgroundColor = UIColor.black.withAlphaComponent(0.75)
+        thumbValueLabel.layer.cornerRadius = 4
+        thumbValueLabel.clipsToBounds = true
+
+        // Give it an initial size (we’ll update text & frame later)
+        thumbValueLabel.text = "\(Int(mineCountSlider.value))"
+        thumbValueLabel.frame.size = CGSize(width:  30.0, height:  20.0)
+        mineCountSlider.addSubview(thumbValueLabel)
+    }
+
+    private func layoutCustomSliderUI() {
+        let trackRect = mineCountSlider.trackRect(forBounds: mineCountSlider.bounds)
+        let trackFrame = CGRect(
+            x: trackRect.origin.x,
+            y: trackRect.origin.y + (mineCountSlider.bounds.height - trackRect.height) / 2,
+            width: trackRect.width,
+            height: trackRect.height
+        )
+
+        gradientLayer.frame = trackFrame
+
+        let safeLabelX = trackFrame.minX
+        let safeLabelY = trackFrame.minY - safeLabel.bounds.height - 2
+        safeLabel.frame.origin = CGPoint(x: safeLabelX, y: safeLabelY)
+
+        let riskyLabelX = trackFrame.maxX - riskyLabel.bounds.width
+        let riskyLabelY = safeLabelY
+        riskyLabel.frame.origin = CGPoint(x: riskyLabelX, y: riskyLabelY)
+
+        let minLabelX = trackFrame.minX
+        let minLabelY = trackFrame.maxY + 2
+        minValueLabel.frame.origin = CGPoint(x: minLabelX, y: minLabelY)
+
+        let maxLabelX = trackFrame.maxX - maxValueLabel.bounds.width
+        let maxLabelY = minLabelY
+        maxValueLabel.frame.origin = CGPoint(x: maxLabelX, y: maxLabelY)
+
+        let thumbRect = mineCountSlider.thumbRect(
+            forBounds: mineCountSlider.bounds,
+            trackRect: trackRect,
+            value: mineCountSlider.value
+        )
+        let thumbCenterX = thumbRect.midX
+        let thumbLabelWidth: CGFloat = 30.0
+        let thumbLabelHeight: CGFloat = 20.0
+        thumbValueLabel.frame.size = CGSize(width: thumbLabelWidth, height: thumbLabelHeight)
+
+        let thumbLabelX = thumbCenterX - (thumbLabelWidth / 2)
+        let thumbLabelY = trackFrame.minY - thumbLabelHeight - 4
+        thumbValueLabel.frame.origin = CGPoint(x: thumbLabelX, y: thumbLabelY)
+        thumbValueLabel.text = "\(Int(mineCountSlider.value))"
+    }
+
+    // ──────────────────────────────────────────────────────
 
     // MARK: – IBActions & Tap Handlers
 
@@ -134,10 +234,16 @@ class LottoViewController: UIViewController {
         betTextField.text = "\(newVal)"
     }
 
+    // ──────────────────────────────────────────────────────
+
     @objc private func sliderValueChanged(_ sender: UISlider) {
+        // Snap to an even integer
         let raw = Int(round(sender.value / 2)) * 2
         let clamped = max(4, min(raw, 16))
         sender.setValue(Float(clamped), animated: false)
+
+        // Each time the slider moves, update the thumbValueLabel’s text & position
+        layoutCustomSliderUI()
     }
 
     @IBAction func betButtonTapped(_ sender: UIButton) {
@@ -352,7 +458,6 @@ class LottoViewController: UIViewController {
     }
 }
 
-
 // MARK: – UICollectionViewDataSource
 
 extension LottoViewController: UICollectionViewDataSource {
@@ -378,7 +483,6 @@ extension LottoViewController: UICollectionViewDataSource {
         return cell
     }
 }
-
 
 // MARK: – UICollectionViewDelegate
 
@@ -456,7 +560,6 @@ extension LottoViewController: UICollectionViewDelegate {
     }
 }
 
-
 // MARK: – UICollectionViewDelegateFlowLayout
 
 extension LottoViewController: UICollectionViewDelegateFlowLayout {
@@ -476,8 +579,6 @@ extension LottoViewController: UICollectionViewDelegateFlowLayout {
         let cellWidth = adjustedWidth / totalColumns
         let cellHeight = adjustedHeight / totalRows
 
-        // Debug prints omitted for brevity…
-
         return CGSize(width: cellWidth, height: cellHeight)
     }
 
@@ -493,7 +594,6 @@ extension LottoViewController: UICollectionViewDelegateFlowLayout {
         return cellSpacing
     }
 }
-
 
 // MARK: – UITextField Extension for “Cancel” button
 

@@ -444,8 +444,8 @@
                                     <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Cloud" translatesAutoresizingMaskIntoConstraints="NO" id="lLj-Tv-ORO">
                                         <rect key="frame" x="0.0" y="0.0" width="393" height="200"/>
                                     </imageView>
-                                    <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="top" spacing="15" translatesAutoresizingMaskIntoConstraints="NO" id="GxE-oa-8nc">
-                                        <rect key="frame" x="20" y="47.999999999999993" width="353" height="104.33333333333331"/>
+                                    <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="top" spacing="5" translatesAutoresizingMaskIntoConstraints="NO" id="GxE-oa-8nc">
+                                        <rect key="frame" x="20" y="55" width="353" height="90"/>
                                         <subviews>
                                             <stackView opaque="NO" contentMode="scaleToFill" spacing="10" translatesAutoresizingMaskIntoConstraints="NO" id="PNu-w9-AWA" userLabel="bet stack">
                                                 <rect key="frame" x="0.0" y="0.0" width="353" height="55"/>
@@ -457,32 +457,21 @@
                                                         </constraints>
                                                     </imageView>
                                                     <textField opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="248" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="bezel" placeholder="Bet amount" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="iDg-st-9IW">
-                                                        <rect key="frame" x="65" y="0.0" width="223" height="55"/>
+                                                        <rect key="frame" x="65" y="0.0" width="133" height="55"/>
                                                         <color key="backgroundColor" systemColor="systemGray3Color"/>
                                                         <fontDescription key="fontDescription" type="system" pointSize="14"/>
                                                         <textInputTraits key="textInputTraits"/>
                                                     </textField>
                                                     <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="+button" translatesAutoresizingMaskIntoConstraints="NO" id="ylh-nn-oq9">
-                                                        <rect key="frame" x="298" y="0.0" width="55" height="55"/>
+                                                        <rect key="frame" x="208" y="0.0" width="55" height="55"/>
                                                         <constraints>
                                                             <constraint firstAttribute="width" secondItem="ylh-nn-oq9" secondAttribute="height" multiplier="1:1" id="dqo-Oo-AAD"/>
                                                         </constraints>
                                                     </imageView>
-                                                </subviews>
-                                                <constraints>
-                                                    <constraint firstAttribute="height" constant="55" id="fe8-Pi-g8m"/>
-                                                </constraints>
-                                            </stackView>
-                                            <stackView opaque="NO" contentMode="scaleToFill" spacing="20" translatesAutoresizingMaskIntoConstraints="NO" id="Lex-xB-tUM">
-                                                <rect key="frame" x="0.0" y="70" width="353" height="34.333333333333343"/>
-                                                <subviews>
-                                                    <slider opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" value="8" minValue="4" maxValue="16" translatesAutoresizingMaskIntoConstraints="NO" id="fxS-bv-lVz">
-                                                        <rect key="frame" x="-2" y="0.0" width="237" height="35.333333333333336"/>
-                                                    </slider>
                                                     <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="Lku-GC-RRX">
-                                                        <rect key="frame" x="253" y="0.0" width="100" height="34.333333333333336"/>
+                                                        <rect key="frame" x="273" y="0.0" width="80" height="55"/>
                                                         <constraints>
-                                                            <constraint firstAttribute="width" constant="100" id="smq-kl-c4u"/>
+                                                            <constraint firstAttribute="width" constant="80" id="smq-kl-c4u" userLabel="width =  60"/>
                                                         </constraints>
                                                         <state key="normal" title="Button"/>
                                                         <buttonConfiguration key="configuration" style="filled" title="Bet" cornerStyle="capsule">
@@ -492,6 +481,18 @@
                                                             <action selector="betButtonTapped:" destination="zBi-JU-8yu" eventType="touchUpInside" id="Ogi-pe-LJL"/>
                                                         </connections>
                                                     </button>
+                                                </subviews>
+                                                <constraints>
+                                                    <constraint firstAttribute="height" constant="55" id="fe8-Pi-g8m"/>
+                                                </constraints>
+                                            </stackView>
+                                            <stackView opaque="NO" contentMode="scaleToFill" spacing="20" translatesAutoresizingMaskIntoConstraints="NO" id="Lex-xB-tUM">
+                                                <rect key="frame" x="0.0" y="60" width="353" height="30"/>
+                                                <subviews>
+                                                    <slider opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" value="8" minValue="4" maxValue="16" translatesAutoresizingMaskIntoConstraints="NO" id="fxS-bv-lVz">
+                                                        <rect key="frame" x="-2" y="0.0" width="357" height="31"/>
+                                                        <accessibility key="accessibilityConfiguration" label="No. of Mines"/>
+                                                    </slider>
                                                 </subviews>
                                             </stackView>
                                         </subviews>
