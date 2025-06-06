@@ -513,11 +513,13 @@ extension LottoViewController: UICollectionViewDelegate {
             lastMultiplier = currentMultiplier
 
             if diamondsSoFar == 1 {
-                let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
+                //let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
+                let title = String("Cash Out")
                 betButton.setTitle(title, for: .normal)
                 betButton.isEnabled = true
             } else {
-                let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
+//                let title = String(format: "Cash Out x%.2f", currentMultiplier ?? 1.0)
+                let title = String("Cash Out")
                 betButton.setTitle(title, for: .normal)
             }
         }
