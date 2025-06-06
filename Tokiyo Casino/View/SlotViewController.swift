@@ -372,6 +372,21 @@ extension SlotViewController: UIPickerViewDelegate, UIPickerViewDataSource {
         label.text = K.imageArray[idx]
         return label
     }
+    
+    func pickerView(_ pickerView: UIPickerView,
+                       widthForComponent component: Int) -> CGFloat {
+           // Calculate a “base” width for each component:
+           let total = pickerView.bounds.width
+           let baseWidth = total / 4.0
+
+           // Subtract a small amount so that UIPickerView will
+           // leave equal spacing between columns.
+           //
+           // For instance, if you subtract 10 points from each column,
+           // you’ll end up with ~40 points total “empty space” distributed
+           // as padding between the 4 reels.
+        return baseWidth - 3.0
+       }
 }
 
 // MARK: - UITextFieldDelegate
