@@ -18,6 +18,7 @@ enum K {
     
     static let toSlotVC  = "toSlotVC"
     static let toLottoVC = "toLottoVC"
+    static let toCoinoVC = "toCoinoVC"
     
     
     static let lightTile = "lightTile"

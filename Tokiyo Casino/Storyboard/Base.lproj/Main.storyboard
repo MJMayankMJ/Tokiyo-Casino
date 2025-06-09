@@ -70,7 +70,7 @@
                                         <rect key="frame" x="0.0" y="213" width="393" height="426"/>
                                         <subviews>
                                             <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="center" spacing="10" translatesAutoresizingMaskIntoConstraints="NO" id="gQl-Qs-VEg">
-                                                <rect key="frame" x="49" y="92" width="295" height="242"/>
+                                                <rect key="frame" x="49" y="29" width="295" height="368"/>
                                                 <subviews>
                                                     <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="tYi-Wg-YAc" userLabel="Button Section 1">
                                                         <rect key="frame" x="0.0" y="0.0" width="295" height="116"/>
@@ -128,7 +128,7 @@
                                                             <constraint firstAttribute="trailing" secondItem="u87-5h-XSL" secondAttribute="trailing" constant="15" id="wNb-mZ-g5P"/>
                                                         </constraints>
                                                     </view>
-                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="fnO-1c-Twq" userLabel="Button Section 1">
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="fnO-1c-Twq" userLabel="Button Section 2">
                                                         <rect key="frame" x="0.0" y="126" width="295" height="116"/>
                                                         <subviews>
                                                             <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="tkW-jt-Z8c" customClass="CustomShapeView" customModule="Tokiyo_Casino" customModuleProvider="target">
@@ -184,6 +184,62 @@
                                                             <constraint firstAttribute="bottom" secondItem="tkW-jt-Z8c" secondAttribute="bottom" id="ucd-n0-yPe"/>
                                                         </constraints>
                                                     </view>
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="6GU-sA-e3x" userLabel="Button Section 3">
+                                                        <rect key="frame" x="0.0" y="252" width="295" height="116"/>
+                                                        <subviews>
+                                                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="aoH-BK-UEd" customClass="CustomShapeView" customModule="Tokiyo_Casino" customModuleProvider="target">
+                                                                <rect key="frame" x="0.0" y="30" width="280" height="86"/>
+                                                                <userDefinedRuntimeAttributes>
+                                                                    <userDefinedRuntimeAttribute type="number" keyPath="slant">
+                                                                        <real key="value" value="30"/>
+                                                                    </userDefinedRuntimeAttribute>
+                                                                    <userDefinedRuntimeAttribute type="color" keyPath="fillColor">
+                                                                        <color key="value" red="0.30995815319999998" green="0.26186702000000001" blue="0.1930845279" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
+                                                                    </userDefinedRuntimeAttribute>
+                                                                    <userDefinedRuntimeAttribute type="number" keyPath="cornerRadius">
+                                                                        <real key="value" value="20"/>
+                                                                    </userDefinedRuntimeAttribute>
+                                                                </userDefinedRuntimeAttributes>
+                                                            </view>
+                                                            <stackView opaque="NO" contentMode="scaleToFill" distribution="fillProportionally" alignment="center" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="Ys5-3r-OIN">
+                                                                <rect key="frame" x="0.0" y="0.0" width="295" height="116"/>
+                                                                <subviews>
+                                                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="game2icon" translatesAutoresizingMaskIntoConstraints="NO" id="9Q8-jB-Nb5">
+                                                                        <rect key="frame" x="0.0" y="8" width="100" height="100"/>
+                                                                        <constraints>
+                                                                            <constraint firstAttribute="width" secondItem="9Q8-jB-Nb5" secondAttribute="height" multiplier="1:1" id="996-eJ-VDN"/>
+                                                                            <constraint firstAttribute="height" constant="100" id="fTF-JH-BCf"/>
+                                                                        </constraints>
+                                                                    </imageView>
+                                                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="TOKIO COINO" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="8x2-rP-3wb">
+                                                                        <rect key="frame" x="108" y="48" width="127" height="20.333333333333329"/>
+                                                                        <fontDescription key="fontDescription" type="boldSystem" pointSize="17"/>
+                                                                        <color key="textColor" red="1" green="0.70588235290000001" blue="0.20392156859999999" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
+                                                                        <nil key="highlightedColor"/>
+                                                                    </label>
+                                                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="blueButton" translatesAutoresizingMaskIntoConstraints="NO" id="tZU-hE-Qug">
+                                                                        <rect key="frame" x="243" y="33" width="52" height="50"/>
+                                                                        <constraints>
+                                                                            <constraint firstAttribute="width" constant="52" id="5sI-Zn-NPm"/>
+                                                                            <constraint firstAttribute="height" constant="50" id="wJp-Nn-ctC"/>
+                                                                        </constraints>
+                                                                    </imageView>
+                                                                </subviews>
+                                                            </stackView>
+                                                        </subviews>
+                                                        <constraints>
+                                                            <constraint firstAttribute="trailing" secondItem="Ys5-3r-OIN" secondAttribute="trailing" id="0qp-Kg-g2b"/>
+                                                            <constraint firstAttribute="bottom" secondItem="aoH-BK-UEd" secondAttribute="bottom" id="1m6-5m-3r2"/>
+                                                            <constraint firstItem="Ys5-3r-OIN" firstAttribute="leading" secondItem="6GU-sA-e3x" secondAttribute="leading" id="AYj-BB-PiB"/>
+                                                            <constraint firstAttribute="bottom" secondItem="Ys5-3r-OIN" secondAttribute="bottom" id="Rqe-nU-iSc"/>
+                                                            <constraint firstItem="Ys5-3r-OIN" firstAttribute="top" secondItem="6GU-sA-e3x" secondAttribute="top" id="YAD-WV-l4e"/>
+                                                            <constraint firstItem="aoH-BK-UEd" firstAttribute="leading" secondItem="6GU-sA-e3x" secondAttribute="leading" id="Ztw-fU-ylz"/>
+                                                            <constraint firstAttribute="width" constant="295" id="dfO-Qx-aWm"/>
+                                                            <constraint firstAttribute="height" constant="116" id="hsR-de-AjF"/>
+                                                            <constraint firstAttribute="trailing" secondItem="aoH-BK-UEd" secondAttribute="trailing" constant="15" id="mdi-dy-to4"/>
+                                                            <constraint firstItem="aoH-BK-UEd" firstAttribute="top" secondItem="6GU-sA-e3x" secondAttribute="top" constant="30" id="s6n-ws-GYD"/>
+                                                        </constraints>
+                                                    </view>
                                                 </subviews>
                                                 <constraints>
                                                     <constraint firstAttribute="width" constant="295" id="8Ej-lM-Bbv"/>
@@ -234,19 +290,22 @@
                     </view>
                     <navigationItem key="navigationItem" id="Nkl-ky-Sip"/>
                     <connections>
+                        <outlet property="buttonPlayCoino" destination="tZU-hE-Qug" id="eeP-8y-DUw"/>
                         <outlet property="buttonPlayLotto" destination="VP4-DN-5f1" id="9ai-Te-i98"/>
                         <outlet property="buttonPlaySlots" destination="rhn-JS-jy3" id="On3-t6-sSs"/>
+                        <outlet property="imageTokioCoino" destination="9Q8-jB-Nb5" id="0c1-Mq-QML"/>
                         <outlet property="imageTokioLotto" destination="arm-5o-Zwk" id="u48-ob-uCj"/>
                         <outlet property="imageTokioSlots" destination="e93-go-wlc" id="zNp-rz-3PE"/>
                         <outlet property="labelTotalCoins" destination="XQP-7F-KHo" id="9AI-25-IwY"/>
                         <outlet property="treasureChestImage" destination="Npm-W7-qjS" id="cUS-wS-M6W"/>
                         <segue destination="uNG-1k-zbZ" kind="presentation" identifier="toSlotVC" modalPresentationStyle="fullScreen" id="9EK-6e-ld4"/>
                         <segue destination="zBi-JU-8yu" kind="presentation" identifier="toLottoVC" modalPresentationStyle="fullScreen" id="b4t-yE-5WK"/>
+                        <segue destination="0V7-Js-UXM" kind="presentation" identifier="toCoinoVC" modalPresentationStyle="fullScreen" id="xbx-js-hdx"/>
                     </connections>
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="1052.6717557251909" y="-2.1126760563380285"/>
+            <point key="canvasLocation" x="816" y="406"/>
         </scene>
         <!--Slot View Controller-->
         <scene sceneID="M3u-Np-Ggd">
@@ -381,7 +440,7 @@
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="XEK-4h-Lp6" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="2049.6183206106871" y="-292.25352112676057"/>
+            <point key="canvasLocation" x="2001" y="-285"/>
         </scene>
         <!--Navigation Controller-->
         <scene sceneID="cU5-fl-xCL">
@@ -399,7 +458,7 @@
                 </navigationController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="mAt-sI-99n" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="125.95419847328243" y="-2.1126760563380285"/>
+            <point key="canvasLocation" x="-447" y="406"/>
         </scene>
         <!--Lotto View Controller-->
         <scene sceneID="aQZ-qW-OC9">
@@ -557,7 +616,162 @@
                 </viewController>
                 <placeholder placeholderIdentifier="IBFirstResponder" id="ADg-cq-8B6" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="2050" y="460"/>
+            <point key="canvasLocation" x="2002" y="406"/>
+        </scene>
+        <!--Flip Game View Controller-->
+        <scene sceneID="ASC-VY-UeR">
+            <objects>
+                <viewController id="0V7-Js-UXM" customClass="FlipGameViewController" customModule="Tokiyo_Casino" customModuleProvider="target" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="l1X-hP-NZC">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="backgroundCoin" translatesAutoresizingMaskIntoConstraints="NO" id="h25-e4-EC2">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                            </imageView>
+                            <stackView opaque="NO" contentMode="scaleToFill" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="gRc-w0-3fz" userLabel="BANNER">
+                                <rect key="frame" x="15.666666666666657" y="79" width="362" height="53"/>
+                                <subviews>
+                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="arrow.backward.circle.fill" catalog="system" translatesAutoresizingMaskIntoConstraints="NO" id="kpg-ix-vHO">
+                                        <rect key="frame" x="0.0" y="0.66666666666666785" width="53" height="51.666666666666657"/>
+                                        <color key="tintColor" red="0.94901967050000002" green="0.64313727620000005" blue="0.24313727020000001" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
+                                        <constraints>
+                                            <constraint firstAttribute="width" secondItem="kpg-ix-vHO" secondAttribute="height" multiplier="1:1" id="3xW-up-OSa"/>
+                                        </constraints>
+                                    </imageView>
+                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="lottoBanner" translatesAutoresizingMaskIntoConstraints="NO" id="WtV-1W-EJm">
+                                        <rect key="frame" x="61" y="0.0" width="240" height="53"/>
+                                        <constraints>
+                                            <constraint firstAttribute="width" constant="240" id="Haw-XY-ik9"/>
+                                            <constraint firstAttribute="width" secondItem="WtV-1W-EJm" secondAttribute="height" multiplier="240:53" id="L7R-4w-eAb"/>
+                                        </constraints>
+                                    </imageView>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="Tsi-cz-hGI">
+                                        <rect key="frame" x="309" y="0.0" width="53" height="53"/>
+                                    </view>
+                                </subviews>
+                                <constraints>
+                                    <constraint firstItem="Tsi-cz-hGI" firstAttribute="width" secondItem="kpg-ix-vHO" secondAttribute="width" id="IZe-BG-X5u"/>
+                                    <constraint firstItem="Tsi-cz-hGI" firstAttribute="height" secondItem="kpg-ix-vHO" secondAttribute="height" id="fNZ-F4-Gig"/>
+                                </constraints>
+                            </stackView>
+                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="GcU-pq-YuA" userLabel="cloud">
+                                <rect key="frame" x="0.0" y="652" width="393" height="200"/>
+                                <subviews>
+                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Cloud" translatesAutoresizingMaskIntoConstraints="NO" id="6o1-OX-faS">
+                                        <rect key="frame" x="0.0" y="0.0" width="393" height="200"/>
+                                    </imageView>
+                                    <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="top" spacing="5" translatesAutoresizingMaskIntoConstraints="NO" id="WGP-Pg-Yek">
+                                        <rect key="frame" x="20" y="54.666666666666629" width="353" height="91"/>
+                                        <subviews>
+                                            <stackView opaque="NO" contentMode="scaleToFill" spacing="10" translatesAutoresizingMaskIntoConstraints="NO" id="4bK-It-bbp" userLabel="bet stack">
+                                                <rect key="frame" x="0.0" y="0.0" width="353" height="55"/>
+                                                <subviews>
+                                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="-button" translatesAutoresizingMaskIntoConstraints="NO" id="Y9C-lt-WXR">
+                                                        <rect key="frame" x="0.0" y="0.0" width="55" height="55"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" secondItem="Y9C-lt-WXR" secondAttribute="height" multiplier="1:1" id="tDq-0C-e6T"/>
+                                                        </constraints>
+                                                    </imageView>
+                                                    <textField opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="248" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="bezel" placeholder="Bet amount" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="KTC-M5-DD6">
+                                                        <rect key="frame" x="65" y="0.0" width="133" height="55"/>
+                                                        <color key="backgroundColor" systemColor="systemGray3Color"/>
+                                                        <fontDescription key="fontDescription" type="system" pointSize="14"/>
+                                                        <textInputTraits key="textInputTraits"/>
+                                                    </textField>
+                                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="+button" translatesAutoresizingMaskIntoConstraints="NO" id="g1G-tV-4BR">
+                                                        <rect key="frame" x="208" y="0.0" width="55" height="55"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" secondItem="g1G-tV-4BR" secondAttribute="height" multiplier="1:1" id="6ES-RR-4Zt"/>
+                                                        </constraints>
+                                                    </imageView>
+                                                    <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="qzr-4T-lZv">
+                                                        <rect key="frame" x="273" y="0.0" width="80" height="55"/>
+                                                        <constraints>
+                                                            <constraint firstAttribute="width" constant="80" id="URE-YG-fEj" userLabel="width =  60"/>
+                                                        </constraints>
+                                                        <state key="normal" title="Button"/>
+                                                        <buttonConfiguration key="configuration" style="filled" title="Bet" cornerStyle="capsule">
+                                                            <color key="baseBackgroundColor" red="0.94901967050000002" green="0.64313727620000005" blue="0.24313727020000001" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
+                                                        </buttonConfiguration>
+                                                        <connections>
+                                                            <action selector="betButtonTapped:" destination="0V7-Js-UXM" eventType="touchUpInside" id="J37-0I-hN3"/>
+                                                        </connections>
+                                                    </button>
+                                                </subviews>
+                                                <constraints>
+                                                    <constraint firstAttribute="height" constant="55" id="AUE-BI-gM3"/>
+                                                </constraints>
+                                            </stackView>
+                                            <stackView opaque="NO" contentMode="scaleToFill" spacing="20" translatesAutoresizingMaskIntoConstraints="NO" id="2LI-ze-XQc">
+                                                <rect key="frame" x="0.0" y="60" width="353" height="31"/>
+                                                <subviews>
+                                                    <segmentedControl opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="left" contentVerticalAlignment="top" segmentControlStyle="bar" selectedSegmentIndex="0" translatesAutoresizingMaskIntoConstraints="NO" id="kPk-jl-fN1">
+                                                        <rect key="frame" x="0.0" y="0.0" width="353" height="32"/>
+                                                        <segments>
+                                                            <segment title="Heads"/>
+                                                            <segment title="Tails"/>
+                                                        </segments>
+                                                    </segmentedControl>
+                                                </subviews>
+                                            </stackView>
+                                        </subviews>
+                                        <constraints>
+                                            <constraint firstAttribute="trailing" secondItem="4bK-It-bbp" secondAttribute="trailing" id="9YF-Xb-DFV"/>
+                                            <constraint firstItem="4bK-It-bbp" firstAttribute="leading" secondItem="WGP-Pg-Yek" secondAttribute="leading" id="Gfy-D2-hTb"/>
+                                            <constraint firstAttribute="trailing" secondItem="2LI-ze-XQc" secondAttribute="trailing" id="WCd-cm-MbN"/>
+                                        </constraints>
+                                    </stackView>
+                                </subviews>
+                                <constraints>
+                                    <constraint firstItem="6o1-OX-faS" firstAttribute="leading" secondItem="GcU-pq-YuA" secondAttribute="leading" id="3qy-xX-thR"/>
+                                    <constraint firstItem="WGP-Pg-Yek" firstAttribute="leading" secondItem="GcU-pq-YuA" secondAttribute="leading" constant="20" id="8Bz-w9-258"/>
+                                    <constraint firstItem="6o1-OX-faS" firstAttribute="top" secondItem="GcU-pq-YuA" secondAttribute="top" id="EHp-I7-gHg"/>
+                                    <constraint firstAttribute="trailing" secondItem="6o1-OX-faS" secondAttribute="trailing" id="KuK-OL-L1y"/>
+                                    <constraint firstAttribute="height" constant="200" id="QTZ-c8-QkU"/>
+                                    <constraint firstAttribute="trailing" secondItem="WGP-Pg-Yek" secondAttribute="trailing" constant="20" id="mUb-zp-hrQ"/>
+                                    <constraint firstAttribute="bottom" secondItem="6o1-OX-faS" secondAttribute="bottom" id="mVT-sb-7wU"/>
+                                    <constraint firstItem="WGP-Pg-Yek" firstAttribute="centerY" secondItem="GcU-pq-YuA" secondAttribute="centerY" id="nTC-2q-f5V"/>
+                                </constraints>
+                            </view>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Tails" translatesAutoresizingMaskIntoConstraints="NO" id="hP4-xv-3Li">
+                                <rect key="frame" x="76.666666666666686" y="306" width="240" height="240"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="240" id="63b-Q6-a6q"/>
+                                    <constraint firstAttribute="width" secondItem="hP4-xv-3Li" secondAttribute="height" multiplier="1:1" id="r9P-1M-yUx"/>
+                                </constraints>
+                            </imageView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="eVT-LS-d8Q"/>
+                        <color key="backgroundColor" red="0.83000975509999997" green="1" blue="0.7591078939" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
+                        <constraints>
+                            <constraint firstItem="gRc-w0-3fz" firstAttribute="top" secondItem="eVT-LS-d8Q" secondAttribute="top" constant="20" id="2e3-49-6k1"/>
+                            <constraint firstAttribute="bottom" secondItem="GcU-pq-YuA" secondAttribute="bottom" id="D7q-PC-Qiy"/>
+                            <constraint firstItem="GcU-pq-YuA" firstAttribute="trailing" secondItem="eVT-LS-d8Q" secondAttribute="trailing" id="MQ7-ab-XoP"/>
+                            <constraint firstItem="h25-e4-EC2" firstAttribute="top" secondItem="l1X-hP-NZC" secondAttribute="top" id="UFF-cL-QcE"/>
+                            <constraint firstAttribute="bottom" secondItem="h25-e4-EC2" secondAttribute="bottom" id="bDM-up-fe1"/>
+                            <constraint firstItem="gRc-w0-3fz" firstAttribute="centerX" secondItem="l1X-hP-NZC" secondAttribute="centerX" id="mNH-xY-oQa"/>
+                            <constraint firstItem="hP4-xv-3Li" firstAttribute="centerY" secondItem="l1X-hP-NZC" secondAttribute="centerY" id="naa-pI-np4"/>
+                            <constraint firstItem="h25-e4-EC2" firstAttribute="trailing" secondItem="eVT-LS-d8Q" secondAttribute="trailing" id="oqk-ch-60z"/>
+                            <constraint firstItem="hP4-xv-3Li" firstAttribute="centerX" secondItem="l1X-hP-NZC" secondAttribute="centerX" id="qqo-Rx-v3K"/>
+                            <constraint firstItem="GcU-pq-YuA" firstAttribute="leading" secondItem="eVT-LS-d8Q" secondAttribute="leading" id="sPV-j6-116"/>
+                            <constraint firstItem="h25-e4-EC2" firstAttribute="leading" secondItem="eVT-LS-d8Q" secondAttribute="leading" id="tbU-NM-9WV"/>
+                        </constraints>
+                    </view>
+                    <navigationItem key="navigationItem" id="NXT-Db-WyI"/>
+                    <connections>
+                        <outlet property="backImageView" destination="kpg-ix-vHO" id="L8V-Om-gUv"/>
+                        <outlet property="betButton" destination="qzr-4T-lZv" id="tI1-7e-uxL"/>
+                        <outlet property="betTextField" destination="KTC-M5-DD6" id="jr3-Nf-Cti"/>
+                        <outlet property="choiceControl" destination="kPk-jl-fN1" id="VoW-Wg-w8Q"/>
+                        <outlet property="coinImageView" destination="hP4-xv-3Li" id="LfP-vq-Yxe"/>
+                        <outlet property="minusImageView" destination="Y9C-lt-WXR" id="Mlf-Xa-ypo"/>
+                        <outlet property="plusImageView" destination="g1G-tV-4BR" id="KCY-79-2lV"/>
+                    </connections>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="Uik-gE-qPb" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="2001" y="1127"/>
         </scene>
     </scenes>
     <resources>
@@ -565,8 +779,10 @@
         <image name="-button" width="123" height="129"/>
         <image name="Buildings" width="1126" height="714"/>
         <image name="Cloud" width="1126" height="738"/>
+        <image name="Tails" width="1540" height="1504"/>
         <image name="TokioCasinoLabel" width="748" height="460"/>
         <image name="arrow.backward.circle.fill" catalog="system" width="128" height="123"/>
+        <image name="backgroundCoin" width="576" height="948"/>
         <image name="backgroundLotto" width="3543" height="4961"/>
         <image name="blueButton" width="124" height="106"/>
         <image name="coinBox" width="511" height="444"/>

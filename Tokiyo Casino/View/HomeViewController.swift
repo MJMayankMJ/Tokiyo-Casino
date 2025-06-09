@@ -13,8 +13,10 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     @IBOutlet weak var labelTotalCoins: UILabel!
     @IBOutlet weak var imageTokioSlots: UIImageView!
     @IBOutlet weak var imageTokioLotto: UIImageView!
+    @IBOutlet weak var imageTokioCoino: UIImageView!
     @IBOutlet weak var buttonPlaySlots: UIImageView!
     @IBOutlet weak var buttonPlayLotto: UIImageView!
+    @IBOutlet weak var buttonPlayCoino: UIImageView!
     @IBOutlet weak var treasureChestImage: UIImageView!
     
     private var viewModel = HomeViewModel()
@@ -77,24 +79,18 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
     private func setupTapGestures() {
         // Game card tap gestures
-        imageTokioSlots.isUserInteractionEnabled = true
-        imageTokioLotto.isUserInteractionEnabled = true
-        
-        let slotsTap = UITapGestureRecognizer(target: self, action: #selector(didTapSlots))
-        let lottoTap = UITapGestureRecognizer(target: self, action: #selector(didTapLotto))
-        
-        imageTokioSlots.addGestureRecognizer(slotsTap)
-        imageTokioLotto.addGestureRecognizer(lottoTap)
+        [imageTokioSlots, imageTokioLotto, imageTokioCoino].forEach { iv in
+            iv?.isUserInteractionEnabled = true
+            let tap = UITapGestureRecognizer(target: self, action: #selector(didTapGameCard(_:)))
+            iv?.addGestureRecognizer(tap)
+        }
         
         // Play button tap gestures
-        buttonPlaySlots.isUserInteractionEnabled = true
-        buttonPlayLotto.isUserInteractionEnabled = true
-        
-        let slotsPlayTap = UITapGestureRecognizer(target: self, action: #selector(didTapSlotsPlay))
-        let lottoPlayTap = UITapGestureRecognizer(target: self, action: #selector(didTapLottoPlay))
-        
-        buttonPlaySlots.addGestureRecognizer(slotsPlayTap)
-        buttonPlayLotto.addGestureRecognizer(lottoPlayTap)
+        [buttonPlaySlots, buttonPlayLotto, buttonPlayCoino].forEach { iv in
+            iv?.isUserInteractionEnabled = true
+            let tap = UITapGestureRecognizer(target: self, action: #selector(didTapPlayButton(_:)))
+            iv?.addGestureRecognizer(tap)
+        }
         
         // Treasure chest tap
         treasureChestImage.isUserInteractionEnabled = true
@@ -104,7 +100,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     
     private func setupInitialAnimations() {
         // Set initial transforms for entrance animations
-        [imageTokioSlots, imageTokioLotto].forEach { imageView in
+        [imageTokioSlots, imageTokioLotto, imageTokioCoino].forEach { imageView in
             imageView?.transform = CGAffineTransform(translationX: 0, y: 50).scaledBy(x: 0.8, y: 0.8)
             imageView?.alpha = 0
         }
@@ -123,7 +119,12 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             self.imageTokioLotto.alpha = 1
         }
         
-        UIView.animate(withDuration: 0.6, delay: 0.6, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.3) {
+        UIView.animate(withDuration: 0.8, delay: 0.6, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5) {
+            self.imageTokioCoino.transform = .identity
+            self.imageTokioCoino.alpha = 1
+        }
+        
+        UIView.animate(withDuration: 0.6, delay: 0.8, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.3) {
             self.treasureChestImage.transform = .identity
             self.treasureChestImage.alpha = 1
         }
@@ -155,27 +156,33 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     }
 
     // MARK: - Actions
-    @objc private func didTapSlots() {
-        animateGameCardTap(imageTokioSlots) {
-            self.performSegue(withIdentifier: K.toSlotVC, sender: nil)
+    @objc private func didTapGameCard(_ sender: UITapGestureRecognizer) {
+        guard let iv = sender.view as? UIImageView else { return }
+        animateGameCardTap(iv) {
+            switch iv {
+            case self.imageTokioSlots:
+                self.performSegue(withIdentifier: K.toSlotVC, sender: nil)
+            case self.imageTokioLotto:
+                self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
+            case self.imageTokioCoino:
+                self.performSegue(withIdentifier: K.toCoinoVC, sender: nil)
+            default: break
+            }
         }
     }
     
-    @objc private func didTapLotto() {
-        animateGameCardTap(imageTokioLotto) {
-            self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
-        }
-    }
-    
-    @objc private func didTapSlotsPlay() {
-        animateImageButtonTap(buttonPlaySlots) {
-            self.performSegue(withIdentifier: K.toSlotVC, sender: nil)
-        }
-    }
-    
-    @objc private func didTapLottoPlay() {
-        animateImageButtonTap(buttonPlayLotto) {
-            self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
+    @objc private func didTapPlayButton(_ sender: UITapGestureRecognizer) {
+        guard let iv = sender.view as? UIImageView else { return }
+        animateImageButtonTap(iv) {
+            switch iv {
+            case self.buttonPlaySlots:
+                self.performSegue(withIdentifier: K.toSlotVC, sender: nil)
+            case self.buttonPlayLotto:
+                self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
+            case self.buttonPlayCoino:
+                self.performSegue(withIdentifier: K.toCoinoVC, sender: nil)
+            default: break
+            }
         }
     }
     
@@ -258,6 +265,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         // Gentle floating animation for game cards
         animateFloating(imageTokioSlots, delay: 0)
         animateFloating(imageTokioLotto, delay: 1.0)
+        animateFloating(imageTokioCoino, delay: 2.0)
         
         // Treasure chest glow animation if available
         if viewModel.canCollectCoins {
@@ -268,6 +276,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     private func stopIdleAnimations() {
         imageTokioSlots.layer.removeAllAnimations()
         imageTokioLotto.layer.removeAllAnimations()
+        imageTokioCoino.layer.removeAllAnimations()
         treasureChestImage.layer.removeAllAnimations()
     }
     
