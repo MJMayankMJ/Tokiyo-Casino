@@ -64,4 +64,5 @@ struct SoundManager {
     static var isMuted: Bool {
         UserDefaults.standard.bool(forKey: kMutedKey)
     }
+    
 }

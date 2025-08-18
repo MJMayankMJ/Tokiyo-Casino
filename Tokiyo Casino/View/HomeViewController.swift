@@ -253,6 +253,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             self.labelTotalCoins.alpha = 0.7
         }) { _ in
             self.labelTotalCoins.text = newText
+            self.labelTotalCoins.font = UIFont(name: "Pocket Monk", size: 30)
             UIView.animate(withDuration: 0.2, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5) {
                 self.labelTotalCoins.transform = .identity
                 self.labelTotalCoins.alpha = 1.0

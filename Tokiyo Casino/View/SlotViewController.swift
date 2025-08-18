@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import CoreHaptics
 
 class SlotViewController: UIViewController {
     // MARK: - IBOutlets
@@ -27,6 +28,8 @@ class SlotViewController: UIViewController {
     private var originalSpinButtonImage: UIImage?
     private var pressedSpinButtonImage: UIImage?
     private var toolbar: UIToolbar!
+    var impactGenerator: UIImpactFeedbackGenerator = UIImpactFeedbackGenerator(style: .heavy)
+    var notificationImpact: UINotificationFeedbackGenerator = UINotificationFeedbackGenerator()
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -53,6 +56,9 @@ class SlotViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         viewModel.onUpdate?() // Refresh UI with latest coins
+        BackgroundSoundManager.shared.setupPlayer(soundName: "bg_soothing", soundType: .mp3)
+        BackgroundSoundManager.shared.play()
+        BackgroundSoundManager.shared.volume(0.3)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -104,13 +110,13 @@ class SlotViewController: UIViewController {
     }
 
     private func setupSounds() {
-        // Use "Slots.m4a" for win, "rattle.m4a" for lose & tap
-        if Bundle.main.url(forResource: "Slots", withExtension: "m4a") != nil {
-            winSound.setupPlayer(soundName: "Slots", soundType: .m4a)
+        // Use "grand_win.mp3" for win, "loose_sound.mp3" for lose & tap
+        if Bundle.main.url(forResource: "grand_win", withExtension: "mp3") != nil {
+            winSound.setupPlayer(soundName: "grand_win", soundType: .mp3)
             winSound.volume(0.7)
         }
-        if Bundle.main.url(forResource: "rattle", withExtension: "m4a") != nil {
-            loseSound.setupPlayer(soundName: "rattle", soundType: .m4a)
+        if Bundle.main.url(forResource: "loose_sound", withExtension: "mp3") != nil {
+            loseSound.setupPlayer(soundName: "loose_sound", soundType: .mp3)
             loseSound.volume(0.5)
             buttonTapSound.setupPlayer(soundName: "rattle", soundType: .m4a)
             buttonTapSound.volume(0.3)
@@ -152,7 +158,10 @@ class SlotViewController: UIViewController {
 
     @objc private func spinButtonTapped() {
         guard !isSpinning else { return }
-
+        
+        impactGenerator.prepare()
+        impactGenerator.impactOccurred()
+        
         // Validate the typed bet
         let validation = viewModel.validateBetInput(betAmountTextField.text)
         updateUI() // Reflect clamped amount if needed
@@ -166,16 +175,23 @@ class SlotViewController: UIViewController {
     }
 
     @objc private func plusButtonTapped() {
-        buttonTapSound.play()
+        buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
+        
+        notificationImpact.prepare()
+        notificationImpact.notificationOccurred(.success)
+        
         animateButtonTap(on: plusButtonImageView)
         viewModel.increaseBet()
         updateUI()
     }
 
     @objc private func minusButtonTapped() {
-        buttonTapSound.play()
+        buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
         animateButtonTap(on: minusButtonImageView)
 
+        notificationImpact.prepare()
+        notificationImpact.notificationOccurred(.success)
+        
         let oldAmount = viewModel.currentBetAmount
         viewModel.decreaseBet()
         if viewModel.currentBetAmount == oldAmount {
@@ -185,6 +201,7 @@ class SlotViewController: UIViewController {
             shake.duration = 0.4
             shake.values = [-5, 5, -5, 5, 0]
             minusButtonImageView.layer.add(shake, forKey: "shake")
+            notificationImpact.notificationOccurred(.warning)
         }
         updateUI()
     }
@@ -192,6 +209,7 @@ class SlotViewController: UIViewController {
     @objc private func backButtonTapped() {
         buttonTapSound.play()
         animateButtonTap(on: backButton)
+        BackgroundSoundManager.shared.pause()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             self.dismiss(animated: true)
         }
@@ -274,6 +292,7 @@ class SlotViewController: UIViewController {
 
     private func updateUI() {
         betAmountTextField.text = "\(viewModel.currentBetAmount)"
+        betAmountTextField.font = UIFont(name: "Pocket Monk", size: 16)
     }
 
     // MARK: - Alerts & Animations

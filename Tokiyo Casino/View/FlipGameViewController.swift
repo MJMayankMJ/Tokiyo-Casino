@@ -26,15 +26,33 @@ class FlipGameViewController: UIViewController {
         setupUI()
         refreshUI()
         setupGestures()
+        BackgroundSoundManager.shared.setupPlayer(soundName: "bg_coino", soundType: .mp3)
+           BackgroundSoundManager.shared.volume(0.2)
+           BackgroundSoundManager.shared.play()
     }
 
     private func setupUI() {
         betTextField.keyboardType = .numberPad
         betTextField.text = "\(viewModel.currentBet)"
+        betTextField.font = UIFont(name: "Pocket Monk", size: 24)
         betButton.layer.cornerRadius = 8
         coinImageView.image = UIImage(named: "Heads")
-        //coinsLabel.text = "Coins: \(viewModel.totalCoins)"
+        
+        // ✅ Change font of Segmented Control (Heads / Tails)
+        let font = UIFont(name: "Pocket Monk", size: 20) ?? UIFont.systemFont(ofSize: 20, weight: .bold)
+        let normalAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.white
+        ]
+        let selectedAttributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.black
+        ]
+        
+        choiceControl.setTitleTextAttributes(normalAttributes, for: .normal)
+        choiceControl.setTitleTextAttributes(selectedAttributes, for: .selected)
     }
+
 
     private func setupGestures() {
         [backImageView, plusImageView, minusImageView].forEach { imgView in
@@ -55,6 +73,7 @@ class FlipGameViewController: UIViewController {
         switch view {
         case backImageView:
             dismiss(animated: true)
+            BackgroundSoundManager.shared.pause()
         case plusImageView:
             viewModel.updateBet(by: viewModel.minBet)
         case minusImageView:
