@@ -52,10 +52,11 @@ class FlipGameViewModel {
     }
 
     // MARK: - Game Logic
-    func performFlip(choice: FlipChoice, completion: @escaping (_ won: Bool, _ reward: Int64) -> Void) {
+    func performFlip(choice: FlipChoice, completion: @escaping (_ result: FlipChoice,_ won: Bool, _ reward: Int64) -> Void) {
         // Simulate flip: random 0 or 1
         let resultRaw = Int.random(in: 0...1)
-        let won = (resultRaw == choice.rawValue)
+        let result: FlipChoice = (resultRaw == 0) ? .heads : .tails
+        let won = (choice == result)
         let reward: Int64 = won ? currentBet * 2 : 0
 
         // Update coins
@@ -65,6 +66,6 @@ class FlipGameViewModel {
             CoinsManager.shared.deductCoins(amount: currentBet) { _ in }
         }
 
-        completion(won, reward)
+        completion(result,won, reward)
     }
 }

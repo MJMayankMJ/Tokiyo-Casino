@@ -159,6 +159,9 @@ class SlotViewController: UIViewController {
     @objc private func spinButtonTapped() {
         guard !isSpinning else { return }
         
+        buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
+        buttonTapSound.play()
+        
         impactGenerator.prepare()
         impactGenerator.impactOccurred()
         
@@ -170,12 +173,13 @@ class SlotViewController: UIViewController {
             showBetError(message: error.message)
             return
         }
-
+        
         performSpin()
     }
 
     @objc private func plusButtonTapped() {
         buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
+        buttonTapSound.play()
         
         notificationImpact.prepare()
         notificationImpact.notificationOccurred(.success)
@@ -187,6 +191,8 @@ class SlotViewController: UIViewController {
 
     @objc private func minusButtonTapped() {
         buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
+        buttonTapSound.play()
+        
         animateButtonTap(on: minusButtonImageView)
 
         notificationImpact.prepare()
