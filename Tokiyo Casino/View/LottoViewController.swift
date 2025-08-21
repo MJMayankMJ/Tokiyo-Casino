@@ -41,6 +41,8 @@ class LottoViewController: UIViewController {
     private let thumbValueLabel = UILabel()
     private var betButtonTitle = "Bet"
     
+    private var soundManager = SoundManager()
+    
     // MARK: – Lifecycle
     
     override func viewDidLoad() {
@@ -442,8 +444,10 @@ class LottoViewController: UIViewController {
     
     private func triggerMineHaptic() {
         if #available(iOS 10.0, *) {
+            soundManager.setupPlayer(soundName: "error_sound", soundType: .mp3)
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.error)
+            
         } else {
             //AudioServicesPlaySystemSound(kSystemSoundID_Vibrate)
         }
@@ -451,6 +455,7 @@ class LottoViewController: UIViewController {
     
     private func triggerCashOutHaptic() {
         if #available(iOS 10.0, *) {
+            soundManager.setupPlayer(soundName: "lotto_win_sound", soundType: .mp3)
             let generator = UINotificationFeedbackGenerator()
             generator.notificationOccurred(.success)
         } else {

@@ -16,6 +16,8 @@ class FlipGameViewController: UIViewController {
     @IBOutlet weak var choiceControl: UISegmentedControl!
     @IBOutlet weak var coinImageView: UIImageView!
     @IBOutlet weak var betButton: UIButton!
+    
+    private var soundManager = SoundManager()
     //@IBOutlet weak var coinsLabel: UILabel!
 
     // MARK: - Properties
@@ -62,6 +64,7 @@ class FlipGameViewController: UIViewController {
         }
     }
 
+    
     private func refreshUI() {
         //coinsLabel.text = "Coins: \(viewModel.totalCoins)"
         betTextField.text = "\(viewModel.currentBet)"
@@ -76,8 +79,14 @@ class FlipGameViewController: UIViewController {
             BackgroundSoundManager.shared.pause()
         case plusImageView:
             viewModel.updateBet(by: viewModel.minBet)
+            soundManager.setupPlayer(soundName: "button_tap", soundType: .mp3)
+            soundManager.play()
+            
         case minusImageView:
             viewModel.updateBet(by: -viewModel.minBet)
+            soundManager.setupPlayer(soundName: "button_tap", soundType: .mp3)
+            soundManager.play()
+            
         default: break
         }
         refreshUI()
@@ -85,6 +94,10 @@ class FlipGameViewController: UIViewController {
 
     @IBAction func betButtonTapped(_ sender: UIButton) {
         let validation = viewModel.validate(betString: betTextField.text)
+        
+        soundManager.setupPlayer(soundName: "coin_flip_sound", soundType: .mp3)
+        soundManager.play()
+        
         viewModel.currentBet = validation.amount
         refreshUI()
         if let err = validation.errorMessage {
@@ -94,18 +107,26 @@ class FlipGameViewController: UIViewController {
         }
 
         performFlipAnimation(times: 6, totalDuration: 0.6) {
-            let choice = FlipChoice(rawValue: self.choiceControl.selectedSegmentIndex) ?? .heads
-            self.viewModel.performFlip(choice: choice) { won, reward in
-                let face = won ? "Heads" : "Tails"
-                self.coinImageView.image = UIImage(named: face)
+            let index = self.choiceControl.selectedSegmentIndex
+            let choice: FlipChoice = (index == 0) ? .heads : .tails
+
+            
+            self.viewModel.performFlip(choice: choice) { [self] result, won, reward in
+               // let face = won ? "Heads" : "Tails"
+                self.coinImageView.image = UIImage(named: result == .heads ? "Heads" : "Tails")
                 let title = won ? "🎉 You Win!" : "☹️ You Lose"
                 let msg = won
                     ? "You won \(reward) coins!"
                     : "You lost \(self.viewModel.currentBet) coins."
+                if won {
+                    self.soundManager.setupPlayer(soundName: "coino_win_sound", soundType: .wav)
+                    soundManager.play()
+                }
                 self.showAlert(title: title, message: msg)
                 self.refreshUI()
             }
         }
+        
     }
 
     private func performFlipAnimation(times: Int, totalDuration: TimeInterval, completion: @escaping () -> Void) {
