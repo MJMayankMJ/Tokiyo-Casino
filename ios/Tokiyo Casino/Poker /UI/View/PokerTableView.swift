@@ -364,7 +364,7 @@ extension PokerTableView {
         guard !playerViews.isEmpty else { return }
         
         // Choose how much to move (tune this value if needed)
-        let shiftAmount: CGFloat = -100   // negative = move up
+        let shiftAmount: CGFloat = -180   // negative = move up
         
         humanPlayerVerticalShift = shiftUp ? shiftAmount : 0
         
