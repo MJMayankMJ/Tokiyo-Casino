@@ -97,7 +97,7 @@ class GameViewController: UIViewController {
             bettingControls.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
             bettingControls.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
             bettingControls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: 30),
-            bettingControls.heightAnchor.constraint(equalToConstant: 80),
+            bettingControls.heightAnchor.constraint(equalToConstant: 200),
             
             // Menu button
             menuButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),

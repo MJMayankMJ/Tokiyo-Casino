@@ -62,7 +62,7 @@ class BettingControlsView: UIView {
         containerView.layer.shadowRadius = 12
         
         // Action title label
-        actionTitleLabel.text = "YOUR ACTION"
+        actionTitleLabel.text = ""
         actionTitleLabel.font = UIFont(name: "Copperplate", size: 12) ?? .systemFont(ofSize: 12, weight: .bold)
         actionTitleLabel.textColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
         actionTitleLabel.textAlignment = .center
