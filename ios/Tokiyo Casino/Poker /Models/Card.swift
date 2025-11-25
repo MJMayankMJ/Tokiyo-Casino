@@ -5,7 +5,7 @@
 //  Created by Mayank Jangid on 8/17/25.
 //
 
-import SwiftUI
+import UIKit
 
 // MARK: - Suit
 enum Suit: String, CaseIterable {

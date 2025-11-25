@@ -19,6 +19,11 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     @IBOutlet weak var buttonPlayCoino: UIImageView!
     @IBOutlet weak var treasureChestImage: UIImageView!
     
+    // Poker card views (created programmatically)
+    private var imageTokioPoker: UIImageView!
+    private var buttonPlayPoker: UIImageView!
+    private var pokerCardContainer: UIView!
+    
     private var viewModel = HomeViewModel()
     private var hasShownDailyRewardAlert = false
 
@@ -26,7 +31,8 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        setupViewModel()
+        setupPokerCard()
+        //setupViewModel()
         setupTapGestures()
         setupInitialAnimations()
         
@@ -68,25 +74,122 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     }
 
     // MARK: - Setup
-    private func setupViewModel() {
-        viewModel.onUpdate = { [weak self] in
-            DispatchQueue.main.async { self?.updateUI() }
+    private func setupPokerCard() {
+        // Find the stack view containing game cards
+        guard let stackView = findGameCardsStackView() else {
+            print("Warning: Could not find game cards stack view")
+            return
         }
-        viewModel.fetchUserStats()
-        viewModel.checkDailyReward()
-        updateUI()
+        
+        // Create Poker card container view matching the structure of other cards
+        pokerCardContainer = UIView()
+        pokerCardContainer.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Create background shape view (CustomShapeView)
+        let backgroundShape = CustomShapeView()
+        backgroundShape.translatesAutoresizingMaskIntoConstraints = false
+        backgroundShape.slant = 30
+        backgroundShape.cornerRadius = 20
+        backgroundShape.fillColor = UIColor(red: 0.31, green: 0.26, blue: 0.19, alpha: 1.0)
+        pokerCardContainer.addSubview(backgroundShape)
+        
+        // Create horizontal stack view for card content
+        let contentStack = UIStackView()
+        contentStack.axis = .horizontal
+        contentStack.distribution = .fillProportionally
+        contentStack.alignment = .center
+        contentStack.spacing = 8
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Create Poker icon image view (using game2icon as placeholder, matching Lotto)
+        imageTokioPoker = UIImageView()
+        imageTokioPoker.image = UIImage(named: "game2icon")
+        imageTokioPoker.contentMode = .scaleAspectFit
+        imageTokioPoker.translatesAutoresizingMaskIntoConstraints = false
+        imageTokioPoker.heightAnchor.constraint(equalToConstant: 100).isActive = true
+        imageTokioPoker.widthAnchor.constraint(equalTo: imageTokioPoker.heightAnchor).isActive = true
+        
+        // Create Poker label
+        let pokerLabel = UILabel()
+        pokerLabel.text = "POKER"
+        pokerLabel.font = .boldSystemFont(ofSize: 17)
+        pokerLabel.textColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 1)
+        pokerLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        // Create play button image view
+        buttonPlayPoker = UIImageView()
+        buttonPlayPoker.image = UIImage(named: "blueButton")
+        buttonPlayPoker.contentMode = .scaleAspectFit
+        buttonPlayPoker.translatesAutoresizingMaskIntoConstraints = false
+        buttonPlayPoker.widthAnchor.constraint(equalToConstant: 52).isActive = true
+        buttonPlayPoker.heightAnchor.constraint(equalToConstant: 50).isActive = true
+        
+        // Add views to content stack
+        contentStack.addArrangedSubview(imageTokioPoker)
+        contentStack.addArrangedSubview(pokerLabel)
+        contentStack.addArrangedSubview(buttonPlayPoker)
+        
+        // Add views to container
+        pokerCardContainer.addSubview(contentStack)
+        
+        // Set up constraints
+        NSLayoutConstraint.activate([
+            // Container size
+            pokerCardContainer.widthAnchor.constraint(equalToConstant: 295),
+            pokerCardContainer.heightAnchor.constraint(equalToConstant: 116),
+            
+            // Background shape
+            backgroundShape.leadingAnchor.constraint(equalTo: pokerCardContainer.leadingAnchor),
+            backgroundShape.trailingAnchor.constraint(equalTo: pokerCardContainer.trailingAnchor, constant: -15),
+            backgroundShape.topAnchor.constraint(equalTo: pokerCardContainer.topAnchor, constant: 30),
+            backgroundShape.bottomAnchor.constraint(equalTo: pokerCardContainer.bottomAnchor),
+            
+            // Content stack
+            contentStack.leadingAnchor.constraint(equalTo: pokerCardContainer.leadingAnchor),
+            contentStack.trailingAnchor.constraint(equalTo: pokerCardContainer.trailingAnchor),
+            contentStack.topAnchor.constraint(equalTo: pokerCardContainer.topAnchor),
+            contentStack.bottomAnchor.constraint(equalTo: pokerCardContainer.bottomAnchor)
+        ])
+        
+        // Add to stack view
+        stackView.addArrangedSubview(pokerCardContainer)
+    }
+    
+    private func findGameCardsStackView() -> UIStackView? {
+        // Traverse view hierarchy to find the stack view containing game cards
+        func findStackView(in view: UIView) -> UIStackView? {
+            if let stackView = view as? UIStackView,
+               stackView.axis == .vertical,
+               stackView.arrangedSubviews.count >= 3 {
+                // Check if it contains the known game card views
+                for subview in stackView.arrangedSubviews {
+                    if subview.subviews.contains(where: { $0 is CustomShapeView }) {
+                        return stackView
+                    }
+                }
+            }
+            
+            for subview in view.subviews {
+                if let found = findStackView(in: subview) {
+                    return found
+                }
+            }
+            return nil
+        }
+        
+        return findStackView(in: view)
     }
 
     private func setupTapGestures() {
         // Game card tap gestures
-        [imageTokioSlots, imageTokioLotto, imageTokioCoino].forEach { iv in
+        [imageTokioSlots, imageTokioLotto, imageTokioCoino, imageTokioPoker].forEach { iv in
             iv?.isUserInteractionEnabled = true
             let tap = UITapGestureRecognizer(target: self, action: #selector(didTapGameCard(_:)))
             iv?.addGestureRecognizer(tap)
         }
         
         // Play button tap gestures
-        [buttonPlaySlots, buttonPlayLotto, buttonPlayCoino].forEach { iv in
+        [buttonPlaySlots, buttonPlayLotto, buttonPlayCoino, buttonPlayPoker].forEach { iv in
             iv?.isUserInteractionEnabled = true
             let tap = UITapGestureRecognizer(target: self, action: #selector(didTapPlayButton(_:)))
             iv?.addGestureRecognizer(tap)
@@ -100,7 +203,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     
     private func setupInitialAnimations() {
         // Set initial transforms for entrance animations
-        [imageTokioSlots, imageTokioLotto, imageTokioCoino].forEach { imageView in
+        [imageTokioSlots, imageTokioLotto, imageTokioCoino, imageTokioPoker].forEach { imageView in
             imageView?.transform = CGAffineTransform(translationX: 0, y: 50).scaledBy(x: 0.8, y: 0.8)
             imageView?.alpha = 0
         }
@@ -124,7 +227,12 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             self.imageTokioCoino.alpha = 1
         }
         
-        UIView.animate(withDuration: 0.6, delay: 0.8, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.3) {
+        UIView.animate(withDuration: 0.8, delay: 0.8, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5) {
+            self.imageTokioPoker?.transform = .identity
+            self.imageTokioPoker?.alpha = 1
+        }
+        
+        UIView.animate(withDuration: 0.6, delay: 1.0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.3) {
             self.treasureChestImage.transform = .identity
             self.treasureChestImage.alpha = 1
         }
@@ -166,6 +274,8 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
                 self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
             case self.imageTokioCoino:
                 self.performSegue(withIdentifier: K.toCoinoVC, sender: nil)
+            case self.imageTokioPoker:
+                self.openPokerGame()
             default: break
             }
         }
@@ -181,8 +291,21 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
                 self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
             case self.buttonPlayCoino:
                 self.performSegue(withIdentifier: K.toCoinoVC, sender: nil)
+            case self.buttonPlayPoker:
+                self.openPokerGame()
             default: break
             }
+        }
+    }
+    
+    private func openPokerGame() {
+        let pokerVC = MenuViewController()
+        pokerVC.modalPresentationStyle = .fullScreen
+        
+        if let navigationController = navigationController {
+            navigationController.pushViewController(pokerVC, animated: true)
+        } else {
+            present(pokerVC, animated: true)
         }
     }
     
@@ -267,6 +390,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         animateFloating(imageTokioSlots, delay: 0)
         animateFloating(imageTokioLotto, delay: 1.0)
         animateFloating(imageTokioCoino, delay: 2.0)
+        animateFloating(imageTokioPoker, delay: 3.0)
         
         // Treasure chest glow animation if available
         if viewModel.canCollectCoins {
@@ -278,6 +402,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         imageTokioSlots.layer.removeAllAnimations()
         imageTokioLotto.layer.removeAllAnimations()
         imageTokioCoino.layer.removeAllAnimations()
+        imageTokioPoker?.layer.removeAllAnimations()
         treasureChestImage.layer.removeAllAnimations()
     }
     

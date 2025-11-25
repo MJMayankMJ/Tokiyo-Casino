@@ -28,6 +28,7 @@ enum K {
     static let playSlots  = "PLAY SLOTS"
     static let playLotto  = "PLAY LOTTO"
     static let playCoino  = "PLAY COINO"
+    static let playPoker  = "PLAY POKER"
     
     // MARK: - Audio
     static let sound      = "Slots"
