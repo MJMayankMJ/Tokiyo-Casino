@@ -60,7 +60,7 @@ class PokerTableView: UIView {
         phaseLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(phaseLabel)
         
-        // Pot label (positioned better)
+        // Pot label (positioned better) Gotcha
         potLabel.text = "Pot: $0"
         potLabel.textColor = .white
         potLabel.font = .boldSystemFont(ofSize: 22)
