@@ -294,20 +294,6 @@ class PokerTableView: UIView {
             }
         }
     }
-    
-//    func revealAllCards() {
-//        print("Revealing all player cards - Total players: \(playerViews.count)")
-//        
-//        for (index, playerView) in playerViews.enumerated() {
-//            // Add staggered delays for dramatic effect
-//            let delay = Double(index) * 0.3
-//            
-//            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-//                playerView.revealCards()
-//            }
-//        }
-//    }
-    
 
     func revealAllCards() {
         print("Revealing all player cards - Total players: \(playerViews.count)")

@@ -20,6 +20,9 @@ class GameViewController: UIViewController {
     private let playerCount: Int
     private let startingChips: Int
     
+    // Track winners for summary
+    private var handWinners: [(player: Player, amount: Int, handDescription: String)] = []
+    
     // MARK: - Initialization
     init(playerCount: Int = 6, startingChips: Int = 1000) {
         self.playerCount = playerCount
@@ -90,11 +93,11 @@ class GameViewController: UIViewController {
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             tableView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             
-            // Betting controls - increased height for plus/minus buttons
-            bettingControls.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            bettingControls.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            bettingControls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
-            bettingControls.heightAnchor.constraint(equalToConstant: 200),
+            // Betting controls - more padding and height
+            bettingControls.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            bettingControls.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            bettingControls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: 30),
+            bettingControls.heightAnchor.constraint(equalToConstant: 80),
             
             // Menu button
             menuButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
@@ -121,7 +124,34 @@ class GameViewController: UIViewController {
     }
     
     private func setupNotifications() {
-        // No longer needed - using GameSummaryViewController instead
+        // Listen for delayed winner alerts
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(showDelayedWinnerAlert(_:)),
+            name: NSNotification.Name("ShowWinnerAlert"),
+            object: nil
+        )
+    }
+    
+    @objc private func showDelayedWinnerAlert(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let player = userInfo["player"] as? Player,
+              let amount = userInfo["amount"] as? Int,
+              let handDescription = userInfo["handDescription"] as? String else {
+            return
+        }
+        
+        // Store winner info for the summary
+        handWinners.append((player: player, amount: amount, handDescription: handDescription))
+        
+        // After all winner notifications are received, show the summary
+        // (This assumes the game sends all notifications before we need to show the summary)
+        // For a more robust solution, you might want to add a separate notification for "AllWinnersProcessed"
+        
+        // For now, we'll show the summary after a small delay to ensure all winners are collected
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.showGameSummary()
+        }
     }
     
     deinit {
@@ -148,6 +178,7 @@ class GameViewController: UIViewController {
     private func startNewHand() {
         newHandButton.isHidden = true
         bettingControls.isHidden = true
+        handWinners = [] // Reset winners for new hand
         
         // Reset human player position
         tableView.adjustHumanPlayerPosition(shiftUp: false)
@@ -164,13 +195,11 @@ class GameViewController: UIViewController {
         }
     }
     
-
-    // UPDATE handlePlayerAction
     private func handlePlayerAction(_ action: PlayerAction) {
         guard let currentPlayer = gameManager.currentPlayer,
               currentPlayer.isHuman else { return }
         
-        // FIX: Hide controls immediately to prevent double-clicking or UI glitches
+        // Hide controls immediately to prevent double-clicking or UI glitches
         bettingControls.isHidden = true
         gameManager.processPlayerAction(action, for: currentPlayer)
     }
@@ -208,77 +237,46 @@ class GameViewController: UIViewController {
         }
     }
     
-    // MARK: - Actions
-    @objc private func menuTapped() {
-        addHapticFeedback(.light)
-        
-        let alert = UIAlertController(title: "Menu", message: nil, preferredStyle: .actionSheet)
-        
-        alert.addAction(UIAlertAction(title: "New Game", style: .default) { [weak self] _ in
-            self?.addHapticFeedback(.medium)
-            self?.setupGame()
-        })
-        
-        alert.addAction(UIAlertAction(title: "Settings", style: .default) { _ in
-            // Add settings functionality
-        })
-        
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
-            self.addHapticFeedback(.light)
-        })
-        
-        present(alert, animated: true)
-    }
-
-    @objc private func newHandTapped() {
-        addHapticFeedback(.medium)
-        startNewHand()
-    }
-    
+    // MARK: - Game Summary
     private func showGameSummary() {
+        guard !handWinners.isEmpty else { return }
+        
         // Create player summaries
-        var playerSummaries: [PlayerSummary] = []
+        var summaries: [PlayerSummary] = []
         
-        // Store initial chips to compare
-        let initialChips = startingChips
-        
-        // Categorize players
         for player in gameManager.players {
-            if player.isFolded {
-                // Folded players
-                playerSummaries.append(PlayerSummary(
-                    player: player,
-                    handDescription: nil,
-                    category: .folded
-                ))
-            } else if player.chips > initialChips {
-                // Winners (gained chips)
-                let handDescription = evaluatePlayerHand(player)
-                playerSummaries.append(PlayerSummary(
-                    player: player,
-                    handDescription: handDescription,
-                    category: .winner
-                ))
+            let category: PlayerSummary.PlayerCategory
+            var handDescription: String?
+            
+            // Determine category
+            if let winnerInfo = handWinners.first(where: { $0.player.id == player.id }) {
+                category = .winner
+                handDescription = winnerInfo.handDescription
+            } else if player.isFolded {
+                category = .folded
             } else {
-                // Lost (stayed same or lost chips, but didn't fold)
-                let handDescription = evaluatePlayerHand(player)
-                playerSummaries.append(PlayerSummary(
-                    player: player,
-                    handDescription: handDescription,
-                    category: .lost
-                ))
+                category = .lost
+                // Evaluate hand for lost players
+                let allCards = player.holeCards + gameManager.communityCards
+                let evaluation = HandEvaluator.evaluateBestHand(from: allCards)
+                handDescription = evaluation.description
             }
+            
+            summaries.append(PlayerSummary(
+                player: player,
+                handDescription: handDescription,
+                category: category
+            ))
         }
         
         // Create and present summary view controller
         let summaryVC = GameSummaryViewController(
-            playerSummaries: playerSummaries,
-            totalPot: gameManager.pot,
+            playerSummaries: summaries,
+            totalPot: handWinners.reduce(0) { $0 + $1.amount }, // Total pot from all winners
             communityCards: gameManager.communityCards
         )
         
-//        summaryVC.modalPresentationStyle = .fullScreen
-//        summaryVC.modalTransitionStyle = .coverVertical
+        summaryVC.modalPresentationStyle = .fullScreen
         
         summaryVC.onNewGame = { [weak self] in
             self?.startNewHand()
@@ -291,29 +289,32 @@ class GameViewController: UIViewController {
         present(summaryVC, animated: true)
     }
     
-    private func evaluatePlayerHand(_ player: Player) -> String {
-        // Simple hand evaluation - you may want to use your game's actual hand evaluator
-        guard !player.holeCards.isEmpty else { return "Unknown Hand" }
+    // MARK: - Actions
+    @objc private func menuTapped() {
+        addHapticFeedback(.light)
         
-        let allCards = player.holeCards + gameManager.communityCards
+        let alert = UIAlertController(title: "Menu", message: nil, preferredStyle: .actionSheet)
         
-        // This is a simplified version - you should use your actual hand evaluation logic
-        // For now, just return a basic description
-        if allCards.isEmpty {
-            return "No Cards"
-        }
+        alert.addAction(UIAlertAction(title: "New Game", style: .default) { [weak self] _ in
+            self?.addHapticFeedback(.medium)
+            self?.setupGame()
+        })
         
-        // Check for pairs, etc. (simplified)
-        let ranks = allCards.map { $0.rank }
-        let uniqueRanks = Set(ranks)
+        alert.addAction(UIAlertAction(title: "Exit to Menu", style: .default) { [weak self] _ in
+            self?.addHapticFeedback(.medium)
+            self?.dismiss(animated: true)
+        })
         
-        if uniqueRanks.count == allCards.count {
-            return "High Card: \(allCards.max(by: { $0.rank.rawValue < $1.rank.rawValue })?.rank.shortString ?? "")"
-        } else if uniqueRanks.count == allCards.count - 1 {
-            return "One Pair"
-        } else {
-            return "Multiple Pairs or Better"
-        }
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+            self.addHapticFeedback(.light)
+        })
+        
+        present(alert, animated: true)
+    }
+
+    @objc private func newHandTapped() {
+        addHapticFeedback(.medium)
+        startNewHand()
     }
 }
 
@@ -333,7 +334,7 @@ extension GameViewController: GameManagerDelegate {
             addHapticFeedback(.heavy)
         }
     }
-
+    
     func playerDidAct(_ player: Player, action: PlayerAction) {
         // Different haptics for different actions
         switch action {
@@ -360,37 +361,12 @@ extension GameViewController: GameManagerDelegate {
     func playerDidWin(_ player: Player, amount: Int, handDescription: String) {
         print("Player did win called for: \(player.name)")
         
-        // Only handle the animation
+        // This now only handles the animation, not the alert
         addSuccessFeedback()
         tableView.showWinner(player)
         
-        // Don't show any alerts - GameSummaryViewController will be shown after gameDidEnd
+        // The alert/summary is handled by notification system
     }
-    
-    private func addDebugButton() {
-        let debugButton = UIButton(type: .system)
-        debugButton.setTitle("Reveal Cards", for: .normal)
-        debugButton.backgroundColor = UIColor.red.withAlphaComponent(0.7)
-        debugButton.setTitleColor(.white, for: .normal)
-        debugButton.layer.cornerRadius = 8
-        debugButton.addTarget(self, action: #selector(debugRevealCards), for: .touchUpInside)
-        debugButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(debugButton)
-        
-        NSLayoutConstraint.activate([
-            debugButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            debugButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            debugButton.widthAnchor.constraint(equalToConstant: 100),
-            debugButton.heightAnchor.constraint(equalToConstant: 36)
-        ])
-    }
-
-    @objc private func debugRevealCards() {
-        print("GameViewController: Debug reveal cards button pressed")
-        tableView.revealAllCards()
-        PlayerView().forceRevealCards()
-    }
-
     
     func gameDidEnd() {
         print("GameViewController: gameDidEnd called")
@@ -416,11 +392,6 @@ extension GameViewController: GameManagerDelegate {
         
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.addHapticFeedback(.light)
-        }
-        
-        // Show game summary after a delay (to let cards reveal)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.showGameSummary()
         }
     }
     
@@ -468,5 +439,4 @@ extension GameViewController: GameManagerDelegate {
             }
         }
     }
-
 }

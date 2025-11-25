@@ -1,8 +1,8 @@
 //
 //  GameSummaryViewController.swift
-//  Tokiyo Casino
+//  Poker
 //
-//  Created by Hari's Mac on 25.11.2025.
+//  Created by Mayank Jangid on 8/17/25.
 //
 
 import UIKit
@@ -336,7 +336,7 @@ class GameSummaryViewController: UIViewController {
             cardsContainer.addSubview(cardView)
         }
         
-        // Stats container (bet & chips)
+        // Stats container (contributed & chips)
         let statsContainer = UIView()
         statsContainer.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(statsContainer)
