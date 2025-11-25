@@ -39,6 +39,10 @@ class GameSummaryViewController: UIViewController {
     
     private let gradientLayer = CAGradientLayer()
     
+    // Sound Managers
+    private var winSoundManager = SoundManager()
+    private var loseSoundManager = SoundManager()
+    
     // Callbacks
     var onNewGame: (() -> Void)?
     var onMenu: (() -> Void)?
@@ -58,14 +62,38 @@ class GameSummaryViewController: UIViewController {
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
+        setupSounds()
         setupUI()
         layoutSummary()
         animateEntrance()
+        playResultSound()
     }
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         gradientLayer.frame = view.bounds
+    }
+    
+    // MARK: - Sound Setup
+    private func setupSounds() {
+        winSoundManager.setupPlayer(soundName: "grand_win", soundType: .mp3)
+        loseSoundManager.setupPlayer(soundName: "loose_sound", soundType: .mp3)
+    }
+    
+    private func playResultSound() {
+        // Check if human player is a winner
+        let humanPlayerIsWinner = playerSummaries.contains { summary in
+            summary.player.isHuman && summary.category == .winner
+        }
+        
+        // Play appropriate sound after a small delay for effect
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            if humanPlayerIsWinner {
+                self.winSoundManager.play()
+            } else {
+                self.loseSoundManager.play()
+            }
+        }
     }
     
     // MARK: - Setup

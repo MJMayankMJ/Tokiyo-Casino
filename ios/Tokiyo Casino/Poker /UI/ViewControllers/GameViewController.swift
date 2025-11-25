@@ -15,6 +15,10 @@ class GameViewController: UIViewController {
     private let bettingControls = BettingControlsView()
     private let menuButton = UIButton(type: .system)
     private let newHandButton = UIButton(type: .system)
+    private let muteButton = UIButton(type: .system)
+    
+    // Sound Manager for BGM
+    private var bgmManager = SoundManager()
     
     // Game settings
     private let playerCount: Int
@@ -40,6 +44,17 @@ class GameViewController: UIViewController {
         setupUI()
         setupGame()
         setupNotifications()
+        setupBGM()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        playBGM()
+    }
+    
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        pauseBGM()
     }
     
     override func viewDidLayoutSubviews() {
@@ -73,6 +88,15 @@ class GameViewController: UIViewController {
         menuButton.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(menuButton)
         
+        // Mute button
+        muteButton.setImage(getMuteButtonImage(), for: .normal)
+        muteButton.tintColor = .white
+        muteButton.backgroundColor = UIColor.black.withAlphaComponent(0.6)
+        muteButton.layer.cornerRadius = 20
+        muteButton.addTarget(self, action: #selector(muteTapped), for: .touchUpInside)
+        muteButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(muteButton)
+        
         // New hand button
         newHandButton.setTitle("New Hand", for: .normal)
         newHandButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
@@ -105,6 +129,12 @@ class GameViewController: UIViewController {
             menuButton.widthAnchor.constraint(equalToConstant: 90),
             menuButton.heightAnchor.constraint(equalToConstant: 40),
             
+            // Mute button
+            muteButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
+            muteButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            muteButton.widthAnchor.constraint(equalToConstant: 40),
+            muteButton.heightAnchor.constraint(equalToConstant: 40),
+            
             // New hand button
             newHandButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             newHandButton.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 100),
@@ -131,6 +161,46 @@ class GameViewController: UIViewController {
             name: NSNotification.Name("ShowWinnerAlert"),
             object: nil
         )
+        
+        // Listen for sound setting changes
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(soundSettingChanged),
+            name: NSNotification.Name("SoundSettingChanged"),
+            object: nil
+        )
+    }
+    
+    // MARK: - BGM Setup
+    private func setupBGM() {
+        bgmManager.setupPlayer(soundName: "casino_bgm", soundType: .mp3)
+        bgmManager.volume(0.3)
+    }
+    
+    private func playBGM() {
+        // Loop indefinitely (-1 means infinite loop)
+        bgmManager.play(-1)
+    }
+    
+    private func pauseBGM() {
+        bgmManager.pause()
+    }
+    
+    private func getMuteButtonImage() -> UIImage? {
+        let imageName = SoundManager.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+        return UIImage(systemName: imageName)
+    }
+    
+    @objc private func soundSettingChanged() {
+        // Update mute button icon
+        muteButton.setImage(getMuteButtonImage(), for: .normal)
+        
+        // Handle BGM based on mute state
+        if SoundManager.isMuted {
+            pauseBGM()
+        } else {
+            playBGM()
+        }
     }
     
     @objc private func showDelayedWinnerAlert(_ notification: Notification) {
@@ -315,6 +385,11 @@ class GameViewController: UIViewController {
     @objc private func newHandTapped() {
         addHapticFeedback(.medium)
         startNewHand()
+    }
+    
+    @objc private func muteTapped() {
+        addHapticFeedback(.light)
+        SoundManager.setMuted(!SoundManager.isMuted)
     }
 }
 

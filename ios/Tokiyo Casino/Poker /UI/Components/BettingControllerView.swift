@@ -7,6 +7,7 @@
 
 import Foundation
 import UIKit
+
 // MARK: - Betting Controls View
 class BettingControlsView: UIView {
     
@@ -24,6 +25,11 @@ class BettingControlsView: UIView {
     private let potentialWinLabel = UILabel()
     private let actionTitleLabel = UILabel()
     
+    // Sound Managers for different actions
+    private var raiseSoundManager = SoundManager()
+    private var allInSoundManager = SoundManager()
+    private var checkSoundManager = SoundManager()
+    
     var onAction: ((PlayerAction) -> Void)?
     
     private var minRaise: Int = 0
@@ -33,10 +39,18 @@ class BettingControlsView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupView()
+        setupSounds()
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+    
+    // MARK: - Sound Setup
+    private func setupSounds() {
+        raiseSoundManager.setupPlayer(soundName: "raise_sound", soundType: .mp3)
+        allInSoundManager.setupPlayer(soundName: "AllIn_sound", soundType: .mp3)
+        checkSoundManager.setupPlayer(soundName: "spin_button_tap", soundType: .mp3)
     }
     
     private func setupView() {
@@ -317,9 +331,14 @@ class BettingControlsView: UIView {
     
     @objc private func checkCallTapped() {
         addHapticFeedback(.light)
+        
         if checkCallButton.title(for: .normal) == "CHECK" {
+            // Play check sound
+            checkSoundManager.play()
             onAction?(.check)
         } else {
+            // Play call sound (same as raise)
+            raiseSoundManager.play()
             onAction?(.call)
         }
         hideWithAnimation()
@@ -332,7 +351,9 @@ class BettingControlsView: UIView {
             // Show slider with animation
             showRaiseControls()
         } else {
-            // Confirm raise
+            // Confirm raise - Play raise sound
+            raiseSoundManager.play()
+            
             let amount = Int(raiseSlider.value)
             onAction?(.raise(amount))
             hideWithAnimation()
@@ -360,13 +381,16 @@ class BettingControlsView: UIView {
         UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut) {
             self.raiseSlider.alpha = 1
             self.raiseAmountLabel.alpha = 1
-            self.raiseSlider.transform = .identity
+           // self..raiseSlider.transform = .identity
             self.raiseAmountLabel.transform = .identity
         }
     }
     
     @objc private func allInTapped() {
         addHapticFeedback(.heavy)
+        
+        // Play All-In sound
+        allInSoundManager.play()
         
         // Extra confirmation haptic
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
