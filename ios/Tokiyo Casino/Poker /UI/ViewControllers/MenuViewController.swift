@@ -26,10 +26,23 @@ class MenuViewController: UIViewController {
     private let chipDecoration1 = UIView()
     private let chipDecoration2 = UIView()
     
+    // MARK: - Coins
+    private var availableCoins: Int64 {
+        return CoinsManager.shared.userStats?.totalCoins ?? 0
+    }
+    private let minBuyIn = 100
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
         addDecorations()
+        refreshCoinsAndClampSlider()
+    }
+    
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        // When you come back from the game, show the updated balance and clamp slider
+        refreshCoinsAndClampSlider()
     }
     
     override func viewDidLayoutSubviews() {
@@ -87,7 +100,7 @@ class MenuViewController: UIViewController {
         view.addSubview(playerCountLabel)
         
         // Enhanced segment control
-        playerCountSegment.selectedSegmentIndex = 3 // Default to 6 players
+        playerCountSegment.selectedSegmentIndex = 3 // (kept from old UI) default intended 6 players
         playerCountSegment.backgroundColor = UIColor.black.withAlphaComponent(0.4)
         playerCountSegment.selectedSegmentTintColor = UIColor(red: 0.2, green: 0.6, blue: 0.2, alpha: 1.0)
         playerCountSegment.setTitleTextAttributes([
@@ -104,7 +117,7 @@ class MenuViewController: UIViewController {
         playerCountSegment.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(playerCountSegment)
         
-        // Starting chips label
+        // Starting chips label (+ we’ll append coins live)
         startingChipsLabel.text = "STARTING CHIPS"
         startingChipsLabel.font = UIFont(name: "Copperplate", size: 14) ?? .systemFont(ofSize: 14, weight: .semibold)
         startingChipsLabel.textColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9)
@@ -124,8 +137,8 @@ class MenuViewController: UIViewController {
         startingChipsValueLabel.layer.shadowRadius = 2
         view.addSubview(startingChipsValueLabel)
         
-        // Enhanced slider
-        startingChipsSlider.minimumValue = 500
+        // Enhanced slider (range set later from coins)
+        startingChipsSlider.minimumValue = Float(minBuyIn)
         startingChipsSlider.maximumValue = 5000
         startingChipsSlider.value = 1000
         startingChipsSlider.minimumTrackTintColor = UIColor(red: 0.3, green: 0.7, blue: 0.3, alpha: 1.0)
@@ -364,7 +377,35 @@ class MenuViewController: UIViewController {
         return cardView
     }
     
+    // MARK: - Coins helpers
+    private func refreshCoinsAndClampSlider() {
+        // Update label to reflect available coins (shown right above the slider)
+        startingChipsLabel.text = "STARTING CHIPS  •  Available: \(formatCoin(availableCoins)) coins"
+        
+        // Clamp slider max to coin balance (min is fixed)
+        let maxFromCoins = max(Float(minBuyIn), Float(min( Int(availableCoins), 5000 )))
+        startingChipsSlider.maximumValue = maxFromCoins
+        
+        // If user has less than min buy-in, disable playing
+        let canPlay = Int64(minBuyIn) <= availableCoins
+        playButton.isEnabled = canPlay
+        playButton.alpha = canPlay ? 1.0 : 0.5
+        
+        // Snap current value inside new bounds
+        let clamped = max(startingChipsSlider.minimumValue, min(startingChipsSlider.value, startingChipsSlider.maximumValue))
+        startingChipsSlider.value = clamped
+        sliderChanged()
+    }
+    
+    private func formatCoin(_ v: Int64) -> String {
+        let f = NumberFormatter()
+        f.numberStyle = .decimal
+        f.groupingSeparator = ","
+        return f.string(from: NSNumber(value: v)) ?? "\(v)"
+    }
+    
     @objc private func sliderChanged() {
+        // Round to nearest 100
         let chips = Int(startingChipsSlider.value / 100) * 100
         startingChipsSlider.value = Float(chips)
         
@@ -404,6 +445,18 @@ class MenuViewController: UIViewController {
         let playerCount = playerCountSegment.selectedSegmentIndex + 3
         let startingChips = Int(startingChipsSlider.value)
         
+        // Hard guard: cannot start with more than coins
+        if Int64(startingChips) > availableCoins {
+            let alert = UIAlertController(
+                title: "Not enough coins",
+                message: "You have \(formatCoin(availableCoins)) coins. Lower the starting chips or earn more coins.",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            present(alert, animated: true)
+            return
+        }
+        
         // Add haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .medium)
         generator.impactOccurred()
@@ -423,3 +476,4 @@ class MenuViewController: UIViewController {
         present(alert, animated: true)
     }
 }
+

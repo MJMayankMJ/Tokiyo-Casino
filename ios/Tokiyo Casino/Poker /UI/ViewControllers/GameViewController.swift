@@ -24,6 +24,10 @@ class GameViewController: UIViewController {
     private let playerCount: Int
     private let startingChips: Int
     
+    // 🟡 Cash-out state
+    private let initialBuyIn: Int        // remember what the human brought to the table
+    private var hasSettledCoins = false  // make sure we only settle once
+    
     // Track winners for summary
     private var handWinners: [(player: Player, amount: Int, handDescription: String)] = []
     
@@ -31,6 +35,7 @@ class GameViewController: UIViewController {
     init(playerCount: Int = 6, startingChips: Int = 1000) {
         self.playerCount = playerCount
         self.startingChips = startingChips
+        self.initialBuyIn = startingChips
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -60,6 +65,12 @@ class GameViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         tableView.setupPlayers(gameManager.players, dealerIndex: gameManager.dealerIndex)
+    }
+    
+    deinit {
+        // Defensive: if someone dismisses without tapping our menu hooks
+        settleCoinsIfNeeded()
+        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - Setup
@@ -214,18 +225,10 @@ class GameViewController: UIViewController {
         // Store winner info for the summary
         handWinners.append((player: player, amount: amount, handDescription: handDescription))
         
-        // After all winner notifications are received, show the summary
-        // (This assumes the game sends all notifications before we need to show the summary)
-        // For a more robust solution, you might want to add a separate notification for "AllWinnersProcessed"
-        
-        // For now, we'll show the summary after a small delay to ensure all winners are collected
+        // Show the summary after a small delay to ensure all winners are collected
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             self.showGameSummary()
         }
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
     }
     
     // MARK: - Haptics
@@ -352,11 +355,28 @@ class GameViewController: UIViewController {
             self?.startNewHand()
         }
         
+        // ⬇️ When leaving to Menu from the summary, settle net chips → coins
         summaryVC.onMenu = { [weak self] in
+            self?.settleCoinsIfNeeded()
             self?.dismiss(animated: true)
         }
         
         present(summaryVC, animated: true)
+    }
+    
+    // MARK: - Coins settlement (Poker $ ↔︎ Tokyo Coins 1:1)
+    private func settleCoinsIfNeeded() {
+        guard !hasSettledCoins,
+              let human = gameManager?.humanPlayer else { return }
+        
+        let delta = human.chips - initialBuyIn    // net won/lost in dollars == coins
+        hasSettledCoins = true
+        
+        if delta > 0 {
+            CoinsManager.shared.addCoins(amount: Int64(delta)) { _ in }
+        } else if delta < 0 {
+            CoinsManager.shared.deductCoins(amount: Int64(-delta)) { _ in }
+        }
     }
     
     // MARK: - Actions
@@ -371,6 +391,8 @@ class GameViewController: UIViewController {
         })
         
         alert.addAction(UIAlertAction(title: "Exit to Menu", style: .default) { [weak self] _ in
+            // 💰 Settle coins when exiting the Poker screen
+            self?.settleCoinsIfNeeded()
             self?.addHapticFeedback(.medium)
             self?.dismiss(animated: true)
         })
@@ -434,60 +456,29 @@ extension GameViewController: GameManagerDelegate {
     }
     
     func playerDidWin(_ player: Player, amount: Int, handDescription: String) {
-        print("Player did win called for: \(player.name)")
-        
-        // This now only handles the animation, not the alert
+        // Animation only; summary/alerts triggered later
         addSuccessFeedback()
         tableView.showWinner(player)
-        
-        // The alert/summary is handled by notification system
     }
     
     func gameDidEnd() {
-        print("GameViewController: gameDidEnd called")
-        
         addHapticFeedback(.medium)
         
         // Hide betting controls immediately and reset position
         hideBettingControls()
         
-        // Print all players and their card states
-        for player in gameManager.players {
-            print("GameViewController: Player \(player.name) - Cards: \(player.holeCards.map { $0.description }.joined(separator: ", ")), Folded: \(player.isFolded)")
-        }
-        
-        // Reveal all cards
-        print("GameViewController: Calling tableView.revealAllCards()")
+        // Reveal all cards (human + AI)
         tableView.revealAllCards()
         
-        // Add staggered haptic feedback
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.addHapticFeedback(.light)
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.addHapticFeedback(.light)
-        }
+        // Little staggered haptics for flare
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.addHapticFeedback(.light) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { self.addHapticFeedback(.light) }
     }
     
     func cardsDealt() {
         addHapticFeedback(.light)
         tableView.showCommunityCards(gameManager.communityCards)
         tableView.updatePlayers(gameManager.players, dealerIndex: gameManager.dealerIndex)
-        
-        // Special haptic for community cards
-        if !gameManager.communityCards.isEmpty {
-            let cardCount = gameManager.communityCards.count
-            if cardCount == 3 { // Flop
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    self.addHapticFeedback(.medium)
-                }
-            } else if cardCount == 4 || cardCount == 5 { // Turn or River
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.addHapticFeedback(.light)
-                }
-            }
-        }
     }
     
     func potDidUpdate(_ amount: Int) {
@@ -499,19 +490,15 @@ extension GameViewController: GameManagerDelegate {
         addHapticFeedback(.light)
         tableView.highlightCurrentPlayer(player)
 
-        // If current player is human
         if player.isHuman {
-            // Hide betting controls if player is all-in
             if player.isAllIn {
                 bettingControls.isHidden = true
-                print("Human player is all-in — auto-check enforced.")
                 return
             }
-
-            // Otherwise show betting controls
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.showBettingControls()
             }
         }
     }
 }
+
