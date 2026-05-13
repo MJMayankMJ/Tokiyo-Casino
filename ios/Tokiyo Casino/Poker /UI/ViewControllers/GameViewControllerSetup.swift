@@ -20,13 +20,10 @@ extension GameViewController {
         view.addSubview(topBar)
         topInfoBar = topBar
 
-        // Wire the existing menu/mute buttons into the top bar's controls.
-        // The TopInfoBar's `backButton` and `menuButton` are local — we replace
-        // their actions/icons here so the existing menu/audio behavior is kept.
+        // Wire the existing menu behavior into the prototype's back + ellipsis chips.
         topBar.backButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
-        topBar.menuButton.setImage(getMuteButtonImage(), for: .normal)
         topBar.menuButton.tintColor = PokerTheme.ink
-        topBar.menuButton.addTarget(self, action: #selector(muteTapped), for: .touchUpInside)
+        topBar.menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
 
         // The legacy `menuButton` / `muteButton` ivars are kept off-screen so
         // any cross-references (e.g. audio toggle updates) continue to work.
@@ -47,6 +44,13 @@ extension GameViewController {
         bettingControls.isHidden = true
         bettingControls.onAction = { [weak self] action in
             self?.handlePlayerAction(action)
+        }
+        bettingControls.onHeightChanged = { [weak self] height in
+            guard let self else { return }
+            self.bettingControlsHeightConstraint?.constant = self.bettingControls.isHidden ? 0 : height
+            UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseInOut]) {
+                self.view.layoutIfNeeded()
+            }
         }
         view.addSubview(bettingControls)
 
@@ -70,6 +74,10 @@ extension GameViewController {
             phase: nil
         )
 
+        let controlsHeight = bettingControls.heightAnchor.constraint(equalToConstant: 0)
+        controlsHeight.priority = .required
+        bettingControlsHeightConstraint = controlsHeight
+
         NSLayoutConstraint.activate([
             topBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
             topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -87,6 +95,7 @@ extension GameViewController {
             bettingControls.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             bettingControls.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             bettingControls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+            controlsHeight,
 
             // Hidden legacy buttons positioned off-screen but in hierarchy
             menuButton.widthAnchor.constraint(equalToConstant: 1),
@@ -106,7 +115,7 @@ extension GameViewController {
     }
 
     @objc func syncMuteIcon() {
-        topInfoBar?.menuButton.setImage(getMuteButtonImage(), for: .normal)
+        topInfoBar?.menuButton.tintColor = PokerTheme.ink
     }
 
     func setupGame() {

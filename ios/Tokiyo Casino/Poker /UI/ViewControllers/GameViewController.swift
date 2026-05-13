@@ -17,6 +17,7 @@ class GameViewController: UIViewController {
     let newHandButton = UIButton(type: .system)
     let muteButton = UIButton(type: .system)
     var topInfoBar: TopInfoBar?
+    var bettingControlsHeightConstraint: NSLayoutConstraint?
     
     // Sound Manager for BGM
     var bgmManager = SoundManager()

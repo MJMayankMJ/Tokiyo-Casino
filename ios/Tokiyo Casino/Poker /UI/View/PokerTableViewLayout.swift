@@ -14,9 +14,9 @@ extension PokerTableView {
     func setupView() {
         backgroundColor = .clear
 
-        // Felt container
+        // Felt container. The JSX handoff has a 360×480 table container and an
+        // oval felt inset by 18px; layoutFelt keeps those two spaces separate.
         feltView.backgroundColor = PokerTheme.felt
-        feltView.layer.cornerRadius = 160
         feltView.layer.masksToBounds = false
         feltView.layer.shadowColor = UIColor.black.cgColor
         feltView.layer.shadowOpacity = 0.18
@@ -54,53 +54,58 @@ extension PokerTableView {
     // MARK: - Layout
 
     func layoutFelt() {
-        // Constrain the felt to the design's 360×480 aspect (≈1.33 tall/wide)
-        // so the seat positions translate from the design without distortion.
+        // Constrain the design table container to 360×480, scaling down only
+        // when a smaller device or the expanded action panel requires it.
         let designRatio: CGFloat = 480.0 / 360.0
         let edgePad: CGFloat = 16
         let maxW = max(0, bounds.width  - edgePad * 2)
         let maxH = max(0, bounds.height - edgePad * 2)
 
-        var feltW = maxW
-        var feltH = feltW * designRatio
-        if feltH > maxH {
-            feltH = maxH
-            feltW = feltH / designRatio
+        var tableW = min(360, maxW)
+        var tableH = tableW * designRatio
+        if tableH > maxH {
+            tableH = maxH
+            tableW = tableH / designRatio
         }
-        let feltFrame = CGRect(
-            x: bounds.midX - feltW / 2,
-            y: bounds.midY - feltH / 2,
-            width: feltW,
-            height: feltH
+        designFrame = CGRect(
+            x: bounds.midX - tableW / 2,
+            y: bounds.midY - tableH / 2,
+            width: tableW,
+            height: tableH
         )
+        designScale = tableW / 360.0
+
+        let feltInset = 18 * designScale
+        let feltFrame = designFrame.insetBy(dx: feltInset, dy: feltInset)
         feltView.frame = feltFrame
-        let corner = min(feltW, feltH) * 0.45
+        let corner = 160 * designScale
         feltView.layer.cornerRadius = corner
         feltView.layer.shadowPath = UIBezierPath(roundedRect: feltView.bounds,
                                                  cornerRadius: corner).cgPath
 
         // Inner border
-        let inner = feltView.bounds.insetBy(dx: 14, dy: 14)
+        let inner = feltView.bounds.insetBy(dx: 14 * designScale, dy: 14 * designScale)
         feltInnerBorder.frame = inner
-        feltInnerBorder.layer.cornerRadius = max(0, corner - 14)
+        feltInnerBorder.layer.cornerRadius = max(0, corner - 14 * designScale)
 
-        // Pot pill — felt-relative (matches y=138/480 in the design)
-        let potY = feltFrame.minY + feltFrame.height * (138.0 / 480.0)
+        // Pot pill — table-container relative top y=138 in poker.jsx.
+        let potTop = designFrame.minY + 138 * designScale
         let potSize = potPill.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-        potPill.bounds.size = CGSize(width: max(120, potSize.width), height: 30)
-        potPill.center = CGPoint(x: feltFrame.midX, y: potY)
+        let potW = max(120 * designScale, potSize.width)
+        let potH = 30 * designScale
+        potPill.frame = CGRect(x: designFrame.midX - potW / 2, y: potTop, width: potW, height: potH)
 
-        // Community cards — felt-relative (matches y=240/480 in the design)
-        let commY = feltFrame.minY + feltFrame.height * (240.0 / 480.0)
-        let cardW: CGFloat = 36
-        let cardH: CGFloat = 50
-        let gap: CGFloat = 6
+        // Community cards — table-container relative top y=222 in poker.jsx.
+        let commTop = designFrame.minY + 222 * designScale
+        let cardW: CGFloat = 36 * designScale
+        let cardH: CGFloat = 50 * designScale
+        let gap: CGFloat = 5 * designScale
         let totalW = cardW * 5 + gap * 4
-        let startX = feltFrame.midX - totalW / 2
+        let startX = designFrame.midX - totalW / 2
         for (i, cv) in communityCardViews.enumerated() {
             cv.frame = CGRect(
                 x: startX + CGFloat(i) * (cardW + gap),
-                y: commY - cardH / 2,
+                y: commTop,
                 width: cardW,
                 height: cardH
             )
@@ -121,11 +126,13 @@ extension PokerTableView {
         // Create new player views with proper sizing
         for (index, player) in players.enumerated() {
             let playerView = PlayerView()
-            let size = player.isHuman ? humanPlayerSize : aiPlayerSize
+            let baseSize = player.isHuman ? humanPlayerBaseSize : aiPlayerBaseSize
+            let size = CGSize(width: baseSize.width * designScale, height: baseSize.height * designScale)
             playerView.frame = CGRect(origin: .zero, size: size)
             addSubview(playerView)
             playerViews.append(playerView)
-            playerView.configureWith(player: player, isDealer: index == dealerIndex)
+            let side = index < cardSides.count ? cardSides[index] : .right
+            playerView.configureWith(player: player, isDealer: index == dealerIndex, cardSide: side)
         }
 
         DispatchQueue.main.async {
@@ -135,25 +142,26 @@ extension PokerTableView {
     }
 
     func updatePlayerPositions() {
-        let felt = feltView.frame
-        guard felt.width > 0 else { return }
+        let table = designFrame
+        guard table.width > 0 else { return }
 
         for (index, playerView) in playerViews.enumerated() {
             guard index < playerPositions.count else { continue }
 
             let pos = playerPositions[index]
             let isHuman = index == 0
-            let size = isHuman ? humanPlayerSize : aiPlayerSize
+            let baseSize = isHuman ? humanPlayerBaseSize : aiPlayerBaseSize
+            let size = CGSize(width: baseSize.width * designScale, height: baseSize.height * designScale)
             playerView.bounds = CGRect(origin: .zero, size: size)
 
-            let cx = felt.minX + felt.width * pos.x
-            var cy = felt.minY + felt.height * pos.y
+            let cx = table.minX + table.width * pos.x
+            var cy = table.minY + table.height * pos.y
 
             if isHuman {
-                // Hero overhangs felt's bottom edge by 10pt (mirrors the
+                // Hero overhangs the table container's bottom edge by 10pt (mirrors the
                 // design's `bottom: -10` on the HeroZone wrapper). Cards fan
                 // upward into the felt, the name strip sits at felt's bottom.
-                cy = felt.maxY + 10 - size.height / 2 + humanPlayerVerticalShift
+                cy = table.maxY + 10 * designScale - size.height / 2 + humanPlayerVerticalShift
             }
 
             playerView.center = CGPoint(x: cx, y: cy)
@@ -163,24 +171,31 @@ extension PokerTableView {
 
     func updateBetPillPositions() {
         guard !players.isEmpty else { return }
-        let felt = feltView.frame
-        guard felt.width > 0 else { return }
+        let table = designFrame
+        guard table.width > 0 else { return }
 
         for (index, player) in players.enumerated() {
             guard index < betPillPositions.count else { continue }
             guard let pill = betPills[player.id] else { continue }
             let pos = betPillPositions[index]
             let size = pill.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
-            pill.bounds.size = CGSize(width: max(56, size.width), height: 24)
+            pill.bounds.size = CGSize(width: max(56 * designScale, size.width), height: 24 * designScale)
             pill.center = CGPoint(
-                x: felt.minX + felt.width * pos.x,
-                y: felt.minY + felt.height * pos.y
+                x: table.minX + table.width * pos.x,
+                y: table.minY + table.height * pos.y
             )
         }
     }
 
     /// Shows or hides a bet pill near the player's seat.
     func updateBetPill(for player: Player, atIndex index: Int) {
+        if player.isHuman {
+            if let existing = betPills[player.id] {
+                existing.removeFromSuperview()
+                betPills.removeValue(forKey: player.id)
+            }
+            return
+        }
         let hasBet = !player.isFolded && player.currentBet > 0
         if hasBet {
             let color: UIColor

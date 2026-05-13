@@ -24,31 +24,36 @@ class PokerTableView: UIView {
     let potPill = PotPillView()
     let communityRow = UIStackView()
     var betPills: [Int: BetPillView] = [:] // playerId -> pill
+    var designFrame: CGRect = .zero
+    var designScale: CGFloat = 1
 
     // Layout coordinates for 6-max seats, expressed as [0..1] across the
-    // *felt* rect (not the tableView). Mirrors the Claude Design seat layout
-    // (felt is 360×480 in the design — coords below come from those pixels).
+    // prototype's 360×480 table container, not the inset oval felt.
     let playerPositions: [CGPoint] = [
-        CGPoint(x: 0.50, y: 1.02),  // 0 — Human (overhangs felt's bottom)
-        CGPoint(x: 0.12, y: 0.81),  // 1 — bottom-left
-        CGPoint(x: 0.06, y: 0.42),  // 2 — mid-left
-        CGPoint(x: 0.50, y: 0.10),  // 3 — top center
-        CGPoint(x: 0.94, y: 0.42),  // 4 — mid-right
-        CGPoint(x: 0.88, y: 0.81)   // 5 — bottom-right
+        CGPoint(x: 180.0 / 360.0, y: 490.0 / 480.0), // 0 — Human wrapper bottom: -10
+        CGPoint(x:  44.0 / 360.0, y: 388.0 / 480.0), // 1 — bottom-left
+        CGPoint(x:  22.0 / 360.0, y: 200.0 / 480.0), // 2 — mid-left
+        CGPoint(x: 180.0 / 360.0, y:  50.0 / 480.0), // 3 — top center
+        CGPoint(x: 338.0 / 360.0, y: 200.0 / 480.0), // 4 — mid-right
+        CGPoint(x: 316.0 / 360.0, y: 388.0 / 480.0)  // 5 — bottom-right
     ]
 
-    let humanPlayerSize = CGSize(width: 240, height: 150)
-    let aiPlayerSize = CGSize(width: 110, height: 110)
+    let humanPlayerBaseSize = CGSize(width: 360, height: 150)
+    let aiPlayerBaseSize = CGSize(width: 96, height: 114)
 
     // Bet pill positions (felt-relative). For the hero this sits above the
     // hero zone but inside the felt.
     let betPillPositions: [CGPoint] = [
-        CGPoint(x: 0.50, y: 0.80),  // 0 — hero
-        CGPoint(x: 0.30, y: 0.70),  // 1 — bottom-left
-        CGPoint(x: 0.23, y: 0.42),  // 2 — mid-left
-        CGPoint(x: 0.50, y: 0.22),  // 3 — top
-        CGPoint(x: 0.77, y: 0.42),  // 4 — mid-right
-        CGPoint(x: 0.70, y: 0.70)   // 5 — bottom-right
+        CGPoint(x: 180.0 / 360.0, y: 384.0 / 480.0), // hero bet is rendered in HeroZone
+        CGPoint(x: 108.0 / 360.0, y: 338.0 / 480.0), // bottom-left
+        CGPoint(x:  82.0 / 360.0, y: 200.0 / 480.0), // mid-left
+        CGPoint(x: 180.0 / 360.0, y: 108.0 / 480.0), // top
+        CGPoint(x: 278.0 / 360.0, y: 200.0 / 480.0), // mid-right
+        CGPoint(x: 252.0 / 360.0, y: 338.0 / 480.0)  // bottom-right
+    ]
+
+    let cardSides: [PlayerView.TuckedCardSide] = [
+        .right, .right, .right, .right, .left, .left
     ]
 
     var players: [Player] = []

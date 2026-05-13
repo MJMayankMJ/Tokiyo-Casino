@@ -37,15 +37,25 @@ final class BettingControlsView: UIView {
 
     // Public
     var onAction: ((PlayerAction) -> Void)?
+    var onHeightChanged: ((CGFloat) -> Void)?
 
     // State
     private var minRaise: Int = 0
     private var maxRaise: Int = 0
     private var callAmount: Int = 0
     private var raiseValue: Int = 0
+    private var currentTableBet: Int = 0
+    private var allInDisplayTotal: Int = 0
     private var pot: Int = 0
     private var canRaise: Bool = false
+    private var hasRaiseAction: Bool = false
     private var raisePanelExpanded: Bool = false
+    private var quickBetButtons: [(button: QuickBetButton, value: Int, isAllIn: Bool)] = []
+
+    var preferredHeight: CGFloat {
+        if isHidden { return 0 }
+        return raisePanelExpanded && !raisePanel.isHidden ? 210 : 76
+    }
 
     // MARK: - Init
 
@@ -111,7 +121,7 @@ final class BettingControlsView: UIView {
 
         fill.backgroundColor = PokerTheme.forest
         fill.layer.cornerRadius = 3
-        fill.translatesAutoresizingMaskIntoConstraints = false
+        fill.translatesAutoresizingMaskIntoConstraints = true
         track.addSubview(fill)
 
         thumb.backgroundColor = .white
@@ -122,7 +132,7 @@ final class BettingControlsView: UIView {
         thumb.layer.shadowOpacity = 0.2
         thumb.layer.shadowOffset = CGSize(width: 0, height: 2)
         thumb.layer.shadowRadius = 4
-        thumb.translatesAutoresizingMaskIntoConstraints = false
+        thumb.translatesAutoresizingMaskIntoConstraints = true
         raisePanel.addSubview(thumb)
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(trackPanned(_:)))
@@ -201,10 +211,6 @@ final class BettingControlsView: UIView {
             quickStack.topAnchor.constraint(equalTo: track.bottomAnchor, constant: 16),
             quickStack.heightAnchor.constraint(equalToConstant: 32),
             quickStack.bottomAnchor.constraint(equalTo: raisePanel.bottomAnchor, constant: -12),
-
-            thumb.widthAnchor.constraint(equalToConstant: 20),
-            thumb.heightAnchor.constraint(equalToConstant: 20),
-            thumb.centerYAnchor.constraint(equalTo: track.centerYAnchor),
         ]
         inside.forEach { $0.priority = .defaultHigh }
         NSLayoutConstraint.activate(inside)
@@ -224,23 +230,40 @@ final class BettingControlsView: UIView {
         button.layer.cornerRadius = 11
     }
 
+    private var displayRaiseTotal: Int {
+        currentTableBet + raiseValue
+    }
+
+    private var displayAllInTotal: Int {
+        allInDisplayTotal
+    }
+
+    private func clampedRaiseDelta(_ value: Int) -> Int {
+        guard maxRaise > 0 else { return 0 }
+        if maxRaise < minRaise { return maxRaise }
+        return max(minRaise, min(maxRaise, value))
+    }
+
     // MARK: - Public surface
 
     /// Called by GameViewController when it's the human's turn.
-    func updateForActions(_ actions: [PlayerAction], callAmount: Int, minRaise: Int, maxRaise: Int) {
+    func updateForActions(_ actions: [PlayerAction], callAmount: Int, minRaise: Int, maxRaise: Int, currentBet: Int = 0, allInTotal: Int? = nil) {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
 
         self.callAmount = callAmount
-        self.minRaise = minRaise
-        self.maxRaise = maxRaise
-        self.raiseValue = max(minRaise, min(maxRaise, raiseValue == 0 ? minRaise : raiseValue))
+        self.currentTableBet = currentBet
+        self.maxRaise = max(0, maxRaise)
+        self.allInDisplayTotal = allInTotal ?? (currentBet + self.maxRaise)
 
         let canFold = actions.contains { if case .fold = $0 { return true } else { return false } }
         let canCheck = actions.contains { if case .check = $0 { return true } else { return false } }
         let canCall = actions.contains { if case .call = $0 { return true } else { return false } }
         let canRaiseAction = actions.contains { if case .raise = $0 { return true } else { return false } }
         let canAllIn = actions.contains { if case .allIn = $0 { return true } else { return false } }
+        self.hasRaiseAction = canRaiseAction
+        self.minRaise = canRaiseAction ? minRaise : self.maxRaise
         self.canRaise = canRaiseAction || canAllIn
+        self.raiseValue = clampedRaiseDelta(raiseValue == 0 ? self.minRaise : raiseValue)
 
         // Fold
         foldButton.label = "Fold"
@@ -263,13 +286,21 @@ final class BettingControlsView: UIView {
         }
 
         // Raise
-        raiseButton.label = "Raise"
-        raiseButton.sublabel = canRaise ? "tap to set" : nil
+        raisePanelExpanded = canRaiseAction
+        raisePanel.isHidden = !canRaiseAction
+        raisePanel.alpha = 1
+        raisePanel.transform = .identity
+        raiseButton.label = canRaiseAction ? "Raise" : "All-In"
+        raiseButton.sublabel = canRaise
+            ? (canRaiseAction ? "$\(ChipFormatter.string(displayRaiseTotal))" : "$\(ChipFormatter.string(displayAllInTotal))")
+            : nil
         raiseButton.isEnabled = canRaise
 
         rebuildQuickBets()
         updateRaiseLabels()
         positionThumb()
+        invalidateIntrinsicContentSize()
+        onHeightChanged?(preferredHeight)
 
         // Slide-in animation
         transform = CGAffineTransform(translationX: 0, y: 60)
@@ -286,7 +317,11 @@ final class BettingControlsView: UIView {
         }
     }
 
-    func setPot(_ pot: Int) { self.pot = pot; rebuildQuickBets(); updateRaiseLabels() }
+    func setPot(_ pot: Int) {
+        self.pot = pot
+        rebuildQuickBets()
+        updateRaiseLabels()
+    }
 
     // MARK: - Action handlers
 
@@ -310,7 +345,11 @@ final class BettingControlsView: UIView {
 
     private func raiseTapped() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        if !raisePanelExpanded {
+        if !hasRaiseAction {
+            allInSoundManager.play()
+            onAction?(.allIn)
+            hideWithAnimation()
+        } else if !raisePanelExpanded {
             showRaisePanel()
         } else if raiseValue >= maxRaise && maxRaise > 0 {
             // All-in convenience: pushing slider to max
@@ -332,10 +371,7 @@ final class BettingControlsView: UIView {
     }
 
     private func stepSize() -> Int {
-        // Round to nearest "nice" step. Use the bigBlind-like minRaise as the step,
-        // falling back to 25 if it's odd.
-        let step = max(1, minRaise > 0 ? minRaise : 25)
-        return step
+        25
     }
 
     @objc private func trackPanned(_ rec: UIPanGestureRecognizer) {
@@ -357,36 +393,38 @@ final class BettingControlsView: UIView {
     }
 
     private func setRaise(_ value: Int) {
-        raiseValue = max(minRaise, min(maxRaise, value))
-        raiseButton.sublabel = "$\(ChipFormatter.string(raiseValue))"
+        raiseValue = clampedRaiseDelta(value)
+        raiseButton.sublabel = "$\(ChipFormatter.string(displayRaiseTotal))"
         updateRaiseLabels()
         positionThumb()
+        updateQuickBetSelection()
         UISelectionFeedbackGenerator().selectionChanged()
     }
 
     private func updateRaiseLabels() {
-        raiseAmountLabel.text = "$\(ChipFormatter.string(raiseValue))"
+        raiseAmountLabel.text = "$\(ChipFormatter.string(displayRaiseTotal))"
         if pot > 0 {
-            let mult = Double(raiseValue) / Double(pot)
+            let mult = Double(displayRaiseTotal) / Double(pot)
             raiseSubLabel.text = String(format: "%.2f× pot", mult)
         } else {
             raiseSubLabel.text = ""
         }
         if raisePanelExpanded {
-            raiseButton.sublabel = "$\(ChipFormatter.string(raiseValue))"
+            raiseButton.sublabel = "$\(ChipFormatter.string(displayRaiseTotal))"
         }
     }
 
     private func positionThumb() {
         guard maxRaise > minRaise else {
-            thumb.center = CGPoint(x: track.frame.minX, y: track.frame.midY)
+            let trackFrame = track.frame
+            thumb.frame = CGRect(x: trackFrame.minX - 10, y: trackFrame.midY - 10, width: 20, height: 20)
             fill.frame = .zero
             return
         }
         let pct = CGFloat(raiseValue - minRaise) / CGFloat(maxRaise - minRaise)
         let trackFrame = track.frame
         let x = trackFrame.minX + trackFrame.width * pct
-        thumb.center = CGPoint(x: x, y: trackFrame.midY)
+        thumb.frame = CGRect(x: x - 10, y: trackFrame.midY - 10, width: 20, height: 20)
         fill.frame = CGRect(x: 0, y: 0, width: track.bounds.width * pct, height: track.bounds.height)
     }
 
@@ -395,12 +433,15 @@ final class BettingControlsView: UIView {
             quickStack.removeArrangedSubview($0)
             $0.removeFromSuperview()
         }
+        quickBetButtons.removeAll()
+        let minTarget = hasRaiseAction ? currentTableBet + minRaise : displayAllInTotal
+        let maxTarget = displayAllInTotal
         let bets: [(label: String, value: Int, isAllIn: Bool)] = [
-            ("Min", minRaise, false),
+            ("Min", minTarget, false),
             ("½ Pot", round25(Double(pot) * 0.5), false),
             ("Pot", round25(Double(pot)), false),
             ("2× Pot", round25(Double(pot) * 2), false),
-            ("All-In", maxRaise, true),
+            ("All-In", maxTarget, true),
         ]
         for bet in bets {
             let button = QuickBetButton()
@@ -408,9 +449,21 @@ final class BettingControlsView: UIView {
             button.isAllIn = bet.isAllIn
             button.onTap = { [weak self] in
                 guard let self else { return }
-                self.setRaise(min(self.maxRaise, max(self.minRaise, bet.value)))
+                let target = min(maxTarget, max(minTarget, bet.value))
+                self.setRaise(target - self.currentTableBet)
             }
             quickStack.addArrangedSubview(button)
+            quickBetButtons.append((button, bet.value, bet.isAllIn))
+        }
+        updateQuickBetSelection()
+    }
+
+    private func updateQuickBetSelection() {
+        let currentTarget = displayRaiseTotal
+        let minTarget = hasRaiseAction ? currentTableBet + minRaise : displayAllInTotal
+        for item in quickBetButtons {
+            let clampedTarget = min(displayAllInTotal, max(minTarget, item.value))
+            item.button.isSelectedBet = abs(clampedTarget - currentTarget) < 1
         }
     }
 
@@ -421,10 +474,12 @@ final class BettingControlsView: UIView {
 
     private func showRaisePanel() {
         raisePanelExpanded = true
-        raiseButton.sublabel = "$\(ChipFormatter.string(raiseValue))"
+        raiseButton.sublabel = "$\(ChipFormatter.string(displayRaiseTotal))"
         raisePanel.isHidden = false
         raisePanel.alpha = 0
         raisePanel.transform = CGAffineTransform(translationX: 0, y: 10)
+        invalidateIntrinsicContentSize()
+        onHeightChanged?(preferredHeight)
         UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.4) {
             self.raisePanel.alpha = 1
             self.raisePanel.transform = .identity
@@ -439,6 +494,8 @@ final class BettingControlsView: UIView {
             self.isHidden = true
             self.transform = .identity
             self.resetRaisePanel()
+            self.invalidateIntrinsicContentSize()
+            self.onHeightChanged?(0)
         }
     }
 
@@ -446,7 +503,7 @@ final class BettingControlsView: UIView {
         raisePanel.isHidden = true
         raisePanelExpanded = false
         raiseButton.sublabel = canRaise ? "tap to set" : nil
-        raiseValue = max(minRaise, min(maxRaise, raiseValue))
+        raiseValue = clampedRaiseDelta(raiseValue)
     }
 }
 
@@ -581,6 +638,7 @@ private final class ActionButton: UIView {
 private final class QuickBetButton: UIView {
     var title: String = "" { didSet { label.text = title } }
     var isAllIn: Bool = false { didSet { applyStyle() } }
+    var isSelectedBet: Bool = false { didSet { applyStyle() } }
     var onTap: (() -> Void)?
 
     private let label = UILabel()
@@ -608,10 +666,14 @@ private final class QuickBetButton: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func applyStyle() {
-        if isAllIn {
-            layer.borderColor = PokerTheme.amber.cgColor
+        if isSelectedBet {
+            backgroundColor = isAllIn ? PokerTheme.amber : PokerTheme.forest
+            layer.borderColor = backgroundColor?.cgColor
+            label.textColor = .white
         } else {
-            layer.borderColor = PokerTheme.border.cgColor
+            backgroundColor = PokerTheme.surfaceAlt
+            label.textColor = PokerTheme.ink
+            layer.borderColor = (isAllIn ? PokerTheme.amber : PokerTheme.border).cgColor
         }
     }
 

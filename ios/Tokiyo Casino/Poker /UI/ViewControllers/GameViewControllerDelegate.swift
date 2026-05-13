@@ -94,12 +94,14 @@ extension GameViewController: GameManagerDelegate {
 
         if player.isHuman {
             if player.isAllIn {
-                bettingControls.isHidden = true
+                hideBettingControls()
                 return
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 self.showBettingControls()
             }
+        } else {
+            hideBettingControls()
         }
     }
 }

@@ -12,7 +12,7 @@ extension GameViewController {
     // MARK: - Game Actions
     func startNewHand() {
         newHandButton.isHidden = true
-        bettingControls.isHidden = true
+        hideBettingControls()
         handWinners = [] // Reset winners for new hand
         
         // Reset human player position
@@ -35,7 +35,7 @@ extension GameViewController {
               currentPlayer.isHuman else { return }
         
         // Hide controls immediately to prevent double-clicking or UI glitches
-        bettingControls.isHidden = true
+        hideBettingControls()
         gameManager.processPlayerAction(action, for: currentPlayer)
     }
     
@@ -53,18 +53,28 @@ extension GameViewController {
         
         // Small delay to let player view animate first
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            self.bettingControls.isHidden = false
             self.bettingControls.updateForActions(
                 validActions,
                 callAmount: callAmount,
                 minRaise: minRaise,
-                maxRaise: maxRaise
+                maxRaise: maxRaise,
+                currentBet: self.gameManager.currentBet,
+                allInTotal: humanPlayer.currentBet + humanPlayer.chips
             )
-            self.bettingControls.isHidden = false
+            self.bettingControlsHeightConstraint?.constant = self.bettingControls.preferredHeight
+            UIView.animate(withDuration: 0.24, delay: 0, options: [.curveEaseInOut]) {
+                self.view.layoutIfNeeded()
+            }
         }
     }
     
     func hideBettingControls() {
         bettingControls.isHidden = true
+        bettingControlsHeightConstraint?.constant = 0
+        UIView.animate(withDuration: 0.20, delay: 0, options: [.curveEaseInOut]) {
+            self.view.layoutIfNeeded()
+        }
         
         // Reset human player position with animation
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -81,6 +91,12 @@ extension GameViewController {
         alert.addAction(UIAlertAction(title: "New Game", style: .default) { [weak self] _ in
             self?.addHapticFeedback(.medium)
             self?.setupGame()
+        })
+
+        let soundTitle = SoundManager.isMuted ? "Unmute Sound" : "Mute Sound"
+        alert.addAction(UIAlertAction(title: soundTitle, style: .default) { [weak self] _ in
+            self?.addHapticFeedback(.light)
+            SoundManager.setMuted(!SoundManager.isMuted)
         })
         
         alert.addAction(UIAlertAction(title: "Exit to Menu", style: .default) { [weak self] _ in

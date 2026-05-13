@@ -27,6 +27,8 @@ enum PokerTheme {
                                           darkRGBA:  (230, 205, 140, 0.20))
     static let glass = UIColor.dyn(lightRGBA: (255, 255, 255, 0.85),
                                    darkRGBA:  (255, 255, 255, 0.10))
+    static let betPillSurface = UIColor.dyn(light: .white,
+                                            dark: UIColor.white.withAlphaComponent(0.92))
 
     // Accents
     static let coral = UIColor.dyn(light: 0xD5604E, dark: 0xE8786A)
@@ -298,13 +300,13 @@ final class BetPillView: UIView {
         self.chip = ChipView(size: chipSize, color: chipColor)
         super.init(frame: .zero)
 
-        backgroundColor = PokerTheme.glass
+        backgroundColor = PokerTheme.betPillSurface
         layer.cornerRadius = 999 / 2
         PokerTheme.applyShadowSm(layer)
         clipsToBounds = false
 
         amountLabel.font = .systemFont(ofSize: 11.5, weight: .bold)
-        amountLabel.textColor = PokerTheme.ink
+        amountLabel.textColor = PokerTheme.suitBlack
         amountLabel.text = "$\(ChipFormatter.string(amount))"
         amountLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -536,7 +538,7 @@ final class TopInfoBar: UIView {
             .foregroundColor: PokerTheme.ink,
             .font: UIFont.systemFont(ofSize: 11, weight: .semibold),
         ]
-        let separator = NSAttributedString(string: "  ·  ", attributes: muted)
+        let separator = NSAttributedString(string: "  |  ", attributes: muted)
         let out = NSMutableAttributedString()
         out.append(NSAttributedString(string: "Blinds ", attributes: muted))
         out.append(NSAttributedString(string: blinds, attributes: inked))

@@ -13,6 +13,11 @@ import UIKit
 
 class PlayerView: UIView {
 
+    enum TuckedCardSide {
+        case left
+        case right
+    }
+
     // MARK: - Subviews (AI seat)
     private var avatar: AvatarView?
     private let nameStackPill = UIView()
@@ -33,6 +38,8 @@ class PlayerView: UIView {
     private(set) var player: Player?
     private var isHumanPlayer = false
     private var isDealer = false
+    private var isHighlighted = false
+    private var cardSide: TuckedCardSide = .right
 
     // Layout vars
     private var avatarSize: CGFloat = 44
@@ -108,7 +115,7 @@ class PlayerView: UIView {
         turnPill.layer.cornerRadius = 10
         turnPill.isHidden = true
         addSubview(turnPill)
-        turnPillLabel.text = "YOUR TURN"
+        turnPillLabel.text = "YOUR TURN · 12s"
         turnPillLabel.textColor = .white
         turnPillLabel.font = .systemFont(ofSize: 9.5, weight: .heavy)
         turnPillLabel.textAlignment = .center
@@ -131,10 +138,11 @@ class PlayerView: UIView {
 
     // MARK: - Configure
 
-    func configureWith(player: Player, isDealer: Bool = false) {
+    func configureWith(player: Player, isDealer: Bool = false, cardSide: TuckedCardSide = .right) {
         self.player = player
         self.isHumanPlayer = player.isHuman
         self.isDealer = isDealer
+        self.cardSide = cardSide
 
         rebuild()
     }
@@ -157,8 +165,8 @@ class PlayerView: UIView {
 
         // Cards: human face up, AI face down (cards are revealed at showdown)
         let hasHole = player.holeCards.count >= 2
-        card1.isHidden = !hasHole
-        card2.isHidden = !hasHole
+        card1.isHidden = !hasHole || player.isFolded
+        card2.isHidden = !hasHole || player.isFolded
         card1.style = isHumanPlayer ? .hero : .face
         card2.style = isHumanPlayer ? .hero : .face
         if hasHole {
@@ -167,12 +175,14 @@ class PlayerView: UIView {
         }
 
         updateStatusBadge()
+        updateHeroBetPill()
         setNeedsLayout()
     }
 
     func updateChips() {
         guard let player else { return }
         stackLabel.text = "$\(ChipFormatter.string(player.chips))"
+        updateHeroBetPill()
     }
 
     private func updateStatusBadge() {
@@ -187,6 +197,10 @@ class PlayerView: UIView {
             showBadge(text: "ALL-IN", color: PokerTheme.amber)
             return
         }
+        if isHighlighted && !isHumanPlayer {
+            showBadge(text: "12s", color: PokerTheme.forest)
+            return
+        }
         statusBadge.isHidden = true
     }
 
@@ -195,6 +209,28 @@ class PlayerView: UIView {
         statusBadge.textColor = color
         statusBadge.backgroundColor = PokerTheme.glass
         statusBadge.isHidden = false
+    }
+
+    private func updateHeroBetPill() {
+        guard isHumanPlayer, let player else {
+            betPill?.removeFromSuperview()
+            betPill = nil
+            return
+        }
+        guard !player.isFolded, player.currentBet > 0 else {
+            betPill?.removeFromSuperview()
+            betPill = nil
+            return
+        }
+
+        if let betPill {
+            betPill.setAmount(player.currentBet)
+        } else {
+            let pill = BetPillView(amount: player.currentBet, chipColor: PokerTheme.Chip.green)
+            betPill = pill
+            addSubview(pill)
+        }
+        setNeedsLayout()
     }
 
     private func hueFor(player: Player) -> CGFloat {
@@ -257,15 +293,28 @@ class PlayerView: UIView {
             statusBadge.frame = CGRect(x: (w - sz.width) / 2, y: pillY + pillH + 4, width: sz.width, height: sz.height)
         }
 
-        // Tucked cards — to the right of the avatar
+        // Tucked cards — fixed anchor per side, matching poker.jsx's cardSide.
         let cardW: CGFloat = 24
         let cardH: CGFloat = 32
-        let cardsX = w / 2 + avatarSize / 2 - 4
+        let groupW = cardW * 2 - 11
+        let cardsX: CGFloat
+        let firstTilt: CGFloat
+        let secondTilt: CGFloat
+        switch cardSide {
+        case .right:
+            cardsX = w / 2 + avatarSize / 2 - 16
+            firstTilt = -12
+            secondTilt = 4
+        case .left:
+            cardsX = w / 2 - avatarSize / 2 - groupW + 16
+            firstTilt = -4
+            secondTilt = 12
+        }
         let cardsY = avY + 6
         card1.frame = CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH)
         card2.frame = CGRect(x: cardsX + cardW - 11, y: cardsY, width: cardW, height: cardH)
-        card1.transform = CGAffineTransform(rotationAngle: -12 * .pi / 180)
-        card2.transform = CGAffineTransform(rotationAngle: 4 * .pi / 180)
+        card1.transform = CGAffineTransform(rotationAngle: firstTilt * .pi / 180)
+        card2.transform = CGAffineTransform(rotationAngle: secondTilt * .pi / 180)
 
         // Action overlay above pill
         if actionLabel.alpha > 0.0 {
@@ -283,13 +332,14 @@ class PlayerView: UIView {
         let h = bounds.height
 
         // Fanned hero cards (centered, slightly above the name bar)
-        let cardW: CGFloat = 64
-        let cardH: CGFloat = 92
-        let cardsY: CGFloat = 4
-        let totalCardsW = cardW * 2 - 14
+        let scale = max(0.82, min(1.0, w / 360.0))
+        let cardW: CGFloat = 64 * scale
+        let cardH: CGFloat = 92 * scale
+        let cardsY: CGFloat = 4 * scale
+        let totalCardsW = cardW * 2 - 14 * scale
         let cardsX = (w - totalCardsW) / 2
         card1.frame = CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH)
-        card2.frame = CGRect(x: cardsX + cardW - 14, y: cardsY, width: cardW, height: cardH)
+        card2.frame = CGRect(x: cardsX + cardW - 14 * scale, y: cardsY, width: cardW, height: cardH)
         // tilt out
         card1.transform = CGAffineTransform(rotationAngle: -7 * .pi / 180)
         card2.transform = CGAffineTransform(rotationAngle: 7 * .pi / 180)
@@ -299,34 +349,52 @@ class PlayerView: UIView {
         card2.layer.shadowRadius = 14
 
         // Name/stack strip
-        let stripY = cardsY + cardH + 6
-        let stripH: CGFloat = 44
-        let strip = CGRect(x: 12, y: stripY, width: w - 24, height: stripH)
+        let stripY = cardsY + cardH + 6 * scale
+        let stripH: CGFloat = 44 * scale
+        let strip = CGRect(x: 14 * scale, y: stripY, width: w - 28 * scale, height: stripH)
         nameStackPill.frame = strip
-        nameStackPill.backgroundColor = .clear
+        nameStackPill.backgroundColor = isHighlighted
+            ? PokerTheme.forest.withAlphaComponent(traitCollection.userInterfaceStyle == .dark ? 0.18 : 0.10)
+            : .clear
+        nameStackPill.layer.cornerRadius = 14 * scale
         nameStackPill.layer.shadowOpacity = 0
 
         // Avatar inside the strip (small)
         let av = avatar
-        let smallAv: CGFloat = 36
-        av?.frame = CGRect(x: strip.minX + 6, y: strip.minY + (stripH - smallAv) / 2, width: smallAv, height: smallAv)
+        let smallAv: CGFloat = 36 * scale
+        av?.frame = CGRect(x: strip.minX + 6 * scale, y: strip.minY + (stripH - smallAv) / 2, width: smallAv, height: smallAv)
 
         // Name/stack labels next to avatar
-        let textX = (av?.frame.maxX ?? strip.minX) + 8
+        let textX = (av?.frame.maxX ?? strip.minX) + 8 * scale
         nameLabel.textAlignment = .left
         stackLabel.textAlignment = .left
-        nameLabel.frame = CGRect(x: textX - strip.minX, y: 6, width: strip.width / 2, height: 14)
-        stackLabel.frame = CGRect(x: textX - strip.minX, y: 22, width: strip.width / 2, height: 16)
+        nameLabel.frame = CGRect(x: textX - strip.minX, y: 6 * scale, width: strip.width / 2, height: 14 * scale)
+        stackLabel.frame = CGRect(x: textX - strip.minX, y: 22 * scale, width: strip.width / 2, height: 16 * scale)
 
         // Dealer chip near avatar (small overlay)
         if !dealerChip.isHidden {
             dealerChip.frame = CGRect(x: (av?.frame.maxX ?? strip.minX) - 2, y: (av?.frame.maxY ?? strip.minY) - 14, width: 18, height: 18)
         }
 
-        // YOUR TURN pill on the right
-        turnPill.frame = CGRect(x: strip.maxX - 84 - strip.minX + strip.minX, y: stripY + 12, width: 88, height: 20)
-        turnPillLabel.frame = turnPill.bounds.insetBy(dx: 6, dy: 0)
+        // YOUR TURN pill in the center of the name strip.
+        let turnW: CGFloat = 104 * scale
+        turnPill.frame = CGRect(x: strip.midX - turnW / 2, y: stripY + 12 * scale, width: turnW, height: 20 * scale)
+        turnPill.layer.cornerRadius = 10 * scale
+        turnPillLabel.frame = turnPill.bounds.insetBy(dx: 6 * scale, dy: 0)
         turnPill.bringSubviewToFront(turnPillLabel)
+
+        if let betPill {
+            let fit = betPill.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            let pillW = max(64 * scale, fit.width)
+            let pillH = 24 * scale
+            betPill.frame = CGRect(
+                x: strip.maxX - pillW - 6 * scale,
+                y: stripY + (stripH - pillH) / 2,
+                width: pillW,
+                height: pillH
+            )
+            bringSubviewToFront(betPill)
+        }
 
         // No tucked cards / status badge for human
         statusBadge.isHidden = true
@@ -372,12 +440,15 @@ class PlayerView: UIView {
     }
 
     func setHighlighted(_ highlighted: Bool) {
+        isHighlighted = highlighted
         if isHumanPlayer {
             turnPill.isHidden = !highlighted
+            setNeedsLayout()
             return
         }
         activeRingBg.isHidden = !highlighted
         timerRing.isHidden = !highlighted
+        updateStatusBadge()
         if highlighted {
             // Pulse the ring (opacity)
             let pulse = CABasicAnimation(keyPath: "opacity")
@@ -427,4 +498,3 @@ class PlayerView: UIView {
         }
     }
 }
-
