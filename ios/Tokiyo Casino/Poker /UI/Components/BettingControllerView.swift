@@ -54,7 +54,7 @@ final class BettingControlsView: UIView {
 
     var preferredHeight: CGFloat {
         if isHidden { return 0 }
-        return raisePanelExpanded && !raisePanel.isHidden ? 210 : 76
+        return raisePanelExpanded && !raisePanel.isHidden ? 224 : 76
     }
 
     // MARK: - Init
@@ -102,6 +102,7 @@ final class BettingControlsView: UIView {
         raiseSubLabel.font = .systemFont(ofSize: 10, weight: .medium)
         raiseSubLabel.textColor = PokerTheme.muted
         raiseSubLabel.textAlignment = .center
+        raiseSubLabel.numberOfLines = 1
         raiseSubLabel.translatesAutoresizingMaskIntoConstraints = false
         raisePanel.addSubview(raiseSubLabel)
 
@@ -133,6 +134,7 @@ final class BettingControlsView: UIView {
         thumb.layer.shadowOffset = CGSize(width: 0, height: 2)
         thumb.layer.shadowRadius = 4
         thumb.translatesAutoresizingMaskIntoConstraints = true
+        thumb.isHidden = true
         raisePanel.addSubview(thumb)
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(trackPanned(_:)))
@@ -190,6 +192,7 @@ final class BettingControlsView: UIView {
 
             raiseSubLabel.topAnchor.constraint(equalTo: raiseAmountLabel.bottomAnchor, constant: 0),
             raiseSubLabel.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
+            raiseSubLabel.heightAnchor.constraint(equalToConstant: 16),
 
             minusButton.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
             minusButton.centerYAnchor.constraint(equalTo: raiseAmountLabel.centerYAnchor),
@@ -224,9 +227,13 @@ final class BettingControlsView: UIView {
     private func styleStepperButton(_ button: UIButton, glyph: String) {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.backgroundColor = PokerTheme.surfaceAlt
-        button.setTitle(glyph, for: .normal)
-        button.setTitleColor(PokerTheme.ink, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 19, weight: .bold)
+        button.setTitle(nil, for: .normal)
+        let symbolName = glyph == "+" ? "plus" : "minus"
+        let cfg = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        button.setImage(UIImage(systemName: symbolName, withConfiguration: cfg), for: .normal)
+        button.tintColor = PokerTheme.ink
+        button.contentHorizontalAlignment = .center
+        button.contentVerticalAlignment = .center
         button.layer.cornerRadius = 11
     }
 
@@ -299,6 +306,7 @@ final class BettingControlsView: UIView {
         rebuildQuickBets()
         updateRaiseLabels()
         positionThumb()
+        setNeedsLayout()
         invalidateIntrinsicContentSize()
         onHeightChanged?(preferredHeight)
 
@@ -415,6 +423,12 @@ final class BettingControlsView: UIView {
     }
 
     private func positionThumb() {
+        guard !raisePanel.isHidden, track.bounds.width > 0 else {
+            thumb.isHidden = true
+            fill.frame = .zero
+            return
+        }
+        thumb.isHidden = false
         guard maxRaise > minRaise else {
             let trackFrame = track.frame
             thumb.frame = CGRect(x: trackFrame.minX - 10, y: trackFrame.midY - 10, width: 20, height: 20)
@@ -480,9 +494,11 @@ final class BettingControlsView: UIView {
         raisePanel.transform = CGAffineTransform(translationX: 0, y: 10)
         invalidateIntrinsicContentSize()
         onHeightChanged?(preferredHeight)
+        setNeedsLayout()
         UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.4) {
             self.raisePanel.alpha = 1
             self.raisePanel.transform = .identity
+            self.layoutIfNeeded()
         }
     }
 
@@ -501,6 +517,7 @@ final class BettingControlsView: UIView {
 
     private func resetRaisePanel() {
         raisePanel.isHidden = true
+        thumb.isHidden = true
         raisePanelExpanded = false
         raiseButton.sublabel = canRaise ? "tap to set" : nil
         raiseValue = clampedRaiseDelta(raiseValue)

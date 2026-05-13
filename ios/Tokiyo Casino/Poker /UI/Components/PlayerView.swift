@@ -40,6 +40,7 @@ class PlayerView: UIView {
     private var isDealer = false
     private var isHighlighted = false
     private var cardSide: TuckedCardSide = .right
+    private var showsRevealedOpponentCards = false
 
     // Layout vars
     private var avatarSize: CGFloat = 44
@@ -119,7 +120,9 @@ class PlayerView: UIView {
         turnPillLabel.textColor = .white
         turnPillLabel.font = .systemFont(ofSize: 9.5, weight: .heavy)
         turnPillLabel.textAlignment = .center
-        turnPillLabel.translatesAutoresizingMaskIntoConstraints = false
+        turnPillLabel.adjustsFontSizeToFitWidth = true
+        turnPillLabel.minimumScaleFactor = 0.85
+        turnPillLabel.translatesAutoresizingMaskIntoConstraints = true
         turnPill.addSubview(turnPillLabel)
 
         // Active glow ring (CA layer behind avatar)
@@ -165,6 +168,9 @@ class PlayerView: UIView {
 
         // Cards: human face up, AI face down (cards are revealed at showdown)
         let hasHole = player.holeCards.count >= 2
+        if !hasHole || player.isFolded {
+            showsRevealedOpponentCards = false
+        }
         card1.isHidden = !hasHole || player.isFolded
         card2.isHidden = !hasHole || player.isFolded
         card1.style = isHumanPlayer ? .hero : .face
@@ -293,28 +299,46 @@ class PlayerView: UIView {
             statusBadge.frame = CGRect(x: (w - sz.width) / 2, y: pillY + pillH + 4, width: sz.width, height: sz.height)
         }
 
-        // Tucked cards — fixed anchor per side, matching poker.jsx's cardSide.
-        let cardW: CGFloat = 24
-        let cardH: CGFloat = 32
-        let groupW = cardW * 2 - 11
-        let cardsX: CGFloat
-        let firstTilt: CGFloat
-        let secondTilt: CGFloat
-        switch cardSide {
-        case .right:
-            cardsX = w / 2 + avatarSize / 2 - 16
-            firstTilt = -12
-            secondTilt = 4
-        case .left:
-            cardsX = w / 2 - avatarSize / 2 - groupW + 16
-            firstTilt = -4
-            secondTilt = 12
+        if showsRevealedOpponentCards {
+            // Showdown: cards come forward and grow enough to read, instead of
+            // staying hidden behind the avatar.
+            let cardW: CGFloat = 38
+            let cardH: CGFloat = 54
+            let overlap: CGFloat = 10
+            let groupW = cardW * 2 - overlap
+            let cardsX = (w - groupW) / 2
+            let cardsY = max(-6, avY - 4)
+            setCardFrame(card1, frame: CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH), degrees: -7)
+            setCardFrame(card2, frame: CGRect(x: cardsX + cardW - overlap, y: cardsY, width: cardW, height: cardH), degrees: 7)
+            bringSubviewToFront(card1)
+            bringSubviewToFront(card2)
+            bringSubviewToFront(dealerChip)
+        } else {
+            // Tucked cards — fixed anchor per side, matching poker.jsx's cardSide.
+            let cardW: CGFloat = 24
+            let cardH: CGFloat = 32
+            let groupW = cardW * 2 - 11
+            let cardsX: CGFloat
+            let firstTilt: CGFloat
+            let secondTilt: CGFloat
+            switch cardSide {
+            case .right:
+                cardsX = w / 2 + avatarSize / 2 - 16
+                firstTilt = -12
+                secondTilt = 4
+            case .left:
+                cardsX = w / 2 - avatarSize / 2 - groupW + 16
+                firstTilt = -4
+                secondTilt = 12
+            }
+            let cardsY = avY + 6
+            setCardFrame(card1, frame: CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH), degrees: firstTilt)
+            setCardFrame(card2, frame: CGRect(x: cardsX + cardW - 11, y: cardsY, width: cardW, height: cardH), degrees: secondTilt)
+            if let av {
+                bringSubviewToFront(av)
+            }
+            bringSubviewToFront(dealerChip)
         }
-        let cardsY = avY + 6
-        card1.frame = CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH)
-        card2.frame = CGRect(x: cardsX + cardW - 11, y: cardsY, width: cardW, height: cardH)
-        card1.transform = CGAffineTransform(rotationAngle: firstTilt * .pi / 180)
-        card2.transform = CGAffineTransform(rotationAngle: secondTilt * .pi / 180)
 
         // Action overlay above pill
         if actionLabel.alpha > 0.0 {
@@ -338,11 +362,8 @@ class PlayerView: UIView {
         let cardsY: CGFloat = 4 * scale
         let totalCardsW = cardW * 2 - 14 * scale
         let cardsX = (w - totalCardsW) / 2
-        card1.frame = CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH)
-        card2.frame = CGRect(x: cardsX + cardW - 14 * scale, y: cardsY, width: cardW, height: cardH)
-        // tilt out
-        card1.transform = CGAffineTransform(rotationAngle: -7 * .pi / 180)
-        card2.transform = CGAffineTransform(rotationAngle: 7 * .pi / 180)
+        setCardFrame(card1, frame: CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH), degrees: -7)
+        setCardFrame(card2, frame: CGRect(x: cardsX + cardW - 14 * scale, y: cardsY, width: cardW, height: cardH), degrees: 7)
         card1.layer.shadowOpacity = 0.22
         card1.layer.shadowRadius = 14
         card2.layer.shadowOpacity = 0.22
@@ -353,9 +374,7 @@ class PlayerView: UIView {
         let stripH: CGFloat = 44 * scale
         let strip = CGRect(x: 14 * scale, y: stripY, width: w - 28 * scale, height: stripH)
         nameStackPill.frame = strip
-        nameStackPill.backgroundColor = isHighlighted
-            ? PokerTheme.forest.withAlphaComponent(traitCollection.userInterfaceStyle == .dark ? 0.18 : 0.10)
-            : .clear
+        nameStackPill.backgroundColor = .clear
         nameStackPill.layer.cornerRadius = 14 * scale
         nameStackPill.layer.shadowOpacity = 0
 
@@ -377,10 +396,12 @@ class PlayerView: UIView {
         }
 
         // YOUR TURN pill in the center of the name strip.
-        let turnW: CGFloat = 104 * scale
-        turnPill.frame = CGRect(x: strip.midX - turnW / 2, y: stripY + 12 * scale, width: turnW, height: 20 * scale)
-        turnPill.layer.cornerRadius = 10 * scale
-        turnPillLabel.frame = turnPill.bounds.insetBy(dx: 6 * scale, dy: 0)
+        let turnH: CGFloat = 26 * scale
+        let desiredTurnW = turnPillLabel.intrinsicContentSize.width + 28 * scale
+        let turnW = min(strip.width - 96 * scale, max(128 * scale, desiredTurnW))
+        turnPill.frame = CGRect(x: strip.midX - turnW / 2, y: stripY + (stripH - turnH) / 2, width: turnW, height: turnH)
+        turnPill.layer.cornerRadius = turnH / 2
+        turnPillLabel.frame = turnPill.bounds
         turnPill.bringSubviewToFront(turnPillLabel)
 
         if let betPill {
@@ -463,13 +484,27 @@ class PlayerView: UIView {
         }
     }
 
+    func resetCardPresentation() {
+        showsRevealedOpponentCards = false
+        if !isHumanPlayer {
+            card1.style = .face
+            card2.style = .face
+        }
+        setNeedsLayout()
+    }
+
     func revealCards() {
         guard let player else { return }
         guard !player.isFolded, player.holeCards.count >= 2 else { return }
-        card1.style = .hero
-        card2.style = .hero
+        if !isHumanPlayer {
+            showsRevealedOpponentCards = true
+        }
+        card1.style = isHumanPlayer ? .hero : .face
+        card2.style = isHumanPlayer ? .hero : .face
+        setNeedsLayout()
         card1.revealCard()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            self.setNeedsLayout()
             self.card2.revealCard()
         }
     }
@@ -477,10 +512,15 @@ class PlayerView: UIView {
     func forceRevealCards() {
         guard let player else { return }
         guard player.holeCards.count >= 2 else { return }
-        card1.style = .hero
-        card2.style = .hero
+        if !isHumanPlayer {
+            showsRevealedOpponentCards = true
+        }
+        card1.style = isHumanPlayer ? .hero : .face
+        card2.style = isHumanPlayer ? .hero : .face
+        setNeedsLayout()
         card1.forceShowCard()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            self.setNeedsLayout()
             self.card2.forceShowCard()
         }
     }
@@ -496,5 +536,11 @@ class PlayerView: UIView {
                 self.nameStackPill.backgroundColor = PokerTheme.glass
             }
         }
+    }
+
+    private func setCardFrame(_ cardView: CardView, frame: CGRect, degrees: CGFloat) {
+        cardView.transform = .identity
+        cardView.frame = frame
+        cardView.transform = CGAffineTransform(rotationAngle: degrees * .pi / 180)
     }
 }

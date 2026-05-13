@@ -124,6 +124,7 @@ extension PokerTableView {
 
         for playerView in playerViews {
             playerView.setHighlighted(false)
+            playerView.resetCardPresentation()
         }
     }
 }
