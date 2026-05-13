@@ -99,7 +99,7 @@ class Player {
         func reset() {
             holeCards = []
             currentBet = 0
-            isActive = true
+            isActive = chips > 0
             hasActed = false
             isAllIn = false
             isFolded = false
@@ -110,7 +110,7 @@ class Player {
         
         // UPDATE bet()
         func bet(amount: Int) -> Int {
-            let actualBet = min(amount, chips)
+            let actualBet = max(0, min(amount, chips))
             chips -= actualBet
             currentBet += actualBet
             totalInvested += actualBet // Track total investment
@@ -126,10 +126,13 @@ class Player {
     
     func win(amount: Int) {
         chips += amount
-        winnings = amount
-        handsWon += 1
-        if amount > biggestPot {
-            biggestPot = amount
+        let isFirstWinThisHand = (winnings == 0)
+        winnings += amount
+        if isFirstWinThisHand {
+            handsWon += 1
+        }
+        if winnings > biggestPot {
+            biggestPot = winnings
         }
     }
     

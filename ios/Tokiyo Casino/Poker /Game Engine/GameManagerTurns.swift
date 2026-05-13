@@ -31,7 +31,7 @@ extension GameManager {
                 endBettingRound()
             } else {
                 // Move to the next player who can actually act
-                currentPlayerIndex = findNextActivePlayerIndex(after: currentPlayerIndex)
+                moveToNextPlayer(after: current)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
                     self?.processNextTurn()
                 }
@@ -76,47 +76,58 @@ extension GameManager {
     }
     
     func moveToNextPlayer() {
-        currentPlayerIndex = findNextActivePlayerIndex(after: currentPlayerIndex)
+        moveToNextPlayer(after: currentPlayer)
     }
     
-    func findNextActivePlayerIndex(after index: Int) -> Int {
-        let active = activePlayers
-        guard !active.isEmpty else { return -1 }
-        
-        var nextIndex = (index + 1) % active.count
-        var attempts = 0
-        
-        while attempts < active.count {
-            let player = active[nextIndex]
-            // FIX: Explicitly skip players who are All-In
-            // They are still "active" for winning, but inactive for betting turns
-            if !player.isAllIn && !player.isFolded {
-                return nextIndex
-            }
-            nextIndex = (nextIndex + 1) % active.count
-            attempts += 1
+    func moveToNextPlayer(after player: Player?) {
+        guard let player,
+              let seatIndex = players.firstIndex(where: { $0.id == player.id }) else {
+            currentPlayerIndex = findFirstActivePlayerAfterDealer()
+            return
         }
-        
-        return -1
+        currentPlayerIndex = findNextActivePlayerIndex(afterSeatIndex: seatIndex)
     }
     
     func findFirstActivePlayerAfterDealer() -> Int {
-        let activePlayerIds = activePlayers.map { $0.id }
+        return findNextActivePlayerIndex(afterSeatIndex: dealerIndex)
+    }
+    
+    func findNextActivePlayerIndex(afterSeatIndex seatIndex: Int) -> Int {
+        guard !players.isEmpty else { return -1 }
         
-        // Start from small blind position (dealer + 1)
-        var searchIndex = (dealerIndex + 1) % players.count
+        var searchIndex = (seatIndex + 1) % players.count
         var attempts = 0
         
         while attempts < players.count {
             let player = players[searchIndex]
-            if let activeIndex = activePlayerIds.firstIndex(of: player.id),
-               !player.isAllIn && !player.isFolded {
+            if player.isActive,
+               !player.isFolded,
+               !player.isAllIn,
+               let activeIndex = activePlayers.firstIndex(where: { $0.id == player.id }) {
                 return activeIndex
             }
             searchIndex = (searchIndex + 1) % players.count
             attempts += 1
         }
         
-        return 0 // Fallback
+        return -1
+    }
+    
+    func findNextInHandSeat(afterSeatIndex seatIndex: Int) -> Int? {
+        guard !players.isEmpty else { return nil }
+        
+        var searchIndex = (seatIndex + 1) % players.count
+        var attempts = 0
+        
+        while attempts < players.count {
+            let player = players[searchIndex]
+            if player.isActive && !player.isFolded {
+                return searchIndex
+            }
+            searchIndex = (searchIndex + 1) % players.count
+            attempts += 1
+        }
+        
+        return nil
     }
 }

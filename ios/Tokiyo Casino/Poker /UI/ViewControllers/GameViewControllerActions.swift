@@ -46,7 +46,7 @@ extension GameViewController {
         let validActions = gameManager.getValidActions(for: humanPlayer)
         let callAmount = gameManager.currentBet - humanPlayer.currentBet
         let minRaise = gameManager.minRaise
-        let maxRaise = humanPlayer.chips
+        let maxRaise = max(0, humanPlayer.chips - max(callAmount, 0))
         
         // Shift human player view up to make space for betting controls
         tableView.adjustHumanPlayerPosition(shiftUp: true)

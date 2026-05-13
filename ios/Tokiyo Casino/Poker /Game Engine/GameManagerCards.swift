@@ -29,8 +29,15 @@ extension GameManager {
     }
     
     func postBlinds() {
-        let sbIndex = (dealerIndex + 1) % players.count
-        let bbIndex = (dealerIndex + 2) % players.count
+        guard let sbIndex = findNextInHandSeat(afterSeatIndex: dealerIndex),
+              let bbIndex = findNextInHandSeat(afterSeatIndex: sbIndex) else {
+            bigBlindPlayerSeatIndex = nil
+            currentBet = 0
+            delegate?.potDidUpdate(mainPot.amount)
+            return
+        }
+        
+        bigBlindPlayerSeatIndex = bbIndex
         
         // Small blind
         let sbPlayer = players[sbIndex]
@@ -42,25 +49,42 @@ extension GameManager {
         let bbAmount = bbPlayer.bet(amount: bigBlind)
         mainPot.add(bbAmount)
         
-        currentBet = bigBlind
+        currentBet = max(sbPlayer.currentBet, bbPlayer.currentBet)
+        currentBetAllowsRaises = true
         delegate?.potDidUpdate(mainPot.amount)
     }
     
     func dealRemainingCommunityCards() {
         print("Dealing remaining community cards. Current count: \(communityCards.count)")
         
-        while communityCards.count < 5 {
-            // Burn card before dealing (except for the first remaining card)
-            if communityCards.count > 0 {
-                _ = deck.deal() // Burn card
+        // Deal remaining streets following Texas Hold'em burn/deal rules:
+        // Flop:  burn 1, deal 3
+        // Turn:  burn 1, deal 1
+        // River: burn 1, deal 1
+        
+        if communityCards.count < 3 {
+            // Flop not yet dealt
+            _ = deck.deal() // Burn
+            let flopCards = deck.dealMultiple(3 - communityCards.count)
+            communityCards.append(contentsOf: flopCards)
+            print("Flop: \(flopCards.map { $0.description }.joined(separator: ", "))")
+        }
+        
+        if communityCards.count < 4 {
+            // Turn not yet dealt
+            _ = deck.deal() // Burn
+            if let turnCard = deck.deal() {
+                communityCards.append(turnCard)
+                print("Turn: \(turnCard.description)")
             }
-            
-            if let card = deck.deal() {
-                communityCards.append(card)
-                print("Dealt community card: \(card.description)")
-            } else {
-                print("No more cards in deck!")
-                break
+        }
+        
+        if communityCards.count < 5 {
+            // River not yet dealt
+            _ = deck.deal() // Burn
+            if let riverCard = deck.deal() {
+                communityCards.append(riverCard)
+                print("River: \(riverCard.description)")
             }
         }
         

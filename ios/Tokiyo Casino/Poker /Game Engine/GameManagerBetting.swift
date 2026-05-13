@@ -38,12 +38,14 @@ extension GameManager {
         print("Ending betting round. Phase: \(currentPhase)")
         
         // Check if only one player remains (early end)
-        let nonFoldedPlayers = players.filter { !$0.isFolded && $0.chips >= 0 }
+        let nonFoldedPlayers = players.filter { $0.isActive && !$0.isFolded }
         if nonFoldedPlayers.count == 1 {
             print("Only one player remaining, ending hand early")
             
             if let winner = nonFoldedPlayers.first {
-                winner.win(amount: mainPot.amount)
+                let winAmount = mainPot.amount
+                winner.win(amount: winAmount)
+                mainPot.reset()
                 
                 // 1) Reveal cards (only this non-folded player will show)
                 DispatchQueue.main.async {
@@ -55,7 +57,7 @@ extension GameManager {
                 DispatchQueue.main.asyncAfter(deadline: .now() + revealDelay) {
                     self.showWinnerAlert(
                         player: winner,
-                        amount: self.mainPot.amount,
+                        amount: winAmount,
                         handDescription: "All others folded"
                     )
                 }
@@ -79,7 +81,9 @@ extension GameManager {
             player.currentBet = 0
         }
         currentBet = 0
+        lastRaiseAmount = bigBlind
         minRaise = bigBlind
+        currentBetAllowsRaises = true
         currentPlayerIndex = 0
         
         // Move to next phase
@@ -104,7 +108,9 @@ extension GameManager {
             player.currentBet = 0
         }
         currentBet = 0
+        lastRaiseAmount = bigBlind
         minRaise = bigBlind
+        currentBetAllowsRaises = true
         
         // Find first active player after dealer for new betting round
         currentPlayerIndex = findFirstActivePlayerAfterDealer()

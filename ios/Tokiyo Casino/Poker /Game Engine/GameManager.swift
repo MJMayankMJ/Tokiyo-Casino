@@ -17,7 +17,6 @@ class GameManager {
     var deck: Deck = Deck()
     var communityCards: [Card] = []
     var mainPot: Pot = Pot()
-    var sidePots: [Pot] = []
     var currentPhase: GamePhase = .waiting
     
     private(set) var dealerIndex: Int = 0
@@ -27,6 +26,8 @@ class GameManager {
     var currentBet: Int = 0
     var minRaise: Int = 20
     var lastRaiseAmount: Int = 0
+    var currentBetAllowsRaises: Bool = true
+    var bigBlindPlayerSeatIndex: Int?
     
     // Game settings
     let startingChips: Int
@@ -77,7 +78,21 @@ class GameManager {
     
     // MARK: - Game Control
     func startNewHand() {
+        // Chip conservation check (debug only)
+        #if DEBUG
+        let totalChips = players.reduce(0) { $0 + $1.chips } + mainPot.amount
+        let expected = playerCount * startingChips
+        assert(totalChips == expected,
+               "CHIP LEAK: total=\(totalChips) expected=\(expected)")
+        #endif
+        
         resetForNewHand()
+        guard activePlayers.count >= 2 else {
+            currentPhase = .waiting
+            delegate?.gamePhaseDidChange(currentPhase)
+            return
+        }
+        
         dealHoleCards()
         postBlinds()
         
@@ -85,8 +100,12 @@ class GameManager {
         delegate?.gamePhaseDidChange(currentPhase)
         delegate?.gameDidStart()
         
-        // Set current player (after big blind)
-        currentPlayerIndex = findNextActivePlayerIndex(after: 2)
+        // Set current player (left of the actual big blind)
+        if let bigBlindPlayerSeatIndex {
+            currentPlayerIndex = findNextActivePlayerIndex(afterSeatIndex: bigBlindPlayerSeatIndex)
+        } else {
+            currentPlayerIndex = findFirstActivePlayerAfterDealer()
+        }
         
         // Process AI turns if needed
         processNextTurn()
@@ -96,16 +115,17 @@ class GameManager {
         deck.reset()
         communityCards = []
         mainPot.reset()
-        sidePots = []
         currentBet = 0
         lastRaiseAmount = bigBlind
         minRaise = bigBlind
+        currentBetAllowsRaises = true
+        bigBlindPlayerSeatIndex = nil
         
         for player in players {
             player.reset()
         }
         
         // Move dealer button
-        dealerIndex = (dealerIndex + 1) % players.count
+        dealerIndex = findNextInHandSeat(afterSeatIndex: dealerIndex) ?? ((dealerIndex + 1) % players.count)
     }
 }

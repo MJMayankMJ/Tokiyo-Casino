@@ -31,7 +31,6 @@ enum GamePhase {
 // MARK: - Pot Structure
 struct Pot {
     var amount: Int = 0
-    var eligiblePlayers: [Player] = []
     
     mutating func add(_ chips: Int) {
         amount += chips
@@ -39,7 +38,6 @@ struct Pot {
     
     mutating func reset() {
         amount = 0
-        eligiblePlayers = []
     }
 }
 

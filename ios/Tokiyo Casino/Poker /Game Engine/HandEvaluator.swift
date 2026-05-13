@@ -120,7 +120,8 @@ class HandEvaluator {
         
         // Determine hand rank and value
         if isFlush && isStraight {
-            if straightHighCard == .ace && sortedCards[1].rank == .king {
+            let ranks = Set(sortedCards.map { $0.rank })
+            if ranks == [.ace, .king, .queen, .jack, .ten] {
                 // Royal Flush
                 return HandEvaluation(
                     rank: .royalFlush,
@@ -255,11 +256,15 @@ class HandEvaluator {
     }
     
     private static func calculateKickerValue(_ values: [Int]) -> Int {
+        // Base-15 encoding: each position is strictly more significant than the next.
+        // Max rank rawValue is 14 (Ace), so base 15 avoids collisions.
+        // Multipliers: 1, 15, 225, 3375, 50625 — max total ≈ 759,374,
+        // well within the 100,000,000 gap between hand-rank tiers.
         var result = 0
-        var multiplier = 10000
-        for value in values.prefix(5) {
+        var multiplier = 1
+        for value in values.prefix(5).reversed() {
             result += value * multiplier
-            multiplier /= 100
+            multiplier *= 15
         }
         return result
     }

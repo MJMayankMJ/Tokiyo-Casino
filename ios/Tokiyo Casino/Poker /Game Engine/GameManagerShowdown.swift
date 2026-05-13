@@ -36,45 +36,13 @@ extension GameManager {
         delegate?.gameDidEnd() // This will trigger card reveals in the UI
     }
 
-    func determineWinners() {
-        print("Starting showdown") // Debug
-        
-        var playerHands: [(Player, HandEvaluation)] = []
-        
-        // Evaluate each active player's hand
-        for player in activePlayers {
-            let allCards = player.holeCards + communityCards
-            let evaluation = HandEvaluator.evaluateBestHand(from: allCards)
-            playerHands.append((player, evaluation))
-            
-            print("\(player.name): \(player.holeCards.map { $0.description }.joined(separator: ", ")) -> \(evaluation.description)")
-        }
-        
-        // Sort by hand value (highest first)
-        playerHands.sort { $0.1.value > $1.1.value }
-        
-        guard !playerHands.isEmpty else { return }
-        
-        // Find all winners (handle ties)
-        let winningValue = playerHands[0].1.value
-        let winners = playerHands.filter { $0.1.value == winningValue }
-        
-        print("Winners: \(winners.map { $0.0.name }.joined(separator: ", "))")
-        
-        // Split pot among winners
-        let potShare = mainPot.amount / winners.count
-        
-        for (player, evaluation) in winners {
-            player.win(amount: potShare)
-            delegate?.playerDidWin(player, amount: potShare, handDescription: evaluation.description)
-        }
-    }
+
 
     func determineWinnersWithDelay() {
         print("Determining winners with side pot logic")
         
         // 1. Get all players who haven't folded (including All-In players)
-        let candidates = players.filter { !$0.isFolded }
+        let candidates = players.filter { $0.isActive && !$0.isFolded && $0.holeCards.count == 2 }
         
         // 2. Calculate hand strength for everyone
         var playerStrengths: [(Player, HandEvaluation)] = []
@@ -87,7 +55,13 @@ extension GameManager {
         // 3. Sort by hand strength (Highest value first)
         playerStrengths.sort { $0.1.value > $1.1.value }
         
-        // 4. Distribute the pot (Side Pot Algorithm)
+        // 4. Build a local contribution ledger so we don't destroy player.totalInvested
+        var contributions: [Int: Int] = [:]  // [player.id : invested amount]
+        for p in players {
+            contributions[p.id] = p.totalInvested
+        }
+        
+        // 5. Distribute the pot (Side Pot Algorithm)
         var remainingPot = mainPot.amount
         
         // While there is money in the pot
@@ -103,43 +77,81 @@ extension GameManager {
             
             // ROBUST ALGORITHM:
             // 1. Pick the winner(s) with best hand.
-            // 2. Determine the specific winner with the SMALLEST totalInvested among the ties.
+            // 2. Determine the specific winner with the SMALLEST contribution among the ties.
             // 3. That amount is the "Cap".
             // 4. Collect 'Cap' from EVERY player (active or folded) into a temporary side pot.
-            //    (Subtract this 'Cap' from everyone's totalInvested tracker so we don't count it twice).
+            //    (Subtract this 'Cap' from the ledger so we don't count it twice).
             // 5. Split that side pot among the winners.
             // 6. Remove the "Smallest Stack Winner" from the list (they are fully paid).
             // 7. Repeat until pot is empty.
             
             // Find the lowest invested amount among the current winners
-            let minInvestedAmongWinners = winners.map { $0.0.totalInvested }.min() ?? 0
+            let minInvestedAmongWinners = winners.map { contributions[$0.0.id] ?? 0 }.min() ?? 0
             
-            // Calculate the side pot size
+            // Calculate the side pot size from the local ledger
             var sidePot = 0
             for p in players { // iterate ALL players (even folded ones contributed)
-                let contribution = min(p.totalInvested, minInvestedAmongWinners)
+                let invested = contributions[p.id] ?? 0
+                let contribution = min(invested, minInvestedAmongWinners)
                 sidePot += contribution
-                p.totalInvested -= contribution // Deduct used portion
+                contributions[p.id] = invested - contribution  // deduct from ledger, not player
             }
             
             remainingPot -= sidePot
             
-            // Split sidePot among winners
-            let share = sidePot / winners.count
-            for (winner, evaluation) in winners {
-                winner.win(amount: share)
+            // Split sidePot among winners, awarding odd chip(s) to first winner(s)
+            // clockwise from the dealer button (standard poker rule)
+            let playerCount = players.count
+            let firstOddChipSeat = (dealerIndex + 1) % playerCount
+            let sortedWinners = winners.sorted { a, b in
+                let indexA = players.firstIndex(where: { $0.id == a.0.id }) ?? a.0.id
+                let indexB = players.firstIndex(where: { $0.id == b.0.id }) ?? b.0.id
+                let seatA = (indexA - firstOddChipSeat + playerCount) % playerCount
+                let seatB = (indexB - firstOddChipSeat + playerCount) % playerCount
+                return seatA < seatB
+            }
+            let share = sidePot / sortedWinners.count
+            let remainder = sidePot % sortedWinners.count
+            for (i, (winner, evaluation)) in sortedWinners.enumerated() {
+                let bonus = (i < remainder) ? 1 : 0
+                let total = share + bonus
+                winner.win(amount: total)
                 
                 // Alert for this specific payout
-                if share > 0 {
+                if total > 0 {
                     // We use a small delay to stack alerts if multiple side pots
-                    self.showWinnerAlert(player: winner, amount: share, handDescription: evaluation.description)
+                    self.showWinnerAlert(player: winner, amount: total, handDescription: evaluation.description)
                 }
             }
             
             // Remove fully paid winners from the contest
-            // (Anyone whose totalInvested is now 0 has been fully calculated)
-            playerStrengths.removeAll { $0.0.totalInvested == 0 }
+            // (Anyone whose ledger contribution is now 0 has been fully calculated)
+            playerStrengths.removeAll { (contributions[$0.0.id] ?? 0) == 0 }
         }
+        
+        // Reconcile any unclaimed remainder (e.g., from rounding mismatches)
+        if remainingPot > 0 {
+            assertionFailure("Unclaimed chips remained after side-pot distribution: \(remainingPot)")
+            print("WARNING: \(remainingPot) unclaimed chips in pot – awarding only to an eligible contributor")
+            
+            let originalEligibleFallback = candidates
+                .filter { $0.totalInvested > 0 }
+                .map { ($0, HandEvaluator.evaluateBestHand(from: $0.holeCards + communityCards)) }
+                .sorted { $0.1.value > $1.1.value }
+                .first?
+                .0
+            let fallback = playerStrengths.first(where: { contributions[$0.0.id, default: 0] > 0 || $0.0.totalInvested > 0 })?.0 ?? originalEligibleFallback
+            
+            if let fallback {
+                fallback.win(amount: remainingPot)
+                self.showWinnerAlert(player: fallback, amount: remainingPot, handDescription: "Unclaimed remainder")
+            } else {
+                print("ERROR: No eligible contributor found for unclaimed remainder")
+            }
+        }
+        
+        // Zero the pot so it doesn't linger until resetForNewHand()
+        mainPot.reset()
     }
     
     func showWinnerAlert(player: Player, amount: Int, handDescription: String) {
