@@ -30,9 +30,11 @@ extension GameViewController {
     }
     
     @objc func soundSettingChanged() {
-        // Update mute button icon
+        // Update mute button icon (legacy + top info bar)
         muteButton.setImage(getMuteButtonImage(), for: .normal)
-        
+        topInfoBar?.menuButton.setImage(getMuteButtonImage(), for: .normal)
+        topInfoBar?.menuButton.tintColor = PokerTheme.ink
+
         // Handle BGM based on mute state
         if SoundManager.isMuted {
             pauseBGM()

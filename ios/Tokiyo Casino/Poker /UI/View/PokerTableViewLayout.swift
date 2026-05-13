@@ -2,169 +2,226 @@
 //  PokerTableViewLayout.swift
 //  Poker
 //
-//  Created by Mayank Jangid on 8/17/25.
+//  Felt shape, pot pill placement, community row layout, seat positioning.
 //
 
 import UIKit
 
 extension PokerTableView {
-    
-    // MARK: - Layout
+
+    // MARK: - Setup
+
     func setupView() {
-        backgroundColor = UIColor(red: 0.08, green: 0.25, blue: 0.08, alpha: 1.0)
-        
-        // Table oval background
-        setupTableOval()
-        
-        // Phase label (moved higher to avoid overlap)
-        phaseLabel.text = "Waiting..."
-        phaseLabel.textColor = .white
-        phaseLabel.font = .systemFont(ofSize: 18, weight: .bold)
-        phaseLabel.textAlignment = .center
-        phaseLabel.backgroundColor = UIColor.black.withAlphaComponent(0.6)
-        phaseLabel.layer.cornerRadius = 8
-        phaseLabel.layer.masksToBounds = true
-        phaseLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(phaseLabel)
-        
-        // Pot label (positioned better)
-        potLabel.text = "Pot: $0"
-        potLabel.textColor = .white
-        potLabel.font = .boldSystemFont(ofSize: 22)
-        potLabel.textAlignment = .center
-        potLabel.backgroundColor = UIColor.black.withAlphaComponent(0.7)
-        potLabel.layer.cornerRadius = 12
-        potLabel.layer.masksToBounds = true
-        potLabel.layer.borderWidth = 2
-        potLabel.layer.borderColor = UIColor.yellow.cgColor
-        potLabel.translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = .clear
+
+        // Felt container
+        feltView.backgroundColor = PokerTheme.felt
+        feltView.layer.cornerRadius = 160
+        feltView.layer.masksToBounds = false
+        feltView.layer.shadowColor = UIColor.black.cgColor
+        feltView.layer.shadowOpacity = 0.18
+        feltView.layer.shadowOffset = CGSize(width: 0, height: 10)
+        feltView.layer.shadowRadius = 22
+        addSubview(feltView)
+
+        // Inner ring border for depth
+        feltInnerBorder.layer.borderColor = PokerTheme.borderStrong.cgColor
+        feltInnerBorder.layer.borderWidth = 1
+        feltInnerBorder.layer.cornerRadius = 150
+        feltInnerBorder.isUserInteractionEnabled = false
+        feltView.addSubview(feltInnerBorder)
+
+        // Hidden compatibility labels
+        potLabel.isHidden = true
         addSubview(potLabel)
-        
-        // Setup community cards area (better spacing)
-        setupCommunityCards()
-        
-        NSLayoutConstraint.activate([
-            // Phase label
-            phaseLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            phaseLabel.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor, constant: 20),
-            phaseLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
-            phaseLabel.heightAnchor.constraint(equalToConstant: 32),
-            
-            // Pot label
-            potLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            potLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -40),
-            potLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 140),
-            potLabel.heightAnchor.constraint(equalToConstant: 44)
-        ])
-    }
-    
-    func setupTableOval() {
-        // Create a more realistic poker table background
-        let ovalLayer = CAShapeLayer()
-        let tableRect = CGRect(x: 30, y: 80, width: bounds.width - 60, height: bounds.height - 240)
-        let path = UIBezierPath(ovalIn: tableRect)
-        ovalLayer.path = path.cgPath
-        ovalLayer.fillColor = UIColor(red: 0.12, green: 0.35, blue: 0.12, alpha: 1.0).cgColor
-        ovalLayer.strokeColor = UIColor(red: 0.4, green: 0.2, blue: 0.1, alpha: 1.0).cgColor
-        ovalLayer.lineWidth = 12
-        ovalLayer.shadowColor = UIColor.black.cgColor
-        ovalLayer.shadowOffset = CGSize(width: 0, height: 6)
-        ovalLayer.shadowOpacity = 0.6
-        ovalLayer.shadowRadius = 15
-        layer.insertSublayer(ovalLayer, at: 0)
-    }
-    
-    func setupCommunityCards() {
-        // Clear existing community card views
-        communityCardViews.forEach { $0.removeFromSuperview() }
-        communityCardViews.removeAll()
-        
-        let cardWidth: CGFloat = 60
-        let cardHeight: CGFloat = 84
-        let cardSpacing: CGFloat = 8
-        
-        for i in 0..<5 {
-            let cardView = CardView()
-            cardView.translatesAutoresizingMaskIntoConstraints = false
-            cardView.isHidden = true
-            addSubview(cardView)
-            communityCardViews.append(cardView)
-            
-            let xOffset = CGFloat((i - 2)) * (cardWidth + cardSpacing)
-            
-            NSLayoutConstraint.activate([
-                cardView.widthAnchor.constraint(equalToConstant: cardWidth),
-                cardView.heightAnchor.constraint(equalToConstant: cardHeight),
-                cardView.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 20),
-                cardView.centerXAnchor.constraint(equalTo: centerXAnchor, constant: xOffset)
-            ])
+        phaseLabel.isHidden = true
+        addSubview(phaseLabel)
+
+        // Pot pill (above center)
+        addSubview(potPill)
+
+        // Community card row — positioned manually via frame in layoutFelt.
+        for _ in 0..<5 {
+            let cv = CardView()
+            cv.style = .face
+            cv.isHidden = true
+            cv.translatesAutoresizingMaskIntoConstraints = true
+            communityCardViews.append(cv)
+            addSubview(cv)
         }
     }
-    
+
+    // MARK: - Layout
+
+    func layoutFelt() {
+        // Constrain the felt to the design's 360×480 aspect (≈1.33 tall/wide)
+        // so the seat positions translate from the design without distortion.
+        let designRatio: CGFloat = 480.0 / 360.0
+        let edgePad: CGFloat = 16
+        let maxW = max(0, bounds.width  - edgePad * 2)
+        let maxH = max(0, bounds.height - edgePad * 2)
+
+        var feltW = maxW
+        var feltH = feltW * designRatio
+        if feltH > maxH {
+            feltH = maxH
+            feltW = feltH / designRatio
+        }
+        let feltFrame = CGRect(
+            x: bounds.midX - feltW / 2,
+            y: bounds.midY - feltH / 2,
+            width: feltW,
+            height: feltH
+        )
+        feltView.frame = feltFrame
+        let corner = min(feltW, feltH) * 0.45
+        feltView.layer.cornerRadius = corner
+        feltView.layer.shadowPath = UIBezierPath(roundedRect: feltView.bounds,
+                                                 cornerRadius: corner).cgPath
+
+        // Inner border
+        let inner = feltView.bounds.insetBy(dx: 14, dy: 14)
+        feltInnerBorder.frame = inner
+        feltInnerBorder.layer.cornerRadius = max(0, corner - 14)
+
+        // Pot pill — felt-relative (matches y=138/480 in the design)
+        let potY = feltFrame.minY + feltFrame.height * (138.0 / 480.0)
+        let potSize = potPill.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+        potPill.bounds.size = CGSize(width: max(120, potSize.width), height: 30)
+        potPill.center = CGPoint(x: feltFrame.midX, y: potY)
+
+        // Community cards — felt-relative (matches y=240/480 in the design)
+        let commY = feltFrame.minY + feltFrame.height * (240.0 / 480.0)
+        let cardW: CGFloat = 36
+        let cardH: CGFloat = 50
+        let gap: CGFloat = 6
+        let totalW = cardW * 5 + gap * 4
+        let startX = feltFrame.midX - totalW / 2
+        for (i, cv) in communityCardViews.enumerated() {
+            cv.frame = CGRect(
+                x: startX + CGFloat(i) * (cardW + gap),
+                y: commY - cardH / 2,
+                width: cardW,
+                height: cardH
+            )
+        }
+    }
+
     func setupPlayers(_ players: [Player], dealerIndex: Int) {
         self.players = players
-        
+
         // Remove existing player views
         playerViews.forEach { $0.removeFromSuperview() }
         playerViews.removeAll()
-        
+
+        // Remove bet pills
+        betPills.values.forEach { $0.removeFromSuperview() }
+        betPills.removeAll()
+
         // Create new player views with proper sizing
         for (index, player) in players.enumerated() {
             let playerView = PlayerView()
-            playerView.translatesAutoresizingMaskIntoConstraints = false
+            let size = player.isHuman ? humanPlayerSize : aiPlayerSize
+            playerView.frame = CGRect(origin: .zero, size: size)
             addSubview(playerView)
             playerViews.append(playerView)
-            
-            // Size based on player type
-            let size = player.isHuman ? humanPlayerSize : aiPlayerSize
-            
-            NSLayoutConstraint.activate([
-                playerView.widthAnchor.constraint(equalToConstant: size.width),
-                playerView.heightAnchor.constraint(equalToConstant: size.height)
-            ])
-            
             playerView.configureWith(player: player, isDealer: index == dealerIndex)
         }
-        
-        // Position players after layout
+
         DispatchQueue.main.async {
-            self.updatePlayerPositions()
-        }
-    }
-    
-    func updatePlayerPositions() {
-        for (index, playerView) in playerViews.enumerated() {
-            guard index < playerPositions.count else { continue }
-            
-            let position = playerPositions[index]
-            let xPosition = bounds.width * position.x
-            var yPosition = bounds.height * position.y
-            
-            // Apply extra shift only to the human player (index 0)
-            if index == 0 {
-                yPosition += humanPlayerVerticalShift
-            }
-            
-            playerView.center = CGPoint(x: xPosition, y: yPosition)
-        }
-    }
-    
-    /// Adjusts the human player view position when betting controls appear/disappear.
-    /// - Parameter shiftUp: If true, shifts player up to make room for betting controls.
-    func adjustHumanPlayerPosition(shiftUp: Bool) {
-        guard !playerViews.isEmpty else { return }
-        
-        // Choose how much to move (tune this value if needed)
-        let shiftAmount: CGFloat = -180   // negative = move up
-        
-        humanPlayerVerticalShift = shiftUp ? shiftAmount : 0
-        
-        // Animate the movement smoothly
-        UIView.animate(withDuration: 0.25) {
-            self.updatePlayerPositions()
+            self.setNeedsLayout()
             self.layoutIfNeeded()
         }
-        
-        print("PokerTableView: \(shiftUp ? "Shifted human player up" : "Reset human player position")")
+    }
+
+    func updatePlayerPositions() {
+        let felt = feltView.frame
+        guard felt.width > 0 else { return }
+
+        for (index, playerView) in playerViews.enumerated() {
+            guard index < playerPositions.count else { continue }
+
+            let pos = playerPositions[index]
+            let isHuman = index == 0
+            let size = isHuman ? humanPlayerSize : aiPlayerSize
+            playerView.bounds = CGRect(origin: .zero, size: size)
+
+            let cx = felt.minX + felt.width * pos.x
+            var cy = felt.minY + felt.height * pos.y
+
+            if isHuman {
+                // Hero overhangs felt's bottom edge by 10pt (mirrors the
+                // design's `bottom: -10` on the HeroZone wrapper). Cards fan
+                // upward into the felt, the name strip sits at felt's bottom.
+                cy = felt.maxY + 10 - size.height / 2 + humanPlayerVerticalShift
+            }
+
+            playerView.center = CGPoint(x: cx, y: cy)
+            playerView.setNeedsLayout()
+        }
+    }
+
+    func updateBetPillPositions() {
+        guard !players.isEmpty else { return }
+        let felt = feltView.frame
+        guard felt.width > 0 else { return }
+
+        for (index, player) in players.enumerated() {
+            guard index < betPillPositions.count else { continue }
+            guard let pill = betPills[player.id] else { continue }
+            let pos = betPillPositions[index]
+            let size = pill.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
+            pill.bounds.size = CGSize(width: max(56, size.width), height: 24)
+            pill.center = CGPoint(
+                x: felt.minX + felt.width * pos.x,
+                y: felt.minY + felt.height * pos.y
+            )
+        }
+    }
+
+    /// Shows or hides a bet pill near the player's seat.
+    func updateBetPill(for player: Player, atIndex index: Int) {
+        let hasBet = !player.isFolded && player.currentBet > 0
+        if hasBet {
+            let color: UIColor
+            if player.isAllIn { color = PokerTheme.amber }
+            else { color = chipColor(forPlayerIndex: index) }
+            if let existing = betPills[player.id] {
+                existing.setAmount(player.currentBet)
+            } else {
+                let pill = BetPillView(amount: player.currentBet, chipColor: color)
+                betPills[player.id] = pill
+                addSubview(pill)
+                setNeedsLayout()
+            }
+        } else if let existing = betPills[player.id] {
+            UIView.animate(withDuration: 0.2, animations: {
+                existing.alpha = 0
+            }) { _ in
+                existing.removeFromSuperview()
+                self.betPills.removeValue(forKey: player.id)
+            }
+        }
+    }
+
+    private func chipColor(forPlayerIndex idx: Int) -> UIColor {
+        let palette: [UIColor] = [
+            PokerTheme.Chip.green,
+            PokerTheme.Chip.red,
+            PokerTheme.Chip.purple,
+            PokerTheme.Chip.gold,
+            PokerTheme.Chip.blue,
+            PokerTheme.Chip.purple,
+        ]
+        return palette[idx % palette.count]
+    }
+
+    /// Kept for compatibility with GameViewControllerActions, but a no-op:
+    /// the table re-flows naturally when the betting controls expand (the
+    /// stack view collapses/expands and the felt resizes), so no manual
+    /// vertical shift is needed.
+    func adjustHumanPlayerPosition(shiftUp: Bool) {
+        _ = shiftUp
+        humanPlayerVerticalShift = 0
     }
 }

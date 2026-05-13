@@ -16,6 +16,7 @@ class GameViewController: UIViewController {
     let menuButton = UIButton(type: .system)
     let newHandButton = UIButton(type: .system)
     let muteButton = UIButton(type: .system)
+    var topInfoBar: TopInfoBar?
     
     // Sound Manager for BGM
     var bgmManager = SoundManager()
@@ -64,7 +65,10 @@ class GameViewController: UIViewController {
     
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        tableView.setupPlayers(gameManager.players, dealerIndex: gameManager.dealerIndex)
+        // Make sure seats are present after the first layout pass — once.
+        if let gm = gameManager, tableView.playerViews.isEmpty {
+            tableView.setupPlayers(gm.players, dealerIndex: gm.dealerIndex)
+        }
     }
     
     deinit {

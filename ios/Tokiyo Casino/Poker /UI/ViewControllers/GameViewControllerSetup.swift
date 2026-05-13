@@ -2,114 +2,137 @@
 //  GameViewControllerSetup.swift
 //  Poker
 //
-//  Created by Mayank Jangid on 8/17/25.
+//  Restyled to match the Claude Design poker handoff. Uses a soft cream
+//  page background, a top info pill, the redesigned felt and action panel.
 //
 
 import UIKit
 
 extension GameViewController {
-    
+
     // MARK: - Setup
     func setupUI() {
-        view.backgroundColor = UIColor(red: 0.05, green: 0.15, blue: 0.05, alpha: 1.0)
-        
+        view.backgroundColor = PokerTheme.pageBg
+
+        // Top info bar (back chip + center pill + 3-dot chip)
+        let topBar = TopInfoBar()
+        topBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(topBar)
+        topInfoBar = topBar
+
+        // Wire the existing menu/mute buttons into the top bar's controls.
+        // The TopInfoBar's `backButton` and `menuButton` are local — we replace
+        // their actions/icons here so the existing menu/audio behavior is kept.
+        topBar.backButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
+        topBar.menuButton.setImage(getMuteButtonImage(), for: .normal)
+        topBar.menuButton.tintColor = PokerTheme.ink
+        topBar.menuButton.addTarget(self, action: #selector(muteTapped), for: .touchUpInside)
+
+        // The legacy `menuButton` / `muteButton` ivars are kept off-screen so
+        // any cross-references (e.g. audio toggle updates) continue to work.
+        menuButton.isHidden = true
+        view.addSubview(menuButton)
+        muteButton.isHidden = true
+        view.addSubview(muteButton)
+
+        // Update menu (mute) icon when the audio code resets it later.
+        muteButton.addTarget(self, action: #selector(syncMuteIcon), for: .valueChanged)
+
         // Table view
         tableView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(tableView)
-        
-        // Betting controls
+
+        // Betting controls panel
         bettingControls.translatesAutoresizingMaskIntoConstraints = false
         bettingControls.isHidden = true
         bettingControls.onAction = { [weak self] action in
             self?.handlePlayerAction(action)
         }
         view.addSubview(bettingControls)
-        
-        // Menu button
-        menuButton.setTitle("Menu", for: .normal)
-        menuButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
-        menuButton.setTitleColor(.white, for: .normal)
-        menuButton.backgroundColor = UIColor.black.withAlphaComponent(0.6)
-        menuButton.layer.cornerRadius = 10
-        menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
-        menuButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(menuButton)
-        
-        // Mute button
-        muteButton.setImage(getMuteButtonImage(), for: .normal)
-        muteButton.tintColor = .white
-        muteButton.backgroundColor = UIColor.black.withAlphaComponent(0.6)
-        muteButton.layer.cornerRadius = 20
-        muteButton.addTarget(self, action: #selector(muteTapped), for: .touchUpInside)
-        muteButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(muteButton)
-        
-        // New hand button
+
+        // New-hand button — restyled to match the design's forest accent.
         newHandButton.setTitle("New Hand", for: .normal)
-        newHandButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
+        newHandButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .heavy)
         newHandButton.setTitleColor(.white, for: .normal)
-        newHandButton.backgroundColor = UIColor.green.withAlphaComponent(0.8)
-        newHandButton.layer.cornerRadius = 12
-        newHandButton.layer.borderWidth = 2
-        newHandButton.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
+        newHandButton.backgroundColor = PokerTheme.forest
+        newHandButton.layer.cornerRadius = 16
+        newHandButton.layer.borderWidth = 0
+        PokerTheme.applyShadowMd(newHandButton.layer)
         newHandButton.addTarget(self, action: #selector(newHandTapped), for: .touchUpInside)
         newHandButton.translatesAutoresizingMaskIntoConstraints = false
         newHandButton.isHidden = true
         view.addSubview(newHandButton)
-        
+
+        // Initial info text
+        topBar.setInfo(
+            blinds: "\(gameManager?.smallBlind ?? 10)/\(gameManager?.bigBlind ?? 20)",
+            hand: nil,
+            phase: nil
+        )
+
         NSLayoutConstraint.activate([
-            // Table view
-            tableView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            topBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
+            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topBar.heightAnchor.constraint(equalToConstant: 48),
+
+            tableView.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tableView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            
-            // Betting controls - more padding and height
-            bettingControls.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            bettingControls.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            bettingControls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: 30),
-            bettingControls.heightAnchor.constraint(equalToConstant: 200),
-            
-            // Menu button
-            menuButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-            menuButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            menuButton.widthAnchor.constraint(equalToConstant: 90),
-            menuButton.heightAnchor.constraint(equalToConstant: 40),
-            
-            // Mute button
-            muteButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
-            muteButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
-            muteButton.widthAnchor.constraint(equalToConstant: 40),
-            muteButton.heightAnchor.constraint(equalToConstant: 40),
-            
-            // New hand button
+            tableView.bottomAnchor.constraint(equalTo: bettingControls.topAnchor, constant: -8),
+
+            // Betting controls — intrinsic height (~78 collapsed, ~220 with
+            // raise panel expanded) so the felt naturally expands when the
+            // slider isn't shown.
+            bettingControls.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            bettingControls.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            bettingControls.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+
+            // Hidden legacy buttons positioned off-screen but in hierarchy
+            menuButton.widthAnchor.constraint(equalToConstant: 1),
+            menuButton.heightAnchor.constraint(equalToConstant: 1),
+            menuButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: -10),
+            menuButton.topAnchor.constraint(equalTo: view.topAnchor, constant: -10),
+            muteButton.widthAnchor.constraint(equalToConstant: 1),
+            muteButton.heightAnchor.constraint(equalToConstant: 1),
+            muteButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: -10),
+            muteButton.topAnchor.constraint(equalTo: view.topAnchor, constant: -10),
+
             newHandButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            newHandButton.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 100),
-            newHandButton.widthAnchor.constraint(equalToConstant: 140),
-            newHandButton.heightAnchor.constraint(equalToConstant: 50)
+            newHandButton.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 60),
+            newHandButton.widthAnchor.constraint(equalToConstant: 160),
+            newHandButton.heightAnchor.constraint(equalToConstant: 52)
         ])
     }
-    
+
+    @objc func syncMuteIcon() {
+        topInfoBar?.menuButton.setImage(getMuteButtonImage(), for: .normal)
+    }
+
     func setupGame() {
         gameManager = GameManager(playerCount: playerCount, startingChips: startingChips)
         gameManager.delegate = self
-        
+
+        topInfoBar?.setInfo(
+            blinds: "\(gameManager.smallBlind)/\(gameManager.bigBlind)",
+            hand: nil,
+            phase: nil
+        )
+
         // Start first hand after a delay
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
             self.startNewHand()
         }
     }
-    
+
     func setupNotifications() {
-        // Listen for delayed winner alerts
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(showDelayedWinnerAlert(_:)),
             name: NSNotification.Name("ShowWinnerAlert"),
             object: nil
         )
-        
-        // Listen for sound setting changes
+
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(soundSettingChanged),

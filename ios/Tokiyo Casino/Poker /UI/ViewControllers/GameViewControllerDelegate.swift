@@ -11,13 +11,22 @@ import UIKit
 extension GameViewController: GameManagerDelegate {
     func gameDidStart() {
         addHapticFeedback(.light)
-        tableView.updatePlayers(gameManager.players, dealerIndex: gameManager.dealerIndex)
+        if tableView.playerViews.isEmpty {
+            tableView.setupPlayers(gameManager.players, dealerIndex: gameManager.dealerIndex)
+        } else {
+            tableView.updatePlayers(gameManager.players, dealerIndex: gameManager.dealerIndex)
+        }
     }
     
     func gamePhaseDidChange(_ phase: GamePhase) {
         addHapticFeedback(.light)
         tableView.updatePhase(phase)
-        
+        topInfoBar?.setInfo(
+            blinds: "\(gameManager.smallBlind)/\(gameManager.bigBlind)",
+            hand: nil,
+            phase: phase.description
+        )
+
         // Special effects for showdown
         if phase == .showdown {
             addHapticFeedback(.heavy)
@@ -76,6 +85,7 @@ extension GameViewController: GameManagerDelegate {
     func potDidUpdate(_ amount: Int) {
         addHapticFeedback(.light)
         tableView.updatePot(amount)
+        bettingControls.setPot(amount)
     }
     
     func currentPlayerChanged(_ player: Player) {

@@ -2,291 +2,282 @@
 //  BettingControllerView.swift
 //  Tokiyo Casino
 //
-//  Created by Hari's Mac on 25.11.2025.
+//  Redesigned to match the Claude Design action panel: a clean three-button
+//  row (Fold • Check/Call • Raise) with an optional raise slider that
+//  expands above it. Colors and shapes mirror the LIGHT/MIDNIGHT palette.
 //
 
 import Foundation
 import UIKit
 
-// MARK: - Betting Controls View
-class BettingControlsView: UIView {
-    
-    private let foldButton = UIButton(type: .system)
-    private let checkCallButton = UIButton(type: .system)
-    private let raiseButton = UIButton(type: .system)
-    private let allInButton = UIButton(type: .system)
-    private let raiseSlider = UISlider()
+final class BettingControlsView: UIView {
+
+    // MARK: - Buttons (3-button row from design)
+    private let foldButton  = ActionButton(kind: .fold)
+    private let checkCallButton = ActionButton(kind: .check)
+    private let raiseButton = ActionButton(kind: .raise)
+
+    // Raise slider panel (expandable)
+    private let raisePanel = UIView()
+    private let raiseHeader = UILabel()
     private let raiseAmountLabel = UILabel()
-    private let buttonStackView = UIStackView()
-    
-    // Enhanced UI elements
-    private let containerView = UIView()
-    private let chipIndicatorLabel = UILabel()
-    private let potentialWinLabel = UILabel()
-    private let actionTitleLabel = UILabel()
-    
-    // Sound Managers for different actions
+    private let raiseSubLabel = UILabel()
+    private let minusButton = UIButton(type: .system)
+    private let plusButton = UIButton(type: .system)
+    private let track = UIView()
+    private let fill = UIView()
+    private let thumb = UIView()
+    private var trackPanGesture: UIPanGestureRecognizer?
+    private var quickStack = UIStackView()
+
+    // Sound managers (unchanged behavior)
     private var raiseSoundManager = SoundManager()
     private var allInSoundManager = SoundManager()
     private var checkSoundManager = SoundManager()
-    
+
+    // Public
     var onAction: ((PlayerAction) -> Void)?
-    
+
+    // State
     private var minRaise: Int = 0
     private var maxRaise: Int = 0
     private var callAmount: Int = 0
-    
+    private var raiseValue: Int = 0
+    private var pot: Int = 0
+    private var canRaise: Bool = false
+    private var raisePanelExpanded: Bool = false
+
+    // MARK: - Init
+
     override init(frame: CGRect) {
         super.init(frame: frame)
-        setupView()
+        backgroundColor = .clear
         setupSounds()
+        setupView()
     }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
-    // MARK: - Sound Setup
+    required init?(coder: NSCoder) { fatalError() }
+
     private func setupSounds() {
         raiseSoundManager.setupPlayer(soundName: "raise_sound", soundType: .mp3)
         allInSoundManager.setupPlayer(soundName: "AllIn_sound", soundType: .mp3)
         checkSoundManager.setupPlayer(soundName: "spin_button_tap", soundType: .mp3)
     }
-    
+
     private func setupView() {
-        // Container with gradient background
-        containerView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(containerView)
-        
-        // Add gradient to container
-        let gradientLayer = CAGradientLayer()
-        gradientLayer.colors = [
-            UIColor(red: 0.05, green: 0.15, blue: 0.05, alpha: 0.95).cgColor,
-            UIColor(red: 0.02, green: 0.08, blue: 0.02, alpha: 0.98).cgColor
-        ]
-        gradientLayer.locations = [0.0, 1.0]
-        gradientLayer.frame = bounds
-        containerView.layer.insertSublayer(gradientLayer, at: 0)
-        containerView.layer.cornerRadius = 20
-        containerView.layer.borderWidth = 2
-        containerView.layer.borderColor = UIColor(red: 0.3, green: 0.7, blue: 0.3, alpha: 0.4).cgColor
-        containerView.layer.shadowColor = UIColor.black.cgColor
-        containerView.layer.shadowOffset = CGSize(width: 0, height: -4)
-        containerView.layer.shadowOpacity = 0.5
-        containerView.layer.shadowRadius = 12
-        
-        // Action title label
-        actionTitleLabel.text = ""
-        actionTitleLabel.font = UIFont(name: "Copperplate", size: 12) ?? .systemFont(ofSize: 12, weight: .bold)
-        actionTitleLabel.textColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        actionTitleLabel.textAlignment = .center
-        actionTitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(actionTitleLabel)
-        
-        // Setup stack view for buttons
-        buttonStackView.axis = .horizontal
-        buttonStackView.distribution = .fillEqually
-        buttonStackView.spacing = 10
-        buttonStackView.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(buttonStackView)
-        
-        // Configure buttons with enhanced styling
-        setupButton(foldButton, title: "FOLD", gradient: [
-            UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 1.0).cgColor,
-            UIColor(red: 0.6, green: 0.1, blue: 0.1, alpha: 1.0).cgColor
-        ], action: #selector(foldTapped))
-        
-        setupButton(checkCallButton, title: "CHECK", gradient: [
-            UIColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0).cgColor,
-            UIColor(red: 0.15, green: 0.5, blue: 0.2, alpha: 1.0).cgColor
-        ], action: #selector(checkCallTapped))
-        
-        setupButton(raiseButton, title: "RAISE", gradient: [
-            UIColor(red: 0.9, green: 0.6, blue: 0.2, alpha: 1.0).cgColor,
-            UIColor(red: 0.7, green: 0.4, blue: 0.1, alpha: 1.0).cgColor
-        ], action: #selector(raiseTapped))
-        
-        setupButton(allInButton, title: "ALL IN", gradient: [
-            UIColor(red: 0.6, green: 0.2, blue: 0.8, alpha: 1.0).cgColor,
-            UIColor(red: 0.4, green: 0.1, blue: 0.6, alpha: 1.0).cgColor
-        ], action: #selector(allInTapped))
-        
-        // Raise amount label with enhanced styling
-        raiseAmountLabel.textColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        raiseAmountLabel.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
+        // Raise panel
+        raisePanel.backgroundColor = PokerTheme.surface
+        raisePanel.layer.cornerRadius = 16
+        raisePanel.layer.borderWidth = 1
+        raisePanel.layer.borderColor = PokerTheme.border.cgColor
+        PokerTheme.applyShadowMd(raisePanel.layer)
+        raisePanel.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.isHidden = true
+        addSubview(raisePanel)
+
+        raiseHeader.text = "RAISE TO"
+        raiseHeader.font = .systemFont(ofSize: 9, weight: .semibold)
+        raiseHeader.textColor = PokerTheme.muted
+        raiseHeader.textAlignment = .center
+        raiseHeader.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.addSubview(raiseHeader)
+
+        raiseAmountLabel.text = "$0"
+        raiseAmountLabel.font = .systemFont(ofSize: 24, weight: .heavy)
+        raiseAmountLabel.textColor = PokerTheme.ink
         raiseAmountLabel.textAlignment = .center
-        raiseAmountLabel.backgroundColor = UIColor.black.withAlphaComponent(0.7)
-        raiseAmountLabel.layer.cornerRadius = 12
-        raiseAmountLabel.layer.masksToBounds = true
-        raiseAmountLabel.layer.borderWidth = 1
-        raiseAmountLabel.layer.borderColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 0.5).cgColor
-        raiseAmountLabel.isHidden = true
         raiseAmountLabel.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(raiseAmountLabel)
-        
-        // Enhanced raise slider
-        raiseSlider.minimumTrackTintColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        raiseSlider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.3)
-        raiseSlider.thumbTintColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        raiseSlider.layer.shadowColor = UIColor.black.cgColor
-        raiseSlider.layer.shadowOffset = CGSize(width: 0, height: 2)
-        raiseSlider.layer.shadowOpacity = 0.4
-        raiseSlider.layer.shadowRadius = 3
-        raiseSlider.isHidden = true
-        raiseSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
-        raiseSlider.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(raiseSlider)
-        
-        // Chip indicator (shows available chips)
-        chipIndicatorLabel.font = UIFont(name: "Copperplate", size: 11) ?? .systemFont(ofSize: 11, weight: .medium)
-        chipIndicatorLabel.textColor = .white.withAlphaComponent(0.8)
-        chipIndicatorLabel.textAlignment = .center
-        chipIndicatorLabel.isHidden = true
-        chipIndicatorLabel.translatesAutoresizingMaskIntoConstraints = false
-        containerView.addSubview(chipIndicatorLabel)
-        
+        raisePanel.addSubview(raiseAmountLabel)
+
+        raiseSubLabel.text = ""
+        raiseSubLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        raiseSubLabel.textColor = PokerTheme.muted
+        raiseSubLabel.textAlignment = .center
+        raiseSubLabel.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.addSubview(raiseSubLabel)
+
+        styleStepperButton(minusButton, glyph: "−")
+        minusButton.addTarget(self, action: #selector(stepDown), for: .touchUpInside)
+        raisePanel.addSubview(minusButton)
+
+        styleStepperButton(plusButton, glyph: "+")
+        plusButton.addTarget(self, action: #selector(stepUp), for: .touchUpInside)
+        raisePanel.addSubview(plusButton)
+
+        // Track / fill / thumb
+        track.backgroundColor = PokerTheme.surfaceAlt
+        track.layer.cornerRadius = 3
+        track.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.addSubview(track)
+
+        fill.backgroundColor = PokerTheme.forest
+        fill.layer.cornerRadius = 3
+        fill.translatesAutoresizingMaskIntoConstraints = false
+        track.addSubview(fill)
+
+        thumb.backgroundColor = .white
+        thumb.layer.borderWidth = 2
+        thumb.layer.borderColor = PokerTheme.forest.cgColor
+        thumb.layer.cornerRadius = 10
+        thumb.layer.shadowColor = UIColor.black.cgColor
+        thumb.layer.shadowOpacity = 0.2
+        thumb.layer.shadowOffset = CGSize(width: 0, height: 2)
+        thumb.layer.shadowRadius = 4
+        thumb.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.addSubview(thumb)
+
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(trackPanned(_:)))
+        track.addGestureRecognizer(pan)
+        let tap = UITapGestureRecognizer(target: self, action: #selector(trackTapped(_:)))
+        track.addGestureRecognizer(tap)
+        trackPanGesture = pan
+
+        // Quick bets row
+        quickStack.axis = .horizontal
+        quickStack.distribution = .fillEqually
+        quickStack.spacing = 6
+        quickStack.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.addSubview(quickStack)
+
+        // Outer vertical stack: raisePanel above action row. When raisePanel
+        // is hidden, the stack collapses, so bettingControls shrinks to just
+        // the action-row height. The table view above gets the freed space.
+        let actionRow = UIStackView(arrangedSubviews: [foldButton, checkCallButton, raiseButton])
+        actionRow.axis = .horizontal
+        actionRow.spacing = 8
+        actionRow.distribution = .fillEqually
+        actionRow.translatesAutoresizingMaskIntoConstraints = false
+        actionRow.heightAnchor.constraint(equalToConstant: 60).isActive = true
+
+        // Remove raisePanel from `self` and re-add via the stack
+        raisePanel.removeFromSuperview()
+
+        let outerStack = UIStackView(arrangedSubviews: [raisePanel, actionRow])
+        outerStack.axis = .vertical
+        outerStack.spacing = 10
+        outerStack.alignment = .fill
+        outerStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(outerStack)
+
+        foldButton.onTap = { [weak self] in self?.foldTapped() }
+        checkCallButton.onTap = { [weak self] in self?.checkCallTapped() }
+        raiseButton.onTap = { [weak self] in self?.raiseTapped() }
+
         NSLayoutConstraint.activate([
-            // Container fills the view
-            containerView.topAnchor.constraint(equalTo: topAnchor),
-            containerView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            containerView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            containerView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            
-            // Action title
-            actionTitleLabel.topAnchor.constraint(equalTo: containerView.topAnchor, constant: 12),
-            actionTitleLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-            
-            // Button stack view
-            buttonStackView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            buttonStackView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -16),
-            buttonStackView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor, constant: -16),
-            buttonStackView.heightAnchor.constraint(equalToConstant: 60),
-            
-            // Chip indicator
-            chipIndicatorLabel.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 16),
-            chipIndicatorLabel.bottomAnchor.constraint(equalTo: buttonStackView.topAnchor, constant: -8),
-            
-            // Raise amount label
-            raiseAmountLabel.centerXAnchor.constraint(equalTo: containerView.centerXAnchor),
-            raiseAmountLabel.bottomAnchor.constraint(equalTo: buttonStackView.topAnchor, constant: -12),
-            raiseAmountLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 160),
-            raiseAmountLabel.heightAnchor.constraint(equalToConstant: 38),
-            
-            // Slider
-            raiseSlider.leadingAnchor.constraint(equalTo: containerView.leadingAnchor, constant: 20),
-            raiseSlider.trailingAnchor.constraint(equalTo: containerView.trailingAnchor, constant: -20),
-            raiseSlider.bottomAnchor.constraint(equalTo: raiseAmountLabel.topAnchor, constant: -12),
-            raiseSlider.heightAnchor.constraint(equalToConstant: 30)
+            outerStack.topAnchor.constraint(equalTo: topAnchor),
+            outerStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
+            outerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            outerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
         ])
-        
-        // Update gradient frame on layout
-        layoutIfNeeded()
+
+        // Inside-panel layout — defaultHigh priority so a collapsed panel
+        // doesn't fight the actionRow.bottom anchor.
+        let inside: [NSLayoutConstraint] = [
+            raiseHeader.topAnchor.constraint(equalTo: raisePanel.topAnchor, constant: 10),
+            raiseHeader.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
+
+            raiseAmountLabel.topAnchor.constraint(equalTo: raiseHeader.bottomAnchor, constant: 2),
+            raiseAmountLabel.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
+
+            raiseSubLabel.topAnchor.constraint(equalTo: raiseAmountLabel.bottomAnchor, constant: 0),
+            raiseSubLabel.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
+
+            minusButton.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
+            minusButton.centerYAnchor.constraint(equalTo: raiseAmountLabel.centerYAnchor),
+            minusButton.widthAnchor.constraint(equalToConstant: 36),
+            minusButton.heightAnchor.constraint(equalToConstant: 36),
+
+            plusButton.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
+            plusButton.centerYAnchor.constraint(equalTo: raiseAmountLabel.centerYAnchor),
+            plusButton.widthAnchor.constraint(equalToConstant: 36),
+            plusButton.heightAnchor.constraint(equalToConstant: 36),
+
+            track.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
+            track.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
+            track.topAnchor.constraint(equalTo: raiseSubLabel.bottomAnchor, constant: 10),
+            track.heightAnchor.constraint(equalToConstant: 6),
+
+            quickStack.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
+            quickStack.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
+            quickStack.topAnchor.constraint(equalTo: track.bottomAnchor, constant: 16),
+            quickStack.heightAnchor.constraint(equalToConstant: 32),
+            quickStack.bottomAnchor.constraint(equalTo: raisePanel.bottomAnchor, constant: -12),
+
+            thumb.widthAnchor.constraint(equalToConstant: 20),
+            thumb.heightAnchor.constraint(equalToConstant: 20),
+            thumb.centerYAnchor.constraint(equalTo: track.centerYAnchor),
+        ]
+        inside.forEach { $0.priority = .defaultHigh }
+        NSLayoutConstraint.activate(inside)
     }
-    
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        // Update gradient layer frame
-        if let gradientLayer = containerView.layer.sublayers?.first as? CAGradientLayer {
-            gradientLayer.frame = containerView.bounds
-        }
-        
-        // Update button gradient frames
-        for case let button in buttonStackView.arrangedSubviews {
-            if let gradientLayer = button.layer.sublayers?.first(where: { $0 is CAGradientLayer }) as? CAGradientLayer {
-                gradientLayer.frame = button.bounds
-            }
-        }
+        positionThumb()
     }
-    
-    private func setupButton(_ button: UIButton, title: String, gradient: [CGColor], action: Selector) {
-        // Create gradient layer
-        let gradientLayer = CAGradientLayer()
-        gradientLayer.colors = gradient
-        gradientLayer.locations = [0.0, 1.0]
-        gradientLayer.startPoint = CGPoint(x: 0.5, y: 0.0)
-        gradientLayer.endPoint = CGPoint(x: 0.5, y: 1.0)
-        gradientLayer.cornerRadius = 12
-        
-        button.layer.insertSublayer(gradientLayer, at: 0)
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 13) ?? .boldSystemFont(ofSize: 13)
-        button.setTitleColor(.white, for: .normal)
-        button.layer.cornerRadius = 12
-        button.layer.borderWidth = 2
-        button.layer.borderColor = UIColor.white.withAlphaComponent(0.4).cgColor
-        button.layer.shadowColor = UIColor.black.cgColor
-        button.layer.shadowOffset = CGSize(width: 0, height: 3)
-        button.layer.shadowOpacity = 0.4
-        button.layer.shadowRadius = 4
-        button.addTarget(self, action: action, for: .touchUpInside)
-        button.addTarget(self, action: #selector(buttonTouchDown), for: .touchDown)
-        button.addTarget(self, action: #selector(buttonTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        
-        buttonStackView.addArrangedSubview(button)
+
+    private func styleStepperButton(_ button: UIButton, glyph: String) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.backgroundColor = PokerTheme.surfaceAlt
+        button.setTitle(glyph, for: .normal)
+        button.setTitleColor(PokerTheme.ink, for: .normal)
+        button.titleLabel?.font = .systemFont(ofSize: 19, weight: .bold)
+        button.layer.cornerRadius = 11
     }
-    
+
+    // MARK: - Public surface
+
+    /// Called by GameViewController when it's the human's turn.
     func updateForActions(_ actions: [PlayerAction], callAmount: Int, minRaise: Int, maxRaise: Int) {
-        // Add haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-        impactFeedback.impactOccurred()
-        
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+
         self.callAmount = callAmount
         self.minRaise = minRaise
         self.maxRaise = maxRaise
-        
-        // Update chip indicator
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        if let formatted = formatter.string(from: NSNumber(value: maxRaise)) {
-            chipIndicatorLabel.text = "💰 Available: $\(formatted)"
-            chipIndicatorLabel.isHidden = false
-        }
-        
-        // Update button states and titles
-        updateButtonState(foldButton, enabled: actions.contains { if case .fold = $0 { return true } else { return false } })
-        
+        self.raiseValue = max(minRaise, min(maxRaise, raiseValue == 0 ? minRaise : raiseValue))
+
+        let canFold = actions.contains { if case .fold = $0 { return true } else { return false } }
         let canCheck = actions.contains { if case .check = $0 { return true } else { return false } }
         let canCall = actions.contains { if case .call = $0 { return true } else { return false } }
-        
+        let canRaiseAction = actions.contains { if case .raise = $0 { return true } else { return false } }
+        let canAllIn = actions.contains { if case .allIn = $0 { return true } else { return false } }
+        self.canRaise = canRaiseAction || canAllIn
+
+        // Fold
+        foldButton.label = "Fold"
+        foldButton.sublabel = nil
+        foldButton.isEnabled = canFold
+
+        // Check / Call
         if canCheck {
-            checkCallButton.setTitle("CHECK", for: .normal)
-            updateButtonGradient(checkCallButton, colors: [
-                UIColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 1.0).cgColor,
-                UIColor(red: 0.15, green: 0.5, blue: 0.2, alpha: 1.0).cgColor
-            ])
+            checkCallButton.label = "Check"
+            checkCallButton.sublabel = nil
+            checkCallButton.isEnabled = true
         } else if canCall {
-            let formatter = NumberFormatter()
-            formatter.numberStyle = .decimal
-            formatter.groupingSeparator = ","
-            let formattedCall = formatter.string(from: NSNumber(value: callAmount)) ?? "\(callAmount)"
-            checkCallButton.setTitle("CALL $\(formattedCall)", for: .normal)
-            checkCallButton.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 11) ?? .boldSystemFont(ofSize: 11)
-            updateButtonGradient(checkCallButton, colors: [
-                UIColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1.0).cgColor,
-                UIColor(red: 0.15, green: 0.35, blue: 0.6, alpha: 1.0).cgColor
-            ])
+            checkCallButton.label = "Call"
+            checkCallButton.sublabel = "$\(ChipFormatter.string(callAmount))"
+            checkCallButton.isEnabled = true
+        } else {
+            checkCallButton.label = "Check"
+            checkCallButton.sublabel = nil
+            checkCallButton.isEnabled = false
         }
-        updateButtonState(checkCallButton, enabled: canCheck || canCall)
-        
-        updateButtonState(raiseButton, enabled: actions.contains { if case .raise = $0 { return true } else { return false } })
-        updateButtonState(allInButton, enabled: actions.contains { if case .allIn = $0 { return true } else { return false } })
-        
-        // Setup slider
-        if raiseButton.isEnabled {
-            raiseSlider.minimumValue = Float(minRaise)
-            raiseSlider.maximumValue = Float(maxRaise)
-            raiseSlider.value = Float(minRaise)
-            sliderChanged()
-        }
-        
-        // Animate appearance with spring animation
-        transform = CGAffineTransform(translationX: 0, y: 100)
+
+        // Raise
+        raiseButton.label = "Raise"
+        raiseButton.sublabel = canRaise ? "tap to set" : nil
+        raiseButton.isEnabled = canRaise
+
+        rebuildQuickBets()
+        updateRaiseLabels()
+        positionThumb()
+
+        // Slide-in animation
+        transform = CGAffineTransform(translationX: 0, y: 60)
         alpha = 0
         UIView.animate(
-            withDuration: 0.5,
+            withDuration: 0.45,
             delay: 0,
-            usingSpringWithDamping: 0.7,
+            usingSpringWithDamping: 0.78,
             initialSpringVelocity: 0.5,
             options: [.curveEaseOut]
         ) {
@@ -294,164 +285,351 @@ class BettingControlsView: UIView {
             self.alpha = 1
         }
     }
-    
-    private func updateButtonState(_ button: UIButton, enabled: Bool) {
-        button.isEnabled = enabled
-        button.alpha = enabled ? 1.0 : 0.4
-        button.layer.borderColor = enabled ?
-            UIColor.white.withAlphaComponent(0.4).cgColor :
-            UIColor.white.withAlphaComponent(0.2).cgColor
-    }
-    
-    private func updateButtonGradient(_ button: UIButton, colors: [CGColor]) {
-        if let gradientLayer = button.layer.sublayers?.first(where: { $0 is CAGradientLayer }) as? CAGradientLayer {
-            gradientLayer.colors = colors
-        }
-    }
-    
-    @objc private func buttonTouchDown(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.1) {
-            sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
-            sender.alpha = 0.8
-        }
-    }
-    
-    @objc private func buttonTouchUp(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.1) {
-            sender.transform = .identity
-            sender.alpha = sender.isEnabled ? 1.0 : 0.4
-        }
-    }
-    
-    @objc private func foldTapped() {
-        addHapticFeedback(.medium)
+
+    func setPot(_ pot: Int) { self.pot = pot; rebuildQuickBets(); updateRaiseLabels() }
+
+    // MARK: - Action handlers
+
+    private func foldTapped() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         onAction?(.fold)
         hideWithAnimation()
     }
-    
-    @objc private func checkCallTapped() {
-        addHapticFeedback(.light)
-        
-        if checkCallButton.title(for: .normal) == "CHECK" {
-            // Play check sound
+
+    private func checkCallTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if checkCallButton.label.lowercased() == "check" {
             checkSoundManager.play()
             onAction?(.check)
         } else {
-            // Play call sound (same as raise)
             raiseSoundManager.play()
             onAction?(.call)
         }
         hideWithAnimation()
     }
-    
-    @objc private func raiseTapped() {
-        addHapticFeedback(.light)
-        
-        if raiseSlider.isHidden {
-            // Show slider with animation
-            showRaiseControls()
+
+    private func raiseTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        if !raisePanelExpanded {
+            showRaisePanel()
+        } else if raiseValue >= maxRaise && maxRaise > 0 {
+            // All-in convenience: pushing slider to max
+            allInSoundManager.play()
+            onAction?(.allIn)
+            hideWithAnimation()
         } else {
-            // Confirm raise - Play raise sound
             raiseSoundManager.play()
-            
-            let amount = Int(raiseSlider.value)
-            onAction?(.raise(amount))
+            onAction?(.raise(raiseValue))
             hideWithAnimation()
         }
     }
-    
-    private func showRaiseControls() {
-        raiseSlider.isHidden = false
-        raiseAmountLabel.isHidden = false
-        chipIndicatorLabel.isHidden = true
-        
-        // Update raise button
-        raiseButton.setTitle("CONFIRM", for: .normal)
-        updateButtonGradient(raiseButton, colors: [
-            UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0).cgColor,
-            UIColor(red: 0.8, green: 0.64, blue: 0.0, alpha: 1.0).cgColor
-        ])
-        
-        // Animate slider appearance
-        raiseSlider.alpha = 0
-        raiseAmountLabel.alpha = 0
-        raiseSlider.transform = CGAffineTransform(translationX: 0, y: 20)
-        raiseAmountLabel.transform = CGAffineTransform(translationX: 0, y: 20)
-        
-        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.7, initialSpringVelocity: 0.5, options: .curveEaseOut) {
-            self.raiseSlider.alpha = 1
-            self.raiseAmountLabel.alpha = 1
-           // self..raiseSlider.transform = .identity
-            self.raiseAmountLabel.transform = .identity
+
+    @objc private func stepDown() {
+        setRaise(raiseValue - stepSize())
+    }
+    @objc private func stepUp() {
+        setRaise(raiseValue + stepSize())
+    }
+
+    private func stepSize() -> Int {
+        // Round to nearest "nice" step. Use the bigBlind-like minRaise as the step,
+        // falling back to 25 if it's odd.
+        let step = max(1, minRaise > 0 ? minRaise : 25)
+        return step
+    }
+
+    @objc private func trackPanned(_ rec: UIPanGestureRecognizer) {
+        let x = rec.location(in: track).x
+        setRaiseFromTrack(x)
+    }
+    @objc private func trackTapped(_ rec: UITapGestureRecognizer) {
+        let x = rec.location(in: track).x
+        setRaiseFromTrack(x)
+    }
+
+    private func setRaiseFromTrack(_ x: CGFloat) {
+        let w = max(1, track.bounds.width)
+        let p = max(0, min(1, x / w))
+        let raw = CGFloat(minRaise) + p * CGFloat(maxRaise - minRaise)
+        let step = CGFloat(stepSize())
+        let stepped = (raw / step).rounded() * step
+        setRaise(Int(stepped))
+    }
+
+    private func setRaise(_ value: Int) {
+        raiseValue = max(minRaise, min(maxRaise, value))
+        raiseButton.sublabel = "$\(ChipFormatter.string(raiseValue))"
+        updateRaiseLabels()
+        positionThumb()
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
+    private func updateRaiseLabels() {
+        raiseAmountLabel.text = "$\(ChipFormatter.string(raiseValue))"
+        if pot > 0 {
+            let mult = Double(raiseValue) / Double(pot)
+            raiseSubLabel.text = String(format: "%.2f× pot", mult)
+        } else {
+            raiseSubLabel.text = ""
+        }
+        if raisePanelExpanded {
+            raiseButton.sublabel = "$\(ChipFormatter.string(raiseValue))"
         }
     }
-    
-    @objc private func allInTapped() {
-        addHapticFeedback(.heavy)
-        
-        // Play All-In sound
-        allInSoundManager.play()
-        
-        // Extra confirmation haptic
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            self.addHapticFeedback(.heavy)
+
+    private func positionThumb() {
+        guard maxRaise > minRaise else {
+            thumb.center = CGPoint(x: track.frame.minX, y: track.frame.midY)
+            fill.frame = .zero
+            return
         }
-        
-        onAction?(.allIn)
-        hideWithAnimation()
+        let pct = CGFloat(raiseValue - minRaise) / CGFloat(maxRaise - minRaise)
+        let trackFrame = track.frame
+        let x = trackFrame.minX + trackFrame.width * pct
+        thumb.center = CGPoint(x: x, y: trackFrame.midY)
+        fill.frame = CGRect(x: 0, y: 0, width: track.bounds.width * pct, height: track.bounds.height)
     }
-    
-    @objc private func sliderChanged() {
-        // Round to nearest 10
-        let amount = Int(raiseSlider.value / 10) * 10
-        raiseSlider.value = Float(amount)
-        
-        // Format with commas
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        if let formatted = formatter.string(from: NSNumber(value: amount)) {
-            raiseAmountLabel.text = "$\(formatted)"
+
+    private func rebuildQuickBets() {
+        quickStack.arrangedSubviews.forEach {
+            quickStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
         }
-        
-        // Add bounce animation
-        UIView.animate(withDuration: 0.1, animations: {
-            self.raiseAmountLabel.transform = CGAffineTransform(scaleX: 1.05, y: 1.05)
-        }) { _ in
-            UIView.animate(withDuration: 0.1) {
-                self.raiseAmountLabel.transform = .identity
+        let bets: [(label: String, value: Int, isAllIn: Bool)] = [
+            ("Min", minRaise, false),
+            ("½ Pot", round25(Double(pot) * 0.5), false),
+            ("Pot", round25(Double(pot)), false),
+            ("2× Pot", round25(Double(pot) * 2), false),
+            ("All-In", maxRaise, true),
+        ]
+        for bet in bets {
+            let button = QuickBetButton()
+            button.title = bet.label
+            button.isAllIn = bet.isAllIn
+            button.onTap = { [weak self] in
+                guard let self else { return }
+                self.setRaise(min(self.maxRaise, max(self.minRaise, bet.value)))
             }
+            quickStack.addArrangedSubview(button)
         }
-        
-        // Light haptic feedback while sliding
-        let selectionFeedback = UISelectionFeedbackGenerator()
-        selectionFeedback.selectionChanged()
     }
-    
-    private func addHapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
-        let impactFeedback = UIImpactFeedbackGenerator(style: style)
-        impactFeedback.impactOccurred()
+
+    private func round25(_ v: Double) -> Int {
+        let stepped = (v / 25.0).rounded() * 25.0
+        return max(0, Int(stepped))
     }
-    
+
+    private func showRaisePanel() {
+        raisePanelExpanded = true
+        raiseButton.sublabel = "$\(ChipFormatter.string(raiseValue))"
+        raisePanel.isHidden = false
+        raisePanel.alpha = 0
+        raisePanel.transform = CGAffineTransform(translationX: 0, y: 10)
+        UIView.animate(withDuration: 0.25, delay: 0, usingSpringWithDamping: 0.85, initialSpringVelocity: 0.4) {
+            self.raisePanel.alpha = 1
+            self.raisePanel.transform = .identity
+        }
+    }
+
     private func hideWithAnimation() {
-        UIView.animate(withDuration: 0.3, animations: {
+        UIView.animate(withDuration: 0.25, animations: {
             self.alpha = 0
-            self.transform = CGAffineTransform(translationX: 0, y: 50).scaledBy(x: 0.95, y: 0.95)
+            self.transform = CGAffineTransform(translationX: 0, y: 30).scaledBy(x: 0.98, y: 0.98)
         }) { _ in
             self.isHidden = true
             self.transform = .identity
-            self.resetRaiseControls()
+            self.resetRaisePanel()
         }
     }
-    
-    private func resetRaiseControls() {
-        raiseSlider.isHidden = true
-        raiseAmountLabel.isHidden = true
-        chipIndicatorLabel.isHidden = false
-        raiseButton.setTitle("RAISE", for: .normal)
-        updateButtonGradient(raiseButton, colors: [
-            UIColor(red: 0.9, green: 0.6, blue: 0.2, alpha: 1.0).cgColor,
-            UIColor(red: 0.7, green: 0.4, blue: 0.1, alpha: 1.0).cgColor
+
+    private func resetRaisePanel() {
+        raisePanel.isHidden = true
+        raisePanelExpanded = false
+        raiseButton.sublabel = canRaise ? "tap to set" : nil
+        raiseValue = max(minRaise, min(maxRaise, raiseValue))
+    }
+}
+
+// MARK: - Action button
+
+private final class ActionButton: UIView {
+
+    enum Kind { case fold, check, raise }
+
+    var onTap: (() -> Void)?
+    var label: String = "" { didSet { titleLabel.text = label; titleLabel.text = labelDisplayString() } }
+    var sublabel: String? {
+        didSet {
+            sublabelLabel.text = sublabel
+            sublabelLabel.isHidden = (sublabel == nil)
+        }
+    }
+    var isEnabled: Bool = true { didSet { applyStyle() } }
+
+    private let titleLabel = UILabel()
+    private let sublabelLabel = UILabel()
+    private let kind: Kind
+
+    init(kind: Kind) {
+        self.kind = kind
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+
+        layer.cornerRadius = 16
+
+        titleLabel.font = .systemFont(ofSize: 16, weight: .heavy)
+        titleLabel.textAlignment = .center
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        sublabelLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        sublabelLabel.textAlignment = .center
+        sublabelLabel.translatesAutoresizingMaskIntoConstraints = false
+        sublabelLabel.isHidden = true
+        addSubview(sublabelLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -7),
+            sublabelLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
+            sublabelLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
         ])
+
+        applyStyle()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    // MARK: - Touch handling (no gesture recognizer conflicts)
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        guard isEnabled else { return }
+        UIView.animate(withDuration: 0.08) {
+            self.transform = CGAffineTransform(scaleX: 0.97, y: 0.97)
+        }
+    }
+
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesMoved(touches, with: event)
+        guard isEnabled else { return }
+        // Keep pressed style as long as the touch is inside.
+        if let touch = touches.first {
+            let p = touch.location(in: self)
+            let inside = bounds.contains(p)
+            UIView.animate(withDuration: 0.08) {
+                self.transform = inside
+                    ? CGAffineTransform(scaleX: 0.97, y: 0.97)
+                    : .identity
+            }
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        UIView.animate(withDuration: 0.10) { self.transform = .identity }
+        guard isEnabled, let touch = touches.first else { return }
+        let p = touch.location(in: self)
+        if bounds.contains(p) {
+            onTap?()
+        }
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        UIView.animate(withDuration: 0.10) { self.transform = .identity }
+    }
+
+    private func labelDisplayString() -> String {
+        switch kind {
+        case .fold:  return label.uppercased()
+        case .check: return label
+        case .raise: return label.uppercased()
+        }
+    }
+
+    private func applyStyle() {
+        let disabled = !isEnabled
+        layer.borderWidth = (kind == .raise) ? 0 : 1.5
+
+        let baseAlpha: CGFloat = disabled ? 0.5 : 1.0
+        alpha = baseAlpha
+        isUserInteractionEnabled = !disabled
+
+        switch kind {
+        case .fold:
+            backgroundColor = PokerTheme.surface
+            layer.borderColor = PokerTheme.coral.cgColor
+            titleLabel.textColor = PokerTheme.coralDeep
+            sublabelLabel.textColor = PokerTheme.coralDeep
+        case .check:
+            backgroundColor = PokerTheme.surface
+            layer.borderColor = PokerTheme.borderStrong.cgColor
+            titleLabel.textColor = PokerTheme.ink
+            sublabelLabel.textColor = PokerTheme.muted
+        case .raise:
+            backgroundColor = PokerTheme.forest
+            titleLabel.textColor = .white
+            sublabelLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+        }
+        PokerTheme.applyShadowMd(layer)
+    }
+
+}
+
+// MARK: - Quick-bet button
+
+private final class QuickBetButton: UIView {
+    var title: String = "" { didSet { label.text = title } }
+    var isAllIn: Bool = false { didSet { applyStyle() } }
+    var onTap: (() -> Void)?
+
+    private let label = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = 10
+        layer.borderWidth = 1
+        layer.borderColor = PokerTheme.border.cgColor
+        backgroundColor = PokerTheme.surfaceAlt
+
+        label.font = .systemFont(ofSize: 11, weight: .bold)
+        label.textColor = PokerTheme.ink
+        label.textAlignment = .center
+        label.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    private func applyStyle() {
+        if isAllIn {
+            layer.borderColor = PokerTheme.amber.cgColor
+        } else {
+            layer.borderColor = PokerTheme.border.cgColor
+        }
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesBegan(touches, with: event)
+        UIView.animate(withDuration: 0.08) {
+            self.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
+        }
+    }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesEnded(touches, with: event)
+        UIView.animate(withDuration: 0.10) { self.transform = .identity }
+        if let touch = touches.first, bounds.contains(touch.location(in: self)) {
+            onTap?()
+        }
+    }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        super.touchesCancelled(touches, with: event)
+        UIView.animate(withDuration: 0.10) { self.transform = .identity }
     }
 }

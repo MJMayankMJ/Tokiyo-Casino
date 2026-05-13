@@ -2,205 +2,224 @@
 //  CardView.swift
 //  Poker
 //
-//  Created by Mayank Jangid on 8/17/25.
+//  Redesigned to match the Claude Design handoff. Cards render with the
+//  cream/white face, large center rank, suit pictogram and (for hero) a
+//  small corner glyph. Face-down cards use a themed champagne checker.
 //
 
 import UIKit
 
-// MARK: - Fixed CardView with Simple Reveal
 class CardView: UIView {
-    
-    private let imageView = UIImageView()
-    private var card: Card?
-    private var isFaceUp = false
-    
+
+    enum Style { case face, hero }
+
+    private(set) var card: Card?
+    private(set) var isFaceUp: Bool = false
+
+    /// When set, the next setCard call will render with hero styling.
+    var style: Style = .face { didSet { rebuild() } }
+
+    // Layers / subviews
+    private let cardBack = CALayer()
+    private let cardBackPattern = CALayer()
+    private let suitCenter = SuitView()
+    private let suitCorner = SuitView()
+    private let rankLabel = UILabel()
+    private let cornerRankLabel = UILabel()
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupView()
     }
-    
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
-    }
-    
+    required init?(coder: NSCoder) { fatalError() }
+
     private func setupView() {
-        backgroundColor = .white
-        layer.cornerRadius = 8
-        layer.borderWidth = 1
-        layer.borderColor = UIColor.black.cgColor
+        backgroundColor = .clear
+        clipsToBounds = false
+
+        // Soft drop shadow on the view
         layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOffset = CGSize(width: 2, height: 2)
-        layer.shadowOpacity = 0.3
-        layer.shadowRadius = 3
-        
-        imageView.contentMode = .scaleAspectFit
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(imageView)
-        
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
-        ])
-        
-        showBackside()
+        layer.shadowOpacity = 0.18
+        layer.shadowOffset = CGSize(width: 0, height: 4)
+        layer.shadowRadius = 8
+
+        // Back layers (themed checker)
+        cardBack.backgroundColor = PokerTheme.cardBackBg.cgColor
+        cardBackPattern.backgroundColor = UIColor.clear.cgColor
+        layer.addSublayer(cardBack)
+        cardBack.addSublayer(cardBackPattern)
+
+        // Center suit / rank
+        suitCenter.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(suitCenter)
+
+        rankLabel.textAlignment = .center
+        rankLabel.font = .systemFont(ofSize: 18, weight: .heavy)
+        rankLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(rankLabel)
+
+        // Corner (hero only)
+        suitCorner.isHidden = true
+        suitCorner.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(suitCorner)
+
+        cornerRankLabel.isHidden = true
+        cornerRankLabel.textAlignment = .center
+        cornerRankLabel.font = .systemFont(ofSize: 14, weight: .heavy)
+        cornerRankLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(cornerRankLabel)
+
+        showBack()
     }
-    
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        let w = bounds.width
+        let h = bounds.height
+        let radius = max(4, w * 0.18)
+        layer.cornerRadius = radius
+
+        cardBack.frame = bounds
+        cardBack.cornerRadius = radius
+        cardBack.masksToBounds = true
+
+        cardBackPattern.frame = bounds.insetBy(dx: 2, dy: 2)
+        cardBackPattern.cornerRadius = max(2, radius - 2)
+        cardBackPattern.masksToBounds = true
+
+        // Refresh checker pattern image at current size
+        if isFaceUp == false {
+            applyCheckerPattern()
+        }
+
+        // Layout face contents
+        switch style {
+        case .face:
+            // suit on top, rank below
+            let suitSize = max(8, w * 0.36)
+            suitCenter.frame = CGRect(x: (w - suitSize) / 2, y: h * 0.16, width: suitSize, height: suitSize)
+            let rankFontSize = max(10, w * 0.46)
+            rankLabel.font = .systemFont(ofSize: rankFontSize, weight: .heavy)
+            rankLabel.frame = CGRect(x: 0, y: h * 0.50, width: w, height: h * 0.45)
+        case .hero:
+            // big rank center, suit just above + corner glyph at top-left
+            let suitSize = max(10, w * 0.30)
+            suitCenter.frame = CGRect(x: (w - suitSize) / 2, y: h * 0.22, width: suitSize, height: suitSize)
+            let rankFontSize = max(12, w * 0.42)
+            rankLabel.font = .systemFont(ofSize: rankFontSize, weight: .heavy)
+            rankLabel.frame = CGRect(x: 0, y: h * 0.52, width: w, height: h * 0.42)
+            cornerRankLabel.frame = CGRect(x: 6, y: 4, width: 14, height: 16)
+            suitCorner.frame = CGRect(x: 6 + 2, y: 20, width: 10, height: 10)
+        }
+    }
+
+    // MARK: - Public API
+
     func setCard(_ card: Card, faceUp: Bool = true) {
         self.card = card
         self.isFaceUp = faceUp
-        
-        if faceUp {
-            showCard()
-        } else {
-            showBackside()
-        }
+        rebuild()
     }
-    
-    // Simple reveal method - just shows the card immediately
+
+    /// Animated face-up flip.
     func revealCard() {
-        guard let card = card else {
-            print("CardView: No card to reveal!")
-            return
-        }
-        
-        print("CardView: Revealing card \(card.description)")
-        
+        guard card != nil else { return }
         isFaceUp = true
-        
-        // Use transition animation
         UIView.transition(with: self, duration: 0.5, options: .transitionFlipFromLeft) {
-            self.showCard()
+            self.rebuild()
         }
-        
-        // Add haptic feedback
-        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-        impactFeedback.impactOccurred()
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
-    
-    // Force show card without animation
+
+    /// Instant face-up.
     func forceShowCard() {
-        guard let card = card else { return }
-        print("CardView: Force showing card \(card.description)")
+        guard card != nil else { return }
         isFaceUp = true
-        showCard()
+        rebuild()
     }
-    
-    private func showCard() {
-        guard let card = card else { return }
-        
-        // Clear all subviews first
-        subviews.forEach { $0.removeFromSuperview() }
-        
-        // Re-add imageView
-        addSubview(imageView)
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
-        ])
-        
-        // Try to load card image from assets first
-        let imageName = card.imageName
-        print("CardView: Trying to load image: \(imageName)")
-        
-        if let image = UIImage(named: imageName) {
-            imageView.image = image
-            imageView.isHidden = false
-            print("CardView: Successfully loaded image for \(card.description)")
+
+    // MARK: - Private
+
+    private func rebuild() {
+        if isFaceUp, let card {
+            showFace(card)
         } else {
-            // Fallback to drawing the card programmatically
-            print("CardView: Image not found, drawing card programmatically for \(card.description)")
-            imageView.isHidden = true
-            drawCard(card)
+            showBack()
+        }
+        setNeedsLayout()
+    }
+
+    private func showFace(_ card: Card) {
+        // Show face elements, hide back
+        backgroundColor = .white
+        layer.borderColor = UIColor.black.withAlphaComponent(0.04).cgColor
+        layer.borderWidth = 0.5
+
+        cardBack.isHidden = true
+
+        let color = SuitView.color(for: card.suit)
+        suitCenter.glyph = SuitView.glyph(for: card.suit)
+        suitCenter.color = color
+        suitCenter.isHidden = false
+
+        rankLabel.text = card.rank.shortString
+        rankLabel.textColor = color
+        rankLabel.isHidden = false
+
+        if style == .hero {
+            cornerRankLabel.text = card.rank.shortString
+            cornerRankLabel.textColor = color
+            cornerRankLabel.isHidden = false
+
+            suitCorner.glyph = SuitView.glyph(for: card.suit)
+            suitCorner.color = color
+            suitCorner.isHidden = false
+        } else {
+            cornerRankLabel.isHidden = true
+            suitCorner.isHidden = true
         }
     }
-    
-    private func showBackside() {
-        // Clear all subviews first
-        subviews.forEach { $0.removeFromSuperview() }
-        
-        // Re-add imageView
-        addSubview(imageView)
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6)
-        ])
-        
-        imageView.isHidden = true
-        imageView.image = nil
-        
-        // Create pattern view for back of card
-        let patternView = UIView()
-        patternView.backgroundColor = UIColor(red: 0.1, green: 0.2, blue: 0.6, alpha: 1.0)
-        patternView.layer.cornerRadius = 6
-        patternView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(patternView)
-        
-        // Add decorative pattern
-        let centerLabel = UILabel()
-        centerLabel.text = "🂠"
-        centerLabel.font = .systemFont(ofSize: 16)
-        centerLabel.textAlignment = .center
-        centerLabel.textColor = .white
-        centerLabel.translatesAutoresizingMaskIntoConstraints = false
-        patternView.addSubview(centerLabel)
-        
-        NSLayoutConstraint.activate([
-            patternView.topAnchor.constraint(equalTo: topAnchor, constant: 6),
-            patternView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
-            patternView.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            patternView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            
-            centerLabel.centerXAnchor.constraint(equalTo: patternView.centerXAnchor),
-            centerLabel.centerYAnchor.constraint(equalTo: patternView.centerYAnchor)
-        ])
+
+    private func showBack() {
+        backgroundColor = .clear
+        layer.borderWidth = 0
+
+        cardBack.isHidden = false
+        suitCenter.isHidden = true
+        rankLabel.isHidden = true
+        cornerRankLabel.isHidden = true
+        suitCorner.isHidden = true
+        applyCheckerPattern()
     }
-    
-    private func drawCard(_ card: Card) {
-        backgroundColor = .white
-        
-        // Create main container
-        let cardContainer = UIView()
-        cardContainer.backgroundColor = .white
-        cardContainer.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(cardContainer)
-        
-        // Create rank and suit labels
-        let rankLabel = UILabel()
-        rankLabel.text = card.rank.shortString
-        rankLabel.font = .boldSystemFont(ofSize: 18)
-        rankLabel.textColor = card.suit.color
-        rankLabel.textAlignment = .center
-        rankLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardContainer.addSubview(rankLabel)
-        
-        let suitLabel = UILabel()
-        suitLabel.text = card.suit.symbol
-        suitLabel.font = .systemFont(ofSize: 24)
-        suitLabel.textColor = card.suit.color
-        suitLabel.textAlignment = .center
-        suitLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardContainer.addSubview(suitLabel)
-        
-        NSLayoutConstraint.activate([
-            // Container
-            cardContainer.topAnchor.constraint(equalTo: topAnchor, constant: 4),
-            cardContainer.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            cardContainer.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            cardContainer.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -4),
-            
-            // Rank at top
-            rankLabel.topAnchor.constraint(equalTo: cardContainer.topAnchor, constant: 6),
-            rankLabel.centerXAnchor.constraint(equalTo: cardContainer.centerXAnchor),
-            
-            // Suit in center
-            suitLabel.centerXAnchor.constraint(equalTo: cardContainer.centerXAnchor),
-            suitLabel.centerYAnchor.constraint(equalTo: cardContainer.centerYAnchor)
-        ])
+
+    private func applyCheckerPattern() {
+        // Bake a small repeating checker image for the back. We use it as
+        // `contents` on a CALayer; this stays crisp because the layer is masked
+        // to the card's rounded rect and the pattern size scales with the card.
+        let tile: CGFloat = 6
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: tile * 2, height: tile * 2))
+        let image = renderer.image { ctx in
+            let cg = ctx.cgContext
+            // background
+            cg.setFillColor(PokerTheme.cardBackBg.resolvedColor(with: traitCollection).cgColor)
+            cg.fill(CGRect(x: 0, y: 0, width: tile * 2, height: tile * 2))
+            // diagonal checker
+            cg.setFillColor(PokerTheme.cardBack.resolvedColor(with: traitCollection).cgColor)
+            cg.fill(CGRect(x: 0, y: 0, width: tile, height: tile))
+            cg.fill(CGRect(x: tile, y: tile, width: tile, height: tile))
+        }
+        cardBackPattern.contents = image.cgImage
+        cardBackPattern.contentsGravity = .resize
+        // Repeating tile via a pattern color is more authentic — set it as a contents image
+        // with `contentsScale` so it's not stretched.
+        cardBackPattern.contentsScale = UIScreen.main.scale
+        // Use a CALayer of patternColor for a true tiling effect:
+        cardBackPattern.backgroundColor = UIColor(patternImage: image).cgColor
+        cardBackPattern.contents = nil
+
+        // Subtle ring
+        cardBack.borderColor = PokerTheme.cardBack.cgColor
+        cardBack.borderWidth = 1
     }
 }
