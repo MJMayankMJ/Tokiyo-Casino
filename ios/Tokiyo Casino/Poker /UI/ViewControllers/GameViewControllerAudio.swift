@@ -1,0 +1,59 @@
+//
+//  GameViewControllerAudio.swift
+//  Poker
+//
+//  Created by Mayank Jangid on 8/17/25.
+//
+
+import UIKit
+
+extension GameViewController {
+    
+    // MARK: - BGM Setup
+    func setupBGM() {
+        bgmManager.setupPlayer(soundName: "casino_bgm", soundType: .mp3)
+        bgmManager.volume(0.3)
+    }
+    
+    func playBGM() {
+        // Loop indefinitely (-1 means infinite loop)
+        bgmManager.play(-1)
+    }
+    
+    func pauseBGM() {
+        bgmManager.pause()
+    }
+    
+    func getMuteButtonImage() -> UIImage? {
+        let imageName = SoundManager.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill"
+        return UIImage(systemName: imageName)
+    }
+    
+    @objc func soundSettingChanged() {
+        // Update mute button icon
+        muteButton.setImage(getMuteButtonImage(), for: .normal)
+        
+        // Handle BGM based on mute state
+        if SoundManager.isMuted {
+            pauseBGM()
+        } else {
+            playBGM()
+        }
+    }
+    
+    // MARK: - Haptics
+    func addHapticFeedback(_ style: UIImpactFeedbackGenerator.FeedbackStyle) {
+        let impactFeedback = UIImpactFeedbackGenerator(style: style)
+        impactFeedback.impactOccurred()
+    }
+
+    func addSuccessFeedback() {
+        let notificationFeedback = UINotificationFeedbackGenerator()
+        notificationFeedback.notificationOccurred(.success)
+    }
+
+    func addErrorFeedback() {
+        let notificationFeedback = UINotificationFeedbackGenerator()
+        notificationFeedback.notificationOccurred(.error)
+    }
+}
