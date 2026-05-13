@@ -23,6 +23,13 @@ extension GameManager {
             return true
         }
         
+        if activeBettingPlayers.count == 1,
+           let onlyBettingPlayer = activeBettingPlayers.first,
+           activePlayers.contains(where: { $0.isAllIn }),
+           onlyBettingPlayer.currentBet >= currentBet {
+            return true
+        }
+        
         // All active players have acted and bets are equal
         for player in activeBettingPlayers {
             if !player.hasActed || (player.currentBet < currentBet && !player.isAllIn) {

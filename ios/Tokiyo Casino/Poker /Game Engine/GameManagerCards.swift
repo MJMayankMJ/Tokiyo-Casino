@@ -29,27 +29,47 @@ extension GameManager {
     }
     
     func postBlinds() {
-        guard let sbIndex = findNextInHandSeat(afterSeatIndex: dealerIndex),
-              let bbIndex = findNextInHandSeat(afterSeatIndex: sbIndex) else {
+        let blindIndexes: (smallBlind: Int, bigBlind: Int)?
+        
+        if activePlayers.count == 2 {
+            let dealerCanPostBlind = players.indices.contains(dealerIndex)
+                && players[dealerIndex].isActive
+                && !players[dealerIndex].isFolded
+            let sbIndex = dealerCanPostBlind ? dealerIndex : findNextInHandSeat(afterSeatIndex: dealerIndex)
+            
+            if let sbIndex,
+               let bbIndex = findNextInHandSeat(afterSeatIndex: sbIndex) {
+                blindIndexes = (smallBlind: sbIndex, bigBlind: bbIndex)
+            } else {
+                blindIndexes = nil
+            }
+        } else if let sbIndex = findNextInHandSeat(afterSeatIndex: dealerIndex),
+                  let bbIndex = findNextInHandSeat(afterSeatIndex: sbIndex) {
+            blindIndexes = (smallBlind: sbIndex, bigBlind: bbIndex)
+        } else {
+            blindIndexes = nil
+        }
+        
+        guard let blindIndexes else {
             bigBlindPlayerSeatIndex = nil
             currentBet = 0
             delegate?.potDidUpdate(mainPot.amount)
             return
         }
         
-        bigBlindPlayerSeatIndex = bbIndex
+        bigBlindPlayerSeatIndex = blindIndexes.bigBlind
         
         // Small blind
-        let sbPlayer = players[sbIndex]
+        let sbPlayer = players[blindIndexes.smallBlind]
         let sbAmount = sbPlayer.bet(amount: smallBlind)
         mainPot.add(sbAmount)
         
         // Big blind
-        let bbPlayer = players[bbIndex]
+        let bbPlayer = players[blindIndexes.bigBlind]
         let bbAmount = bbPlayer.bet(amount: bigBlind)
         mainPot.add(bbAmount)
         
-        currentBet = max(sbPlayer.currentBet, bbPlayer.currentBet)
+        currentBet = bigBlind
         currentBetAllowsRaises = true
         delegate?.potDidUpdate(mainPot.amount)
     }

@@ -143,7 +143,11 @@ extension GameManager {
     }
     
     func canPlayerRaise(_ player: Player) -> Bool {
-        currentBetAllowsRaises || !player.hasActed
+        let liveOpponents = activePlayers.filter {
+            $0.id != player.id && !$0.isAllIn && !$0.isFolded
+        }
+        
+        return !liveOpponents.isEmpty && (currentBetAllowsRaises || !player.hasActed)
     }
     
     // MARK: - Action Processing
