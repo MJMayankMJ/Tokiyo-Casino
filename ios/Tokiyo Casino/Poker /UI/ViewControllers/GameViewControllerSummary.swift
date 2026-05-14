@@ -189,7 +189,18 @@ extension GameViewController {
             self?.settleCoinsIfNeeded()
             self?.dismiss(animated: true)
         }
-        present(vc, animated: true)
+
+        // If any sheet (e.g. the hand-details sheet the user opened to review
+        // the last hand) is still presented, dismiss it first — otherwise
+        // UIKit refuses to present a second modal and the player gets stuck
+        // on a table they can no longer act on.
+        if let presented = presentedViewController {
+            presented.dismiss(animated: true) { [weak self] in
+                self?.present(vc, animated: true)
+            }
+        } else {
+            present(vc, animated: true)
+        }
     }
 
     // MARK: - Sound
