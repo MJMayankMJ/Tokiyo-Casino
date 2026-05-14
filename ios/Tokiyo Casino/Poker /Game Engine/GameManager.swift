@@ -13,7 +13,7 @@ class GameManager {
     // MARK: - Properties
     weak var delegate: GameManagerDelegate?
     
-    private(set) var players: [Player] = []
+    var players: [Player] = []
     var deck: Deck = Deck()
     var communityCards: [Card] = []
     var mainPot: Pot = Pot()
@@ -55,13 +55,26 @@ class GameManager {
         self.startingChips = startingChips
         setupPlayers()
     }
-    
+
+    /// Multiplayer-friendly initializer. Skips the default solo roster so
+    /// the host service can install a custom seat layout (mix of human
+    /// peers, the host themselves, and AI fill) before the first hand.
+    init(seats: [Player], smallBlind: Int, bigBlind: Int, startingChips: Int) {
+        self.playerCount = seats.count
+        self.startingChips = startingChips
+        self.players = seats
+        self.smallBlind = smallBlind
+        self.bigBlind = bigBlind
+        self.minRaise = bigBlind
+        self.lastRaiseAmount = bigBlind
+    }
+
     func setupPlayers() {
         players = []
-        
+
         // Add human player
         players.append(Player(id: 0, name: "You", type: .human, chips: startingChips))
-        
+
         // Add AI players with varied personalities
         let personalities = AIPersonality.allCases
         for i in 1..<playerCount {

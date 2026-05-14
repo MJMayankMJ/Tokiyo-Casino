@@ -20,6 +20,7 @@ class MenuViewController: UIViewController {
     private let startingChipsLabel = UILabel()
     private let startingChipsValueLabel = UILabel()
     private let settingsButton = UIButton(type: .system)
+    private let playWithFriendsButton = UIButton(type: .system)
     private let gradientLayer = CAGradientLayer()
     
     // Decorative elements
@@ -170,6 +171,24 @@ class MenuViewController: UIViewController {
         playButton.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(playButton)
         
+        // Play With Friends — entry point to the offline-nearby flow.
+        playWithFriendsButton.setTitle("PLAY WITH FRIENDS", for: .normal)
+        playWithFriendsButton.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
+        playWithFriendsButton.setTitleColor(.white, for: .normal)
+        playWithFriendsButton.backgroundColor = UIColor(red: 0.45, green: 0.30, blue: 0.65, alpha: 1.0)
+        playWithFriendsButton.layer.cornerRadius = 24
+        playWithFriendsButton.layer.shadowColor = UIColor.black.cgColor
+        playWithFriendsButton.layer.shadowOffset = CGSize(width: 0, height: 4)
+        playWithFriendsButton.layer.shadowOpacity = 0.5
+        playWithFriendsButton.layer.shadowRadius = 8
+        playWithFriendsButton.layer.borderWidth = 2
+        playWithFriendsButton.layer.borderColor = UIColor(red: 0.6, green: 0.45, blue: 0.85, alpha: 1.0).cgColor
+        playWithFriendsButton.addTarget(self, action: #selector(playWithFriendsTapped), for: .touchUpInside)
+        playWithFriendsButton.addTarget(self, action: #selector(buttonTouchDown), for: .touchDown)
+        playWithFriendsButton.addTarget(self, action: #selector(buttonTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+        playWithFriendsButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(playWithFriendsButton)
+
         // Enhanced settings button
         settingsButton.setTitle("⚙️ Settings", for: .normal)
         settingsButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .medium)
@@ -218,7 +237,12 @@ class MenuViewController: UIViewController {
             playButton.widthAnchor.constraint(equalToConstant: 240),
             playButton.heightAnchor.constraint(equalToConstant: 56),
             
-            settingsButton.topAnchor.constraint(equalTo: playButton.bottomAnchor, constant: 16),
+            playWithFriendsButton.topAnchor.constraint(equalTo: playButton.bottomAnchor, constant: 14),
+            playWithFriendsButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            playWithFriendsButton.widthAnchor.constraint(equalToConstant: 240),
+            playWithFriendsButton.heightAnchor.constraint(equalToConstant: 48),
+
+            settingsButton.topAnchor.constraint(equalTo: playWithFriendsButton.bottomAnchor, constant: 14),
             settingsButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             settingsButton.widthAnchor.constraint(equalToConstant: 160),
             settingsButton.heightAnchor.constraint(equalToConstant: 44)
@@ -466,6 +490,15 @@ class MenuViewController: UIViewController {
         present(gameVC, animated: true)
     }
     
+    @objc private func playWithFriendsTapped() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
+
+        let lobby = MultiplayerEntryViewController()
+        lobby.modalPresentationStyle = .fullScreen
+        present(lobby, animated: true)
+    }
+
     @objc private func settingsTapped() {
         // Add haptic feedback
         let generator = UIImpactFeedbackGenerator(style: .light)

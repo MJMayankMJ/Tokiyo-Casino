@@ -15,6 +15,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+        #if DEBUG
+        // Verify the multiplayer wire-format hasn't drifted from the
+        // golden fixtures. Prints either ✅ or ⚠️ to the console; the
+        // fixtures are also the cross-platform contract for Android.
+        ProtocolGoldenFixtures.selfTest()
+        #endif
         return true
     }
 
