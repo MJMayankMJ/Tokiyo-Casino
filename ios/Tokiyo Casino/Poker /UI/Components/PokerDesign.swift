@@ -498,8 +498,10 @@ final class TopInfoBar: UIView {
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
         infoPill.addSubview(infoLabel)
 
-        // Menu chip (3 dots)
-        styleIconButton(menuButton, systemImage: "ellipsis")
+        // Top-right chip — hand-details / info icon (was 3-dot ellipsis).
+        // The hosting view controller toggles `isEnabled` once the first
+        // hand finishes; until then it's a passive affordance.
+        styleIconButton(menuButton, systemImage: "list.bullet.rectangle")
         addSubview(menuButton)
 
         backButton.translatesAutoresizingMaskIntoConstraints = false

@@ -21,6 +21,11 @@ class GameViewController: UIViewController {
     
     // Sound Manager for BGM
     var bgmManager = SoundManager()
+
+    // Round-result sounds — kept alive on `self` so AVAudioPlayer outlives
+    // the local scope that started playback.
+    var winSoundManager = SoundManager()
+    var loseSoundManager = SoundManager()
     
     // Game settings
     let playerCount: Int
@@ -32,6 +37,26 @@ class GameViewController: UIViewController {
     
     // Track winners for summary
     var handWinners: [(player: Player, amount: Int, handDescription: String)] = []
+
+    // Pending coalesced round-result presentation (cancelled if another
+    // winner notification arrives within the dedupe window).
+    var pendingResultWork: DispatchWorkItem?
+
+    // Whether the session is presenting the round-end banner moment.
+    var isShowingRoundResult: Bool = false
+
+    // Most recent completed hand's full breakdown — surfaced by the
+    // top-right info button.
+    var lastHandSummary: GameViewController.LastHandSummary?
+
+    // Gates the top-right details button until at least one hand has finished.
+    var hasCompletedFirstHand: Bool = false
+
+    struct LastHandSummary {
+        let playerSummaries: [PlayerSummary]
+        let totalPot: Int
+        let communityCards: [Card]
+    }
     
     // MARK: - Initialization
     init(playerCount: Int = 6, startingChips: Int = 1000) {

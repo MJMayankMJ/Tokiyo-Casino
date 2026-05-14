@@ -117,9 +117,34 @@ extension GameViewController {
         addHapticFeedback(.medium)
         startNewHand()
     }
-    
+
     @objc func muteTapped() {
         addHapticFeedback(.light)
         SoundManager.setMuted(!SoundManager.isMuted)
+    }
+
+    // MARK: - Hand details (top-right icon)
+    @objc func handDetailsTapped() {
+        guard hasCompletedFirstHand, let summary = lastHandSummary else { return }
+        addHapticFeedback(.light)
+
+        let vc = GameSummaryViewController(
+            playerSummaries: summary.playerSummaries,
+            totalPot: summary.totalPot,
+            communityCards: summary.communityCards
+        )
+        vc.onClose = { [weak self] in
+            self?.addHapticFeedback(.light)
+        }
+        present(vc, animated: true)
+    }
+
+    /// Keeps the top-right details icon enabled only when there is a
+    /// completed hand to inspect.
+    func refreshHandDetailsButton() {
+        guard let bar = topInfoBar else { return }
+        let enabled = hasCompletedFirstHand && lastHandSummary != nil
+        bar.menuButton.isEnabled = enabled
+        bar.menuButton.alpha = enabled ? 1.0 : 0.4
     }
 }

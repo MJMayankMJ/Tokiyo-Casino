@@ -2,16 +2,28 @@
 //  GameSummaryViewController.swift
 //  Poker
 //
-//  Created by Mayank Jangid on 8/17/25.
+//  Hand-details sheet shown when the user taps the top-right info icon on
+//  the table. Presents the last completed hand's winners, losers, folded
+//  players, community cards, hole cards, and per-player best hand at ~75%
+//  height. Only a close button — no game-flow buttons.
 //
 
 import UIKit
 
 struct PlayerSummary {
-    let player: Player
+    // Snapshotted — captured at the moment the hand finished so the sheet
+    // keeps showing the previous hand's data even after the next hand has
+    // dealt fresh hole cards / shifted stacks on the live Player.
+    let playerId: Int
+    let playerName: String
+    let isHuman: Bool
+    let holeCards: [Card]
+    let chipsAfter: Int
     let handDescription: String?
     let category: PlayerCategory
-    
+    let winningCards: [Card]
+    let amountWon: Int
+
     enum PlayerCategory {
         case winner
         case folded
@@ -20,483 +32,328 @@ struct PlayerSummary {
 }
 
 class GameSummaryViewController: UIViewController {
-    
+
     // MARK: - Properties
     private let playerSummaries: [PlayerSummary]
     private let totalPot: Int
     private let communityCards: [Card]
-    
-    private let scrollView = UIScrollView()
-    private let contentView = UIView()
+
+    private let header = UIView()
     private let titleLabel = UILabel()
-    private let potLabel = UILabel()
-    private let communityCardsContainer = UIView()
-    private let winnersContainer = UIView()
-    private let foldedContainer = UIView()
-    private let lostContainer = UIView()
-    private let newGameButton = UIButton(type: .system)
-    private let menuButton = UIButton(type: .system)
-    
-    private let gradientLayer = CAGradientLayer()
-    
-    // Sound Managers
-    private var winSoundManager = SoundManager()
-    private var loseSoundManager = SoundManager()
-    
+    private let subtitleLabel = UILabel()
+    private let closeButton = UIButton(type: .system)
+
+    private let scrollView = UIScrollView()
+    private let contentStack = UIStackView()
+
     // Callbacks
-    var onNewGame: (() -> Void)?
-    var onMenu: (() -> Void)?
-    
+    var onClose: (() -> Void)?
+
     // MARK: - Initialization
     init(playerSummaries: [PlayerSummary], totalPot: Int, communityCards: [Card]) {
         self.playerSummaries = playerSummaries
         self.totalPot = totalPot
         self.communityCards = communityCards
         super.init(nibName: nil, bundle: nil)
+
+        modalPresentationStyle = .pageSheet
+        if let sheet = sheetPresentationController {
+            if #available(iOS 16.0, *) {
+                sheet.detents = [
+                    .custom(identifier: .init("hand.details")) { ctx in
+                        ctx.maximumDetentValue * 0.75
+                    },
+                    .large()
+                ]
+            } else {
+                sheet.detents = [.medium(), .large()]
+            }
+            sheet.prefersGrabberVisible = true
+            sheet.preferredCornerRadius = 24
+        }
     }
-    
+
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
-    
+
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupSounds()
-        setupUI()
-        layoutSummary()
-        animateEntrance()
-        playResultSound()
+        view.backgroundColor = PokerTheme.pageBg
+        setupChrome()
+        layoutContent()
     }
-    
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        gradientLayer.frame = view.bounds
-    }
-    
-    // MARK: - Sound Setup
-    private func setupSounds() {
-        winSoundManager.setupPlayer(soundName: "grand_win", soundType: .mp3)
-        loseSoundManager.setupPlayer(soundName: "loose_sound", soundType: .mp3)
-    }
-    
-    private func playResultSound() {
-        // Check if human player is a winner
-        let humanPlayerIsWinner = playerSummaries.contains { summary in
-            summary.player.isHuman && summary.category == .winner
-        }
-        
-        // Play appropriate sound after a small delay for effect
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            if humanPlayerIsWinner {
-                self.winSoundManager.play()
-            } else {
-                self.loseSoundManager.play()
-            }
-        }
-    }
-    
+
     // MARK: - Setup
-    private func setupUI() {
-        // Gradient background
-        gradientLayer.colors = [
-            UIColor(red: 0.02, green: 0.20, blue: 0.06, alpha: 1.0).cgColor,
-            UIColor(red: 0.01, green: 0.10, blue: 0.03, alpha: 1.0).cgColor
-        ]
-        view.layer.insertSublayer(gradientLayer, at: 0)
-        
-        // Scroll view
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.showsVerticalScrollIndicator = true
-        scrollView.alwaysBounceVertical = true
-        view.addSubview(scrollView)
-        
-        // Content view
-        contentView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(contentView)
-        
-        // Title
-        titleLabel.text = "🎉 HAND SUMMARY 🎉"
-        titleLabel.font = UIFont(name: "Copperplate-Bold", size: 28) ?? .boldSystemFont(ofSize: 28)
-        titleLabel.textColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        titleLabel.textAlignment = .center
+    private func setupChrome() {
+        header.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(header)
+
+        titleLabel.text = "Hand details"
+        titleLabel.font = .systemFont(ofSize: 18, weight: .heavy)
+        titleLabel.textColor = PokerTheme.ink
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.layer.shadowColor = UIColor.black.cgColor
-        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
-        titleLabel.layer.shadowOpacity = 0.8
-        titleLabel.layer.shadowRadius = 3
-        contentView.addSubview(titleLabel)
-        
-        // Pot label
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        let formattedPot = formatter.string(from: NSNumber(value: totalPot)) ?? "\(totalPot)"
-        
-        potLabel.text = "💰 TOTAL POT: $\(formattedPot)"
-        potLabel.font = UIFont(name: "Copperplate", size: 18) ?? .systemFont(ofSize: 18, weight: .semibold)
-        potLabel.textColor = .white
-        potLabel.textAlignment = .center
-        potLabel.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(potLabel)
-        
-        // Community cards container
-        communityCardsContainer.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(communityCardsContainer)
-        
-        // Containers for different player categories
-        winnersContainer.translatesAutoresizingMaskIntoConstraints = false
-        foldedContainer.translatesAutoresizingMaskIntoConstraints = false
-        lostContainer.translatesAutoresizingMaskIntoConstraints = false
-        
-        contentView.addSubview(winnersContainer)
-        contentView.addSubview(foldedContainer)
-        contentView.addSubview(lostContainer)
-        
-        // Buttons
-        setupButtons()
-        
-        // Constraints
+        header.addSubview(titleLabel)
+
+        subtitleLabel.text = "Pot $\(ChipFormatter.string(totalPot))"
+        subtitleLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        subtitleLabel.textColor = PokerTheme.muted
+        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(subtitleLabel)
+
+        let cfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        closeButton.setImage(UIImage(systemName: "xmark", withConfiguration: cfg), for: .normal)
+        closeButton.tintColor = PokerTheme.ink
+        closeButton.backgroundColor = PokerTheme.glass
+        closeButton.layer.cornerRadius = 14
+        PokerTheme.applyShadowSm(closeButton.layer)
+        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(closeButton)
+
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.alwaysBounceVertical = true
+        scrollView.showsVerticalScrollIndicator = true
+        view.addSubview(scrollView)
+
+        contentStack.axis = .vertical
+        contentStack.spacing = 16
+        contentStack.alignment = .fill
+        contentStack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(contentStack)
+
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            header.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            header.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            header.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            header.heightAnchor.constraint(equalToConstant: 40),
+
+            titleLabel.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            titleLabel.topAnchor.constraint(equalTo: header.topAnchor, constant: 2),
+
+            subtitleLabel.leadingAnchor.constraint(equalTo: header.leadingAnchor),
+            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 2),
+
+            closeButton.trailingAnchor.constraint(equalTo: header.trailingAnchor),
+            closeButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            closeButton.widthAnchor.constraint(equalToConstant: 36),
+            closeButton.heightAnchor.constraint(equalToConstant: 36),
+
+            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 12),
             scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
-            
-            contentView.topAnchor.constraint(equalTo: scrollView.topAnchor),
-            contentView.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor),
-            contentView.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor),
-            contentView.widthAnchor.constraint(equalTo: scrollView.widthAnchor),
-            
-            titleLabel.topAnchor.constraint(equalTo: contentView.topAnchor, constant: 20),
-            titleLabel.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            
-            potLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 10),
-            potLabel.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            
-            communityCardsContainer.topAnchor.constraint(equalTo: potLabel.bottomAnchor, constant: 20),
-            communityCardsContainer.centerXAnchor.constraint(equalTo: contentView.centerXAnchor),
-            communityCardsContainer.heightAnchor.constraint(equalToConstant: 80),
-            
-            winnersContainer.topAnchor.constraint(equalTo: communityCardsContainer.bottomAnchor, constant: 30),
-            winnersContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            winnersContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            
-            lostContainer.topAnchor.constraint(equalTo: winnersContainer.bottomAnchor, constant: 20),
-            lostContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            lostContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            
-            foldedContainer.topAnchor.constraint(equalTo: lostContainer.bottomAnchor, constant: 20),
-            foldedContainer.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 20),
-            foldedContainer.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -20),
-            foldedContainer.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -120)
+            scrollView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            contentStack.topAnchor.constraint(equalTo: scrollView.topAnchor),
+            contentStack.leadingAnchor.constraint(equalTo: scrollView.leadingAnchor, constant: 20),
+            contentStack.trailingAnchor.constraint(equalTo: scrollView.trailingAnchor, constant: -20),
+            contentStack.bottomAnchor.constraint(equalTo: scrollView.bottomAnchor, constant: -24),
+            contentStack.widthAnchor.constraint(equalTo: scrollView.widthAnchor, constant: -40),
         ])
     }
-    
-    private func setupButtons() {
-        // New Game button
-        newGameButton.setTitle("NEW HAND", for: .normal)
-        newGameButton.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
-        newGameButton.setTitleColor(.white, for: .normal)
-        newGameButton.backgroundColor = UIColor(red: 0.2, green: 0.6, blue: 0.2, alpha: 1.0)
-        newGameButton.layer.cornerRadius = 25
-        newGameButton.layer.shadowColor = UIColor.black.cgColor
-        newGameButton.layer.shadowOffset = CGSize(width: 0, height: 4)
-        newGameButton.layer.shadowOpacity = 0.5
-        newGameButton.layer.shadowRadius = 8
-        newGameButton.layer.borderWidth = 2
-        newGameButton.layer.borderColor = UIColor(red: 0.3, green: 0.7, blue: 0.3, alpha: 1.0).cgColor
-        newGameButton.addTarget(self, action: #selector(newGameTapped), for: .touchUpInside)
-        newGameButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(newGameButton)
-        
-        // Menu button
-        menuButton.setTitle("EXIT TO MENU", for: .normal)
-        menuButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .medium)
-        menuButton.setTitleColor(.white.withAlphaComponent(0.9), for: .normal)
-        menuButton.backgroundColor = UIColor.white.withAlphaComponent(0.15)
-        menuButton.layer.cornerRadius = 20
-        menuButton.layer.borderWidth = 1
-        menuButton.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
-        menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
-        menuButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(menuButton)
-        
-        NSLayoutConstraint.activate([
-            newGameButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-            newGameButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            newGameButton.widthAnchor.constraint(equalToConstant: 200),
-            newGameButton.heightAnchor.constraint(equalToConstant: 50),
-            
-            menuButton.bottomAnchor.constraint(equalTo: newGameButton.topAnchor, constant: -12),
-            menuButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: 150),
-            menuButton.heightAnchor.constraint(equalToConstant: 40)
-        ])
-    }
-    
-    // MARK: - Layout
-    private func layoutSummary() {
-        // Show community cards
-        layoutCommunityCards()
-        
-        // Categorize players
+
+    private func layoutContent() {
+        // Community cards block
+        contentStack.addArrangedSubview(makeCommunitySection())
+
         let winners = playerSummaries.filter { $0.category == .winner }
-        let folded = playerSummaries.filter { $0.category == .folded }
         let lost = playerSummaries.filter { $0.category == .lost }
-        
-        // Layout each category
+        let folded = playerSummaries.filter { $0.category == .folded }
+
         if !winners.isEmpty {
-            layoutPlayerCategory(players: winners, in: winnersContainer, title: "🏆 WINNERS", color: UIColor(red: 0.2, green: 0.7, blue: 0.3, alpha: 0.9))
+            contentStack.addArrangedSubview(makeSectionHeader(title: "Winners",
+                                                              accent: PokerTheme.amber))
+            for s in winners { contentStack.addArrangedSubview(makePlayerCard(summary: s)) }
         }
-        
         if !lost.isEmpty {
-            layoutPlayerCategory(players: lost, in: lostContainer, title: "🎲 PLAYERS", color: UIColor(red: 0.8, green: 0.4, blue: 0.2, alpha: 0.7))
+            contentStack.addArrangedSubview(makeSectionHeader(title: "Showdown",
+                                                              accent: PokerTheme.muted))
+            for s in lost { contentStack.addArrangedSubview(makePlayerCard(summary: s)) }
         }
-        
         if !folded.isEmpty {
-            layoutPlayerCategory(players: folded, in: foldedContainer, title: "😔 FOLDED", color: UIColor(red: 0.4, green: 0.4, blue: 0.4, alpha: 0.7))
+            contentStack.addArrangedSubview(makeSectionHeader(title: "Folded",
+                                                              accent: PokerTheme.muted))
+            for s in folded { contentStack.addArrangedSubview(makePlayerCard(summary: s)) }
         }
     }
-    
-    private func layoutCommunityCards() {
-        let cardWidth: CGFloat = 50
-        let cardSpacing: CGFloat = 8
-        let totalWidth = CGFloat(communityCards.count) * (cardWidth + cardSpacing) - cardSpacing
-        
-        var xOffset: CGFloat = 0
-        
-        for card in communityCards {
-            let cardView = createSmallCardView(card: card, width: cardWidth)
-            cardView.frame = CGRect(x: xOffset, y: 0, width: cardWidth, height: 70)
-            communityCardsContainer.addSubview(cardView)
-            xOffset += cardWidth + cardSpacing
-        }
-        
-        communityCardsContainer.widthAnchor.constraint(equalToConstant: totalWidth).isActive = true
-    }
-    
-    private func layoutPlayerCategory(players: [PlayerSummary], in container: UIView, title: String, color: UIColor) {
-        // Category header
-        let headerLabel = UILabel()
-        headerLabel.text = title
-        headerLabel.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
-        headerLabel.textColor = .white
-        headerLabel.textAlignment = .center
-        headerLabel.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(headerLabel)
-        
+
+    private func makeSectionHeader(title: String, accent: UIColor) -> UIView {
+        let row = UIView()
+        let dot = UIView()
+        dot.backgroundColor = accent
+        dot.layer.cornerRadius = 3
+        dot.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(dot)
+
+        let label = UILabel()
+        label.text = title.uppercased()
+        label.font = .systemFont(ofSize: 11, weight: .heavy)
+        label.textColor = PokerTheme.muted
+        label.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(label)
+
         NSLayoutConstraint.activate([
-            headerLabel.topAnchor.constraint(equalTo: container.topAnchor),
-            headerLabel.centerXAnchor.constraint(equalTo: container.centerXAnchor)
+            dot.leadingAnchor.constraint(equalTo: row.leadingAnchor),
+            dot.centerYAnchor.constraint(equalTo: row.centerYAnchor),
+            dot.widthAnchor.constraint(equalToConstant: 6),
+            dot.heightAnchor.constraint(equalToConstant: 6),
+
+            label.leadingAnchor.constraint(equalTo: dot.trailingAnchor, constant: 8),
+            label.trailingAnchor.constraint(equalTo: row.trailingAnchor),
+            label.topAnchor.constraint(equalTo: row.topAnchor),
+            label.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+            row.heightAnchor.constraint(equalToConstant: 18),
         ])
-        
-        var previousView: UIView = headerLabel
-        
-        for (index, summary) in players.enumerated() {
-            let playerCard = createPlayerCard(summary: summary, color: color)
-            playerCard.translatesAutoresizingMaskIntoConstraints = false
-            container.addSubview(playerCard)
-            
-            NSLayoutConstraint.activate([
-                playerCard.topAnchor.constraint(equalTo: previousView.bottomAnchor, constant: 15),
-                playerCard.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-                playerCard.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-                playerCard.heightAnchor.constraint(greaterThanOrEqualToConstant: 120)
-            ])
-            
-            previousView = playerCard
-            
-            if index == players.count - 1 {
-                playerCard.bottomAnchor.constraint(equalTo: container.bottomAnchor).isActive = true
-            }
-        }
+        return row
     }
-    
-    private func createPlayerCard(summary: PlayerSummary, color: UIColor) -> UIView {
+
+    private func makeCommunitySection() -> UIView {
+        let container = UIView()
+        container.backgroundColor = PokerTheme.surface
+        container.layer.cornerRadius = 16
+        container.layer.borderWidth = 1
+        container.layer.borderColor = PokerTheme.border.cgColor
+        PokerTheme.applyShadowSm(container.layer)
+        container.translatesAutoresizingMaskIntoConstraints = false
+
+        let header = UILabel()
+        header.text = "Board"
+        header.font = .systemFont(ofSize: 12, weight: .heavy)
+        header.textColor = PokerTheme.muted
+        header.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(header)
+
+        let cardRow = UIView()
+        cardRow.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(cardRow)
+
+        // Build little card glyphs using the proper CardView for visual consistency.
+        let winningPool: Set<Card> = playerSummaries
+            .filter { $0.category == .winner }
+            .flatMap { $0.winningCards }
+            .reduce(into: Set<Card>()) { $0.insert($1) }
+        let cardW: CGFloat = 38
+        let cardH: CGFloat = 54
+        let gap: CGFloat = 6
+
+        for (idx, card) in communityCards.enumerated() {
+            let cv = CardView()
+            cv.style = .face
+            cv.setCard(card, faceUp: true)
+            cv.frame = CGRect(x: CGFloat(idx) * (cardW + gap), y: 0,
+                              width: cardW, height: cardH)
+            cv.highlightState = winningPool.contains(card) ? .winning : (winningPool.isEmpty ? .none : .unused)
+            cardRow.addSubview(cv)
+        }
+
+        let rowWidth = CGFloat(max(1, communityCards.count)) * cardW
+            + CGFloat(max(0, communityCards.count - 1)) * gap
+
+        NSLayoutConstraint.activate([
+            header.topAnchor.constraint(equalTo: container.topAnchor, constant: 12),
+            header.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 14),
+
+            cardRow.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 10),
+            cardRow.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            cardRow.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -14),
+            cardRow.heightAnchor.constraint(equalToConstant: cardH),
+            cardRow.widthAnchor.constraint(equalToConstant: rowWidth),
+        ])
+        return container
+    }
+
+    private func makePlayerCard(summary: PlayerSummary) -> UIView {
         let card = UIView()
-        card.backgroundColor = color
-        card.layer.cornerRadius = 12
-        card.layer.borderWidth = 2
-        card.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
-        card.layer.shadowColor = UIColor.black.cgColor
-        card.layer.shadowOffset = CGSize(width: 0, height: 4)
-        card.layer.shadowOpacity = 0.3
-        card.layer.shadowRadius = 6
-        
-        // Player name
+        card.backgroundColor = PokerTheme.surface
+        card.layer.cornerRadius = 16
+        card.layer.borderWidth = 1
+        card.layer.borderColor = (summary.category == .winner ? PokerTheme.amber.withAlphaComponent(0.55)
+                                                              : PokerTheme.border).cgColor
+        PokerTheme.applyShadowSm(card.layer)
+
         let nameLabel = UILabel()
-        nameLabel.text = summary.player.name
-        nameLabel.font = UIFont(name: "Copperplate-Bold", size: 16) ?? .boldSystemFont(ofSize: 16)
-        nameLabel.textColor = .white
+        nameLabel.text = summary.playerName
+        nameLabel.font = .systemFont(ofSize: 14, weight: .heavy)
+        nameLabel.textColor = PokerTheme.ink
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         card.addSubview(nameLabel)
-        
-        // Hand description (if winner or lost)
-        var handDescLabel: UILabel?
-        if let handDesc = summary.handDescription {
-            let label = UILabel()
-            label.text = handDesc
-            label.font = .systemFont(ofSize: 13, weight: .medium)
-            label.textColor = .white.withAlphaComponent(0.95)
-            label.translatesAutoresizingMaskIntoConstraints = false
-            card.addSubview(label)
-            handDescLabel = label
+
+        let handLabel = UILabel()
+        if summary.category == .folded {
+            handLabel.text = "Folded"
+        } else if let desc = summary.handDescription {
+            handLabel.text = desc
+        } else {
+            handLabel.text = nil
         }
-        
-        // Hole cards
-        let cardsContainer = UIView()
-        cardsContainer.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(cardsContainer)
-        
-        let cardWidth: CGFloat = 45
-        let cardSpacing: CGFloat = 8
-        
-        for (index, holeCard) in summary.player.holeCards.enumerated() {
-            let cardView = createSmallCardView(card: holeCard, width: cardWidth)
-            cardView.frame = CGRect(
-                x: CGFloat(index) * (cardWidth + cardSpacing),
-                y: 0,
-                width: cardWidth,
-                height: 60
-            )
-            cardsContainer.addSubview(cardView)
+        handLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+        handLabel.textColor = (summary.category == .winner) ? PokerTheme.amber : PokerTheme.muted
+        handLabel.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(handLabel)
+
+        let chipsLabel = UILabel()
+        if summary.category == .winner, summary.amountWon > 0 {
+            chipsLabel.text = "+$\(ChipFormatter.string(summary.amountWon)) · Stack $\(ChipFormatter.string(summary.chipsAfter))"
+        } else {
+            chipsLabel.text = "Stack $\(ChipFormatter.string(summary.chipsAfter))"
         }
-        
-        // Stats container (contributed & chips)
-        let statsContainer = UIView()
-        statsContainer.translatesAutoresizingMaskIntoConstraints = false
-        card.addSubview(statsContainer)
-        
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        
-        let contributedText = formatter.string(from: NSNumber(value: summary.player.totalInvested)) ?? "\(summary.player.totalInvested)"
-        let chipsText = formatter.string(from: NSNumber(value: summary.player.chips)) ?? "\(summary.player.chips)"
-        
-        let contributedLabel = UILabel()
-        contributedLabel.text = "💰 Chips: $\(chipsText)"
-        contributedLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        contributedLabel.textColor = .white.withAlphaComponent(0.9)
-        contributedLabel.translatesAutoresizingMaskIntoConstraints = false
-        statsContainer.addSubview(contributedLabel)
-        
-//        let chipsLabel = UILabel()
-//        chipsLabel.text = "💰 Chips: $\(chipsText)"
-//        chipsLabel.font = .systemFont(ofSize: 13, weight: .medium)
-//        chipsLabel.textColor = .white.withAlphaComponent(0.9)
-//        chipsLabel.translatesAutoresizingMaskIntoConstraints = false
-//        statsContainer.addSubview(chipsLabel)
-        
-        // Constraints
+        chipsLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        chipsLabel.textColor = PokerTheme.muted
+        chipsLabel.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(chipsLabel)
+
+        // Hole cards row (right side)
+        let holeRow = UIView()
+        holeRow.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(holeRow)
+
+        let cardW: CGFloat = 36
+        let cardH: CGFloat = 52
+        let gap: CGFloat = 6
+        let showHoles = !summary.holeCards.isEmpty
+        if showHoles {
+            for (idx, c) in summary.holeCards.enumerated() {
+                let cv = CardView()
+                cv.style = .face
+                cv.setCard(c, faceUp: true)
+                cv.frame = CGRect(x: CGFloat(idx) * (cardW + gap), y: 0,
+                                  width: cardW, height: cardH)
+                if summary.category == .winner {
+                    cv.highlightState = summary.winningCards.contains(c) ? .winning : .unused
+                } else {
+                    cv.highlightState = .none
+                }
+                holeRow.addSubview(cv)
+            }
+        }
+        let holeRowWidth: CGFloat = showHoles
+            ? CGFloat(summary.holeCards.count) * cardW
+              + CGFloat(max(0, summary.holeCards.count - 1)) * gap
+            : 0
+
         NSLayoutConstraint.activate([
             nameLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
-            nameLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
-            
-            cardsContainer.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
-            cardsContainer.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
-            cardsContainer.widthAnchor.constraint(equalToConstant: 2 * cardWidth + cardSpacing),
-            cardsContainer.heightAnchor.constraint(equalToConstant: 60),
-            
-            statsContainer.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
-            statsContainer.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
-            statsContainer.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
-            
-            contributedLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor),
-            contributedLabel.leadingAnchor.constraint(equalTo: statsContainer.leadingAnchor),
-            
-//            chipsLabel.topAnchor.constraint(equalTo: statsContainer.topAnchor),
-//            chipsLabel.trailingAnchor.constraint(equalTo: statsContainer.trailingAnchor)
+            nameLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+
+            handLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 4),
+            handLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+
+            chipsLabel.topAnchor.constraint(equalTo: handLabel.bottomAnchor, constant: 4),
+            chipsLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 14),
+            chipsLabel.trailingAnchor.constraint(lessThanOrEqualTo: holeRow.leadingAnchor, constant: -10),
+            chipsLabel.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -12),
+
+            holeRow.topAnchor.constraint(equalTo: card.topAnchor, constant: 12),
+            holeRow.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -14),
+            holeRow.heightAnchor.constraint(equalToConstant: cardH),
+            holeRow.widthAnchor.constraint(equalToConstant: max(0, holeRowWidth)),
         ])
-        
-        if let handDescLabel = handDescLabel {
-            NSLayoutConstraint.activate([
-                handDescLabel.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 4),
-                handDescLabel.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
-                handDescLabel.trailingAnchor.constraint(lessThanOrEqualTo: cardsContainer.leadingAnchor, constant: -12),
-                
-                statsContainer.topAnchor.constraint(equalTo: handDescLabel.bottomAnchor, constant: 12)
-            ])
-        } else {
-            statsContainer.topAnchor.constraint(equalTo: nameLabel.bottomAnchor, constant: 12).isActive = true
-        }
-        
         return card
     }
-    
-    private func createSmallCardView(card: Card, width: CGFloat) -> UIView {
-        let cardView = UIView()
-        cardView.backgroundColor = .white
-        cardView.layer.cornerRadius = 5
-        cardView.layer.borderWidth = 1
-        cardView.layer.borderColor = UIColor.black.withAlphaComponent(0.2).cgColor
-        cardView.layer.shadowColor = UIColor.black.cgColor
-        cardView.layer.shadowOffset = CGSize(width: 0, height: 2)
-        cardView.layer.shadowOpacity = 0.3
-        cardView.layer.shadowRadius = 3
-        
-        let height = width * 1.4
-        
-        // Rank label
-        let rankLabel = UILabel()
-        rankLabel.text = card.rank.shortString
-        rankLabel.font = .boldSystemFont(ofSize: width * 0.35)
-        rankLabel.textColor = card.suit.color
-        rankLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(rankLabel)
-        
-        // Suit label
-        let suitLabel = UILabel()
-        suitLabel.text = card.suit.symbol
-        suitLabel.font = .systemFont(ofSize: width * 0.5)
-        suitLabel.textColor = card.suit.color
-        suitLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(suitLabel)
-        
-        NSLayoutConstraint.activate([
-            rankLabel.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 3),
-            rankLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 3),
-            
-            suitLabel.centerXAnchor.constraint(equalTo: cardView.centerXAnchor),
-            suitLabel.centerYAnchor.constraint(equalTo: cardView.centerYAnchor)
-        ])
-        
-        return cardView
-    }
-    
-    // MARK: - Animation
-    private func animateEntrance() {
-        view.alpha = 0
-        view.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
-        
-        UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.5, options: .curveEaseOut, animations: {
-            self.view.alpha = 1
-            self.view.transform = .identity
-        })
-        
-        // Haptic
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-    }
-    
-    // MARK: - Actions
-    @objc private func newGameTapped() {
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
-        
-        dismiss(animated: true) {
-            self.onNewGame?()
-        }
-    }
-    
-    @objc private func menuTapped() {
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-        
-        dismiss(animated: true) {
-            self.onMenu?()
-        }
+
+    @objc private func closeTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        dismiss(animated: true) { self.onClose?() }
     }
 }

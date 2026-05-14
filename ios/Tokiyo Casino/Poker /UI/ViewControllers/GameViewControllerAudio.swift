@@ -30,9 +30,10 @@ extension GameViewController {
     }
     
     @objc func soundSettingChanged() {
-        // Update legacy mute button; the top bar keeps the prototype's ellipsis menu.
+        // Top-right chip is now the hand-details icon, not an audio toggle —
+        // keep the legacy hidden mute button in sync for any callers that
+        // still consult it.
         muteButton.setImage(getMuteButtonImage(), for: .normal)
-        topInfoBar?.menuButton.setImage(UIImage(systemName: "ellipsis"), for: .normal)
         topInfoBar?.menuButton.tintColor = PokerTheme.ink
 
         // Handle BGM based on mute state

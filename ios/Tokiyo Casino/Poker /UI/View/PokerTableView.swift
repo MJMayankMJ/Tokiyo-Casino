@@ -27,6 +27,9 @@ class PokerTableView: UIView {
     var designFrame: CGRect = .zero
     var designScale: CGFloat = 1
 
+    // Round-end overlay banner (live only between showdown and the next hand)
+    var resultBanner: RoundResultBanner?
+
     // Layout coordinates for 6-max seats, expressed as [0..1] across the
     // prototype's 360×480 table container, not the inset oval felt.
     let playerPositions: [CGPoint] = [

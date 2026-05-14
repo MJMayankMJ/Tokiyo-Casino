@@ -13,11 +13,22 @@ class CardView: UIView {
 
     enum Style { case face, hero }
 
+    /// Showdown highlight — winning cards stay bright with a warm amber border
+    /// and gold glow; unused cards fade to a beige tint with reduced opacity.
+    enum HighlightState { case none, winning, unused }
+
     private(set) var card: Card?
     private(set) var isFaceUp: Bool = false
 
     /// When set, the next setCard call will render with hero styling.
     var style: Style = .face { didSet { rebuild() } }
+
+    var highlightState: HighlightState = .none {
+        didSet {
+            guard oldValue != highlightState else { return }
+            applyHighlight()
+        }
+    }
 
     // Layers / subviews
     private let cardBack = CALayer()
@@ -38,10 +49,7 @@ class CardView: UIView {
         clipsToBounds = false
 
         // Soft drop shadow on the view
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.18
-        layer.shadowOffset = CGSize(width: 0, height: 4)
-        layer.shadowRadius = 8
+        applyDefaultShadow()
 
         // Back layers (themed checker)
         cardBack.backgroundColor = PokerTheme.cardBackBg.cgColor
@@ -209,6 +217,10 @@ class CardView: UIView {
             cornerRankLabel.isHidden = true
             suitCorner.isHidden = true
         }
+
+        // Re-apply any active showdown highlight so a reveal/flip doesn't
+        // overwrite the amber glow.
+        applyHighlight()
     }
 
     private func showBack() {
@@ -221,6 +233,52 @@ class CardView: UIView {
         cornerRankLabel.isHidden = true
         suitCorner.isHidden = true
         applyCheckerPattern()
+        // Reset visual side-effects of any highlight while showing the back.
+        applyDefaultShadow()
+        alpha = 1.0
+    }
+
+    private func applyDefaultShadow() {
+        layer.shadowColor = UIColor.black.cgColor
+        layer.shadowOpacity = 0.18
+        layer.shadowOffset = CGSize(width: 0, height: 4)
+        layer.shadowRadius = 8
+    }
+
+    private func applyHighlight() {
+        guard isFaceUp else {
+            applyDefaultShadow()
+            alpha = 1.0
+            return
+        }
+        switch highlightState {
+        case .none:
+            applyDefaultShadow()
+            alpha = 1.0
+            backgroundColor = .white
+            layer.borderColor = UIColor.black.withAlphaComponent(0.04).cgColor
+            layer.borderWidth = 0.5
+        case .winning:
+            // Bright white face, warm amber border, soft golden glow.
+            layer.shadowColor = PokerTheme.amber.cgColor
+            layer.shadowOpacity = 0.75
+            layer.shadowOffset = CGSize(width: 0, height: 2)
+            layer.shadowRadius = 14
+            alpha = 1.0
+            backgroundColor = .white
+            layer.borderColor = PokerTheme.amber.cgColor
+            layer.borderWidth = 1.6
+        case .unused:
+            // Faded warm beige tint, reduced opacity, soft shadow.
+            layer.shadowColor = UIColor.black.cgColor
+            layer.shadowOpacity = 0.08
+            layer.shadowOffset = CGSize(width: 0, height: 2)
+            layer.shadowRadius = 4
+            alpha = 0.55
+            backgroundColor = PokerTheme.surfaceAlt
+            layer.borderColor = UIColor.black.withAlphaComponent(0.04).cgColor
+            layer.borderWidth = 0.5
+        }
     }
 
     private func applyCheckerPattern() {

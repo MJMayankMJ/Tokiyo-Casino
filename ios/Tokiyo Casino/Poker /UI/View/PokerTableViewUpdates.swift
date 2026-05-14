@@ -99,6 +99,116 @@ extension PokerTableView {
         }
     }
 
+    // MARK: - Showdown highlights
+
+    /// Marks the cards in `winningCards` with the warm amber highlight on
+    /// both the community row and the winning player's hole cards; everything
+    /// else dims to the faded beige treatment.
+    /// `winnerPlayerId` is the seat that owns the winning hand — only that
+    /// player's unused hole card (if any) is dimmed; other non-folded players
+    /// keep their cards bright but un-highlighted so the user can still read
+    /// the showdown.
+    func highlightWinningCards(_ winningCards: [Card], winnerPlayerId: Int?) {
+        // Community cards
+        for cv in communityCardViews {
+            guard let c = cv.card, !cv.isHidden else {
+                cv.highlightState = .none
+                continue
+            }
+            cv.highlightState = winningCards.contains(c) ? .winning : .unused
+        }
+        // Player hole cards — only fade the winner's unused card; for losers
+        // we leave their two cards bright but unhighlighted so the user can
+        // still read them. The banner makes the actual winner obvious.
+        for (index, pv) in playerViews.enumerated() {
+            guard index < players.count else { continue }
+            let p = players[index]
+            if p.id == winnerPlayerId {
+                pv.applyShowdownHighlight(winningCards: winningCards, anyHighlight: true)
+            } else {
+                pv.clearCardHighlights()
+            }
+        }
+    }
+
+    func clearWinningHighlights() {
+        for cv in communityCardViews { cv.highlightState = .none }
+        for pv in playerViews { pv.clearCardHighlights() }
+    }
+
+    // MARK: - Round-result banner
+
+    /// Shows the compact result banner over the felt and auto-dismisses
+    /// after `duration`. Banner is positioned between the pot pill and the
+    /// community row so it doesn't cover either.
+    func showRoundResultBanner(entries: [RoundResultBanner.Entry],
+                               duration: TimeInterval,
+                               completion: @escaping () -> Void) {
+        resultBanner?.removeFromSuperview()
+        let banner = RoundResultBanner(entries: entries)
+        banner.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(banner)
+        resultBanner = banner
+
+        // Anchor the banner just above the community card row so multi-winner
+        // entries can stack upward without ever covering the highlighted
+        // cards. The pot pill can be briefly overlapped — it's not a card.
+        let communityTop = communityCardViews.first?.frame.minY ?? designFrame.midY
+        let maxW = min(designFrame.width - 40 * designScale, 280 * designScale)
+        NSLayoutConstraint.activate([
+            banner.centerXAnchor.constraint(equalTo: centerXAnchor),
+            banner.bottomAnchor.constraint(equalTo: topAnchor, constant: communityTop - 8 * designScale),
+            banner.widthAnchor.constraint(lessThanOrEqualToConstant: maxW),
+        ])
+        banner.presentAnimated()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            guard let self else { completion(); return }
+            if self.resultBanner === banner {
+                banner.dismissAnimated { [weak self] in
+                    self?.resultBanner = nil
+                    completion()
+                }
+            } else {
+                completion()
+            }
+        }
+    }
+
+    func dismissRoundResultBanner() {
+        guard let banner = resultBanner else { return }
+        resultBanner = nil
+        banner.dismissAnimated {}
+    }
+
+    // MARK: - Pot animation
+
+    /// Animates a snapshot of the pot pill flying toward the winner's seat.
+    func animatePotTo(playerId: Int) {
+        guard let index = players.firstIndex(where: { $0.id == playerId }),
+              index < playerViews.count else { return }
+        let target = playerViews[index]
+
+        guard let snapshot = potPill.snapshotView(afterScreenUpdates: false) else { return }
+        snapshot.frame = potPill.frame
+        addSubview(snapshot)
+
+        let destination = convert(target.center, from: target.superview)
+        UIView.animate(
+            withDuration: 0.85,
+            delay: 0,
+            usingSpringWithDamping: 0.85,
+            initialSpringVelocity: 0.6,
+            options: [.curveEaseInOut]
+        ) {
+            snapshot.center = destination
+            snapshot.transform = CGAffineTransform(scaleX: 0.45, y: 0.45)
+            snapshot.alpha = 0.0
+        } completion: { _ in
+            snapshot.removeFromSuperview()
+        }
+    }
+
     func clearTable() {
         for cardView in communityCardViews {
             UIView.animate(withDuration: 0.2) {
@@ -126,5 +236,10 @@ extension PokerTableView {
             playerView.setHighlighted(false)
             playerView.resetCardPresentation()
         }
+
+        // Drop any showdown overlays from the previous hand.
+        clearWinningHighlights()
+        resultBanner?.removeFromSuperview()
+        resultBanner = nil
     }
 }

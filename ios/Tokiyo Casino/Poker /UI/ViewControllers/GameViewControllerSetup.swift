@@ -20,10 +20,13 @@ extension GameViewController {
         view.addSubview(topBar)
         topInfoBar = topBar
 
-        // Wire the existing menu behavior into the prototype's back + ellipsis chips.
+        // Back chip keeps the legacy menu (New Game / Mute / Exit) since the
+        // top-right chip is now a hand-details affordance.
         topBar.backButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
         topBar.menuButton.tintColor = PokerTheme.ink
-        topBar.menuButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
+        topBar.menuButton.addTarget(self, action: #selector(handDetailsTapped), for: .touchUpInside)
+        // Disabled until the first completed hand provides data to show.
+        refreshHandDetailsButton()
 
         // The legacy `menuButton` / `muteButton` ivars are kept off-screen so
         // any cross-references (e.g. audio toggle updates) continue to work.

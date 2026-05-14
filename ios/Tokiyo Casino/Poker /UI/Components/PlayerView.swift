@@ -490,7 +490,35 @@ class PlayerView: UIView {
             card1.style = .face
             card2.style = .face
         }
+        clearCardHighlights()
         setNeedsLayout()
+    }
+
+    /// Apply showdown highlight. Cards belonging to the winning hand stay
+    /// bright with an amber border/glow; the other (or folded) hole cards
+    /// fade. Call with `winningCards` containing every Card present in the
+    /// winner's best 5-card hand.
+    func applyShowdownHighlight(winningCards: [Card], anyHighlight: Bool) {
+        guard let player else { return }
+        // Don't touch folded players visually — their cards are hidden.
+        if player.isFolded { return }
+
+        for cv in [card1, card2] {
+            guard let c = cv.card else {
+                cv.highlightState = .none
+                continue
+            }
+            if winningCards.contains(c) {
+                cv.highlightState = .winning
+            } else {
+                cv.highlightState = anyHighlight ? .unused : .none
+            }
+        }
+    }
+
+    func clearCardHighlights() {
+        card1.highlightState = .none
+        card2.highlightState = .none
     }
 
     func revealCards() {
