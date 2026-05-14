@@ -24,6 +24,7 @@ final class BettingControlsView: UIView {
     private let raiseSubLabel = UILabel()
     private let minusButton = UIButton(type: .system)
     private let plusButton = UIButton(type: .system)
+    private let sliderTouchArea = UIView()
     private let track = UIView()
     private let fill = UIView()
     private let thumb = UIView()
@@ -50,7 +51,8 @@ final class BettingControlsView: UIView {
     private var canRaise: Bool = false
     private var hasRaiseAction: Bool = false
     private var raisePanelExpanded: Bool = false
-    private var quickBetButtons: [(button: QuickBetButton, value: Int, isAllIn: Bool)] = []
+    private var quickBetButtons: [(button: QuickBetButton, label: String, value: Int, effectiveValue: Int, isAvailable: Bool, isAllIn: Bool)] = []
+    private var selectedQuickBetLabel: String?
 
     var preferredHeight: CGFloat {
         if isHidden { return 0 }
@@ -114,11 +116,16 @@ final class BettingControlsView: UIView {
         plusButton.addTarget(self, action: #selector(stepUp), for: .touchUpInside)
         raisePanel.addSubview(plusButton)
 
-        // Track / fill / thumb
+        // Track / fill / thumb. The visible track is 6pt tall, but the
+        // interaction surface mirrors the JSX hit target at 26pt.
+        sliderTouchArea.backgroundColor = .clear
+        sliderTouchArea.translatesAutoresizingMaskIntoConstraints = false
+        raisePanel.addSubview(sliderTouchArea)
+
         track.backgroundColor = PokerTheme.surfaceAlt
         track.layer.cornerRadius = 3
         track.translatesAutoresizingMaskIntoConstraints = false
-        raisePanel.addSubview(track)
+        sliderTouchArea.addSubview(track)
 
         fill.backgroundColor = PokerTheme.forest
         fill.layer.cornerRadius = 3
@@ -135,12 +142,13 @@ final class BettingControlsView: UIView {
         thumb.layer.shadowRadius = 4
         thumb.translatesAutoresizingMaskIntoConstraints = true
         thumb.isHidden = true
-        raisePanel.addSubview(thumb)
+        sliderTouchArea.addSubview(thumb)
 
         let pan = UIPanGestureRecognizer(target: self, action: #selector(trackPanned(_:)))
-        track.addGestureRecognizer(pan)
+        sliderTouchArea.addGestureRecognizer(pan)
         let tap = UITapGestureRecognizer(target: self, action: #selector(trackTapped(_:)))
-        track.addGestureRecognizer(tap)
+        sliderTouchArea.addGestureRecognizer(tap)
+        thumb.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(trackPanned(_:))))
         trackPanGesture = pan
 
         // Quick bets row
@@ -204,14 +212,19 @@ final class BettingControlsView: UIView {
             plusButton.widthAnchor.constraint(equalToConstant: 36),
             plusButton.heightAnchor.constraint(equalToConstant: 36),
 
-            track.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
-            track.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
-            track.topAnchor.constraint(equalTo: raiseSubLabel.bottomAnchor, constant: 10),
+            sliderTouchArea.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
+            sliderTouchArea.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
+            sliderTouchArea.topAnchor.constraint(equalTo: raiseSubLabel.bottomAnchor, constant: 0),
+            sliderTouchArea.heightAnchor.constraint(equalToConstant: 26),
+
+            track.leadingAnchor.constraint(equalTo: sliderTouchArea.leadingAnchor),
+            track.trailingAnchor.constraint(equalTo: sliderTouchArea.trailingAnchor),
+            track.centerYAnchor.constraint(equalTo: sliderTouchArea.centerYAnchor),
             track.heightAnchor.constraint(equalToConstant: 6),
 
             quickStack.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
             quickStack.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
-            quickStack.topAnchor.constraint(equalTo: track.bottomAnchor, constant: 16),
+            quickStack.topAnchor.constraint(equalTo: sliderTouchArea.bottomAnchor, constant: 6),
             quickStack.heightAnchor.constraint(equalToConstant: 32),
             quickStack.bottomAnchor.constraint(equalTo: raisePanel.bottomAnchor, constant: -12),
         ]
@@ -270,7 +283,8 @@ final class BettingControlsView: UIView {
         self.hasRaiseAction = canRaiseAction
         self.minRaise = canRaiseAction ? minRaise : self.maxRaise
         self.canRaise = canRaiseAction || canAllIn
-        self.raiseValue = clampedRaiseDelta(raiseValue == 0 ? self.minRaise : raiseValue)
+        self.raiseValue = clampedRaiseDelta(self.minRaise)
+        self.selectedQuickBetLabel = canRaiseAction ? "Min" : nil
 
         // Fold
         foldButton.label = "Fold"
@@ -379,7 +393,7 @@ final class BettingControlsView: UIView {
     }
 
     private func stepSize() -> Int {
-        25
+        max(1, minRaise / 2)
     }
 
     @objc private func trackPanned(_ rec: UIPanGestureRecognizer) {
@@ -400,8 +414,9 @@ final class BettingControlsView: UIView {
         setRaise(Int(stepped))
     }
 
-    private func setRaise(_ value: Int) {
+    private func setRaise(_ value: Int, selectedQuickBetLabel: String? = nil) {
         raiseValue = clampedRaiseDelta(value)
+        self.selectedQuickBetLabel = selectedQuickBetLabel
         raiseButton.sublabel = "$\(ChipFormatter.string(displayRaiseTotal))"
         updateRaiseLabels()
         positionThumb()
@@ -420,6 +435,7 @@ final class BettingControlsView: UIView {
         if raisePanelExpanded {
             raiseButton.sublabel = "$\(ChipFormatter.string(displayRaiseTotal))"
         }
+        updateStepperState()
     }
 
     private func positionThumb() {
@@ -442,6 +458,15 @@ final class BettingControlsView: UIView {
         fill.frame = CGRect(x: 0, y: 0, width: track.bounds.width * pct, height: track.bounds.height)
     }
 
+    private func updateStepperState() {
+        let canStepDown = raiseValue > minRaise
+        let canStepUp = raiseValue < maxRaise
+        minusButton.isEnabled = canStepDown
+        plusButton.isEnabled = canStepUp
+        minusButton.alpha = canStepDown ? 1.0 : 0.45
+        plusButton.alpha = canStepUp ? 1.0 : 0.45
+    }
+
     private func rebuildQuickBets() {
         quickStack.arrangedSubviews.forEach {
             quickStack.removeArrangedSubview($0)
@@ -452,38 +477,50 @@ final class BettingControlsView: UIView {
         let maxTarget = displayAllInTotal
         let bets: [(label: String, value: Int, isAllIn: Bool)] = [
             ("Min", minTarget, false),
-            ("½ Pot", round25(Double(pot) * 0.5), false),
-            ("Pot", round25(Double(pot)), false),
-            ("2× Pot", round25(Double(pot) * 2), false),
+            ("½ Pot", potTarget(multiplier: 0.5), false),
+            ("Pot", potTarget(multiplier: 1.0), false),
+            ("2× Pot", potTarget(multiplier: 2.0), false),
             ("All-In", maxTarget, true),
         ]
         for bet in bets {
+            let effectiveTarget = min(maxTarget, max(minTarget, bet.value))
+            let isAvailable = maxTarget >= minTarget && (bet.isAllIn || bet.value >= minTarget)
             let button = QuickBetButton()
             button.title = bet.label
             button.isAllIn = bet.isAllIn
+            button.isEnabled = isAvailable
             button.onTap = { [weak self] in
                 guard let self else { return }
-                let target = min(maxTarget, max(minTarget, bet.value))
-                self.setRaise(target - self.currentTableBet)
+                guard isAvailable else { return }
+                self.setRaise(effectiveTarget - self.currentTableBet, selectedQuickBetLabel: bet.label)
             }
             quickStack.addArrangedSubview(button)
-            quickBetButtons.append((button, bet.value, bet.isAllIn))
+            quickBetButtons.append((button, bet.label, bet.value, effectiveTarget, isAvailable, bet.isAllIn))
         }
         updateQuickBetSelection()
     }
 
     private func updateQuickBetSelection() {
         let currentTarget = displayRaiseTotal
-        let minTarget = hasRaiseAction ? currentTableBet + minRaise : displayAllInTotal
+        guard let selectedQuickBetLabel else {
+            for item in quickBetButtons {
+                item.button.isSelectedBet = false
+            }
+            return
+        }
+
+        let selectedStillMatches = quickBetButtons.contains {
+            $0.label == selectedQuickBetLabel && $0.isAvailable && $0.effectiveValue == currentTarget
+        }
+
         for item in quickBetButtons {
-            let clampedTarget = min(displayAllInTotal, max(minTarget, item.value))
-            item.button.isSelectedBet = abs(clampedTarget - currentTarget) < 1
+            item.button.isSelectedBet = selectedStillMatches && item.isAvailable && item.label == selectedQuickBetLabel
         }
     }
 
-    private func round25(_ v: Double) -> Int {
-        let stepped = (v / 25.0).rounded() * 25.0
-        return max(0, Int(stepped))
+    private func potTarget(multiplier: Double) -> Int {
+        guard pot > 0 else { return 0 }
+        return max(0, Int((Double(pot) * multiplier).rounded()))
     }
 
     private func showRaisePanel() {
@@ -656,6 +693,7 @@ private final class QuickBetButton: UIView {
     var title: String = "" { didSet { label.text = title } }
     var isAllIn: Bool = false { didSet { applyStyle() } }
     var isSelectedBet: Bool = false { didSet { applyStyle() } }
+    var isEnabled: Bool = true { didSet { applyStyle() } }
     var onTap: (() -> Void)?
 
     private let label = UILabel()
@@ -683,7 +721,10 @@ private final class QuickBetButton: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func applyStyle() {
-        if isSelectedBet {
+        isUserInteractionEnabled = isEnabled
+        alpha = isEnabled ? 1.0 : 0.42
+
+        if isSelectedBet && isEnabled {
             backgroundColor = isAllIn ? PokerTheme.amber : PokerTheme.forest
             layer.borderColor = backgroundColor?.cgColor
             label.textColor = .white
@@ -696,6 +737,7 @@ private final class QuickBetButton: UIView {
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesBegan(touches, with: event)
+        guard isEnabled else { return }
         UIView.animate(withDuration: 0.08) {
             self.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
         }
@@ -703,6 +745,7 @@ private final class QuickBetButton: UIView {
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         super.touchesEnded(touches, with: event)
         UIView.animate(withDuration: 0.10) { self.transform = .identity }
+        guard isEnabled else { return }
         if let touch = touches.first, bounds.contains(touch.location(in: self)) {
             onTap?()
         }
