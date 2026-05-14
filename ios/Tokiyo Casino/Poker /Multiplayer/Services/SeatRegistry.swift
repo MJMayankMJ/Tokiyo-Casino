@@ -174,7 +174,17 @@ final class SeatRegistry {
         Set(seats.filter { $0.isDisconnected }.map { $0.seatId })
     }
 
-    func aiTakenOverSeats() -> Set<Int> {
-        Set(seats.filter { $0.aiTookOver }.map { $0.seatId })
+    /// Remote seats whose human has left and not yet rejoined. These
+    /// seats are held vacant; the host service mirrors this set onto
+    /// the GameManager's `Player.isAway` so the dealer skips them.
+    func awaySeats() -> Set<Int> {
+        Set(seats.filter { $0.kind == .remote && $0.isDisconnected }.map { $0.seatId })
+    }
+
+    /// Seats currently filled by AI bots — used by the kick-AI prompt
+    /// to enumerate which seats the host can vacate for a mid-game
+    /// joiner.
+    func aiSeats() -> [SeatRecord] {
+        seats.filter { $0.kind == .ai }
     }
 }

@@ -80,6 +80,13 @@ class Player {
     var hasActed: Bool = false
     var isAllIn: Bool = false
     var isFolded: Bool = false
+    /// True when a human has disconnected / explicitly left and the
+    /// seat is held vacant for them. Treated as folded for the rest of
+    /// the current hand and skipped at the next deal so the seat
+    /// doesn't get hole cards until they rejoin (clear `isAway`).
+    /// Solo poker never sets this; only the multiplayer host service
+    /// touches it.
+    var isAway: Bool = false
     var winnings: Int = 0
     var lastAction: PlayerAction?
     var totalInvested: Int = 0
@@ -99,10 +106,13 @@ class Player {
         func reset() {
             holeCards = []
             currentBet = 0
-            isActive = chips > 0
-            hasActed = false
+            // `isAway` seats are reserved for an offline human. They
+            // get reset for the new hand but stay folded + inactive so
+            // GameManager's turn loop never tries to deal them in.
+            isActive = chips > 0 && !isAway
+            hasActed = isAway
             isAllIn = false
-            isFolded = false
+            isFolded = isAway
             winnings = 0
             lastAction = nil
             totalInvested = 0 // Reset investment

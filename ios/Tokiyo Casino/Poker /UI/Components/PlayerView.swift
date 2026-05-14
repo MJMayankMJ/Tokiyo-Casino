@@ -193,6 +193,14 @@ class PlayerView: UIView {
 
     private func updateStatusBadge() {
         guard let player else { return }
+        // Multiplayer: a human seat held vacant for an offline player.
+        // Show a distinct "AWAY" label so the table doesn't conflate
+        // this with a regular fold. Solo poker never sets `isAway`.
+        if player.isAway {
+            showBadge(text: "AWAY", color: PokerTheme.muted)
+            alpha = 0.40
+            return
+        }
         if player.isFolded {
             showBadge(text: "FOLDED", color: PokerTheme.muted)
             alpha = 0.55

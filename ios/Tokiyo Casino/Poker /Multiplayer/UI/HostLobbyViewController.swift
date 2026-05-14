@@ -223,14 +223,23 @@ final class HostLobbyViewController: UIViewController {
                          message: "Wait for at least one friend to join, or turn on AI fill.")
             return
         }
-        let didStart = hostService.startGame()
-        guard didStart else {
-            presentAlert(title: "Couldn't start", message: "Need at least 2 seats to play.")
-            return
-        }
+        // Present the network game BEFORE calling startGame so the new
+        // VC is registered as the service's observer before any initial
+        // `cardsDealt` / `gamePhaseDidChange` / `currentPlayerChanged`
+        // callbacks fire. Otherwise the lobby (still observer) would
+        // discard the first private-cards delivery and the host would
+        // see no cards until the flop. The replay-on-attach in the
+        // service is the belt; this is the suspenders.
         let vc = NetworkGameViewController(role: .host(hostService))
         vc.modalPresentationStyle = .fullScreen
-        present(vc, animated: true)
+        present(vc, animated: true) { [weak self] in
+            guard let self else { return }
+            let didStart = self.hostService.startGame()
+            if !didStart {
+                self.presentAlert(title: "Couldn't start",
+                                  message: "Need at least 2 seats to play.")
+            }
+        }
     }
 
     @objc private func cancelTapped() {

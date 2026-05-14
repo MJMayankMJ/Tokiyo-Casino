@@ -34,5 +34,12 @@ enum PokerProtocol {
 
     /// How long the host waits for a disconnected guest to reconnect
     /// before swapping their seat to an AI bot (PRD §5).
+    /// Not currently used — friends mode no longer does AI takeover —
+    /// kept for the wire-protocol header so future modes can opt in.
     static let reconnectGraceSeconds: TimeInterval = 30
+
+    /// After this long away, an unclaimed remote seat is recycled to
+    /// `.open` so a new joiner can take it. Prevents orphaned seats
+    /// from a guest that force-quit and won't return.
+    static let staleAwaySeatSeconds: TimeInterval = 5 * 60
 }

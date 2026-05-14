@@ -13,9 +13,12 @@ extension GameManager {
     func dealHoleCards() {
         print("Dealing hole cards to \(players.count) players") // Debug
         
-        // Deal two cards to each active player
+        // Deal two cards to each active player. `isAway` seats are
+        // multiplayer humans who have left/disconnected; they're held
+        // vacant and skipped at the deal so we don't burn cards on
+        // them.
         for _ in 0..<2 {
-            for player in players where player.chips > 0 && !player.isFolded {
+            for player in players where player.chips > 0 && !player.isFolded && !player.isAway {
                 if let card = deck.deal() {
                     player.holeCards.append(card)
                     print("Dealt \(card.description) to \(player.name)") // Debug

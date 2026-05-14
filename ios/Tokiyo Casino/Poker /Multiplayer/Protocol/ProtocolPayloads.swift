@@ -137,6 +137,13 @@ struct PublicPlayerStatePayload: Codable {
     /// sent privately via `privateCards`, never inside the public snapshot.
     let hasCards: Bool
     let isDisconnected: Bool
+    /// True when the seat is reserved for an offline human. The local
+    /// UI greys the seat and shows an "Away" badge; the seat is never
+    /// dealt in until they reconnect.
+    let isAway: Bool
+    /// Kept for wire compatibility but no longer set — v1 used to swap
+    /// disconnected humans for AI bots; the current behaviour holds
+    /// the seat for the human instead.
     let isAITakenOver: Bool
     /// Only populated at showdown for seats whose cards should be visible
     /// to everyone. nil at all other times to preserve privacy.

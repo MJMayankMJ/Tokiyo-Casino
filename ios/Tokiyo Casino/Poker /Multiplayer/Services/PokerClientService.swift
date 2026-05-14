@@ -62,7 +62,25 @@ final class PokerClientService {
     let displayName: String
 
     private let transport: MultiplayerTransport
-    weak var observer: PokerClientServiceObserver?
+
+    /// Latest authoritative state — kept so a freshly-attached observer
+    /// (the `NetworkGameViewController` swapping in over the lobby) can
+    /// be replayed immediately rather than waiting for the next message.
+    /// Without this, the first `tableSnapshot` and `privateCards` events
+    /// of a hand can arrive at the lobby (whose handlers do nothing) and
+    /// the network table renders blank until the next street.
+    private var lastSnapshot: TableSnapshotPayload?
+    private var lastLobby: LobbySnapshotPayload?
+    private var lastPrivateCards: PrivateCardsPayload?
+    private var lastActionRequest: ActionRequestPayload?
+
+    weak var observer: PokerClientServiceObserver? {
+        didSet {
+            guard let newObs = observer else { return }
+            if let old = oldValue, old === newObs { return }
+            replayCurrentState(to: newObs)
+        }
+    }
 
     /// Peer id of the host we're connected to (assigned when invite is
     /// accepted). All `send(...)` calls target this peer.
@@ -104,6 +122,13 @@ final class PokerClientService {
     func join(table: DiscoveredTable) throws {
         state = .connectingToHost(peerId: table.peerId)
         hostPeerId = table.peerId
+        // If we have a saved reconnect token for this host+table from
+        // an earlier session (e.g. force-killed and reopened), reuse
+        // it so we land on the same seat instead of grabbing a new one.
+        if let saved = ReconnectTokenStore.token(forHost: table.peerId,
+                                                 tableId: table.advert.tableId) {
+            reconnectToken = saved
+        }
         try transport.invite(peerId: table.peerId, context: nil)
         // The actual `joinRequest` payload is sent after the MPC session
         // reaches `.peerConnected` for the host (see handlePeerEvent).
@@ -136,6 +161,13 @@ final class PokerClientService {
     }
 
     func leaveTable() {
+        // Friends-mode disconnect: the host treats explicit "Leave"
+        // and a transient transport drop identically — both flow
+        // through `peerDisconnected` → `markSeatAwayMidGame`. We
+        // intentionally do NOT send a `peerLeft` message: MPC's
+        // reliable send can be dropped from the queue when we tear
+        // down the session in the next line, so it isn't a dependable
+        // signal. One code path, fewer invariants.
         transport.disconnect()
         state = .disconnected
     }
@@ -220,7 +252,19 @@ final class PokerClientService {
                 sessionId = p.lobby.sessionId
                 tableId = p.lobby.tableId
                 reconnectToken = p.reconnectToken
+                // Persist so a force-kill + relaunch can still reclaim
+                // this seat (see ReconnectTokenStore in
+                // MultiplayerEntryViewController.swift).
+                if let host = hostPeerId {
+                    ReconnectTokenStore.save(
+                        hostPeerId: host,
+                        tableId: p.lobby.tableId,
+                        token: p.reconnectToken,
+                        seatId: p.seatId
+                    )
+                }
                 state = .inLobby
+                lastLobby = p.lobby
                 observer?.client(self, didReceiveJoinAccepted: p)
                 observer?.client(self, didReceiveLobby: p.lobby)
             }
@@ -235,14 +279,20 @@ final class PokerClientService {
         case .seatUpdate:
             if let p: SeatUpdatePayload = try? decoded.decodePayload(),
                let session = sessionId, let table = tableId {
+                // Preserve the blinds/buy-in we learned in joinAccepted /
+                // lobbySettingsChanged — seatUpdate is a seats-only diff.
+                let prev = lastLobby
                 let snap = LobbySnapshotPayload(
                     tableId: table, sessionId: session,
-                    smallBlind: 0, bigBlind: 0,
-                    startingChips: 0, totalSeats: p.seats.count,
-                    aiFillEnabled: true,
+                    smallBlind: prev?.smallBlind ?? 0,
+                    bigBlind: prev?.bigBlind ?? 0,
+                    startingChips: prev?.startingChips ?? 0,
+                    totalSeats: p.seats.count,
+                    aiFillEnabled: prev?.aiFillEnabled ?? true,
                     seats: p.seats,
                     hostPeerId: hostPeerId ?? ""
                 )
+                lastLobby = snap
                 observer?.client(self, didReceiveLobby: snap)
             }
 
@@ -260,16 +310,26 @@ final class PokerClientService {
         case .tableSnapshot:
             if let p: TableSnapshotPayload = try? decoded.decodePayload() {
                 state = .inGame
+                lastSnapshot = p
+                // Clear stale per-hand caches when a new hand arrives.
+                if let priv = lastPrivateCards, priv.handNumber != p.handNumber {
+                    lastPrivateCards = nil
+                }
+                if p.currentPlayerSeat != seatId {
+                    lastActionRequest = nil
+                }
                 observer?.client(self, didReceiveSnapshot: p)
             }
 
         case .privateCards:
             if let p: PrivateCardsPayload = try? decoded.decodePayload() {
+                lastPrivateCards = p
                 observer?.client(self, didReceivePrivateCards: p)
             }
 
         case .actionRequest:
             if let p: ActionRequestPayload = try? decoded.decodePayload() {
+                lastActionRequest = p
                 observer?.client(self, didReceiveActionRequest: p)
             }
 
@@ -317,6 +377,8 @@ final class PokerClientService {
         case .hostEndingTable:
             if let p: HostEndingTablePayload = try? decoded.decodePayload() {
                 state = .disconnected
+                // Drop the saved reconnect token — this table is gone.
+                if let host = hostPeerId { ReconnectTokenStore.clear(hostPeerId: host) }
                 observer?.client(self, hostEnded: p.reason)
                 transport.disconnect()
             }
@@ -331,6 +393,30 @@ final class PokerClientService {
             // Client doesn't act on these — they originate from this side
             // or are unused in v1.
             break
+        }
+    }
+
+    // MARK: Replay
+
+    /// Replays cached state at a freshly-attached observer so the UI
+    /// reflects the current table immediately. Without this, the first
+    /// few messages of a hand (snapshot, private cards, action request)
+    /// can land on the lobby's empty handlers and the table renders
+    /// blank.
+    private func replayCurrentState(to observer: PokerClientServiceObserver) {
+        if let lobby = lastLobby {
+            observer.client(self, didReceiveLobby: lobby)
+        }
+        if let snap = lastSnapshot {
+            observer.client(self, didReceiveSnapshot: snap)
+        }
+        if let priv = lastPrivateCards,
+           let snap = lastSnapshot,
+           priv.handNumber == snap.handNumber {
+            observer.client(self, didReceivePrivateCards: priv)
+        }
+        if let req = lastActionRequest, req.seatId == seatId {
+            observer.client(self, didReceiveActionRequest: req)
         }
     }
 

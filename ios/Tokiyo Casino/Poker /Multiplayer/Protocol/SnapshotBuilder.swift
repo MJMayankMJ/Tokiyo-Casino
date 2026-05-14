@@ -19,7 +19,7 @@ enum SnapshotBuilder {
         handNumber: UInt32,
         playerKindBySeat: [Int: String],
         disconnectedSeats: Set<Int>,
-        aiTakenOverSeats: Set<Int>,
+        awaySeats: Set<Int>,
         revealedSeats: Set<Int> = [],
         isPaused: Bool = false,
         pausedForSeatId: Int? = nil
@@ -48,7 +48,8 @@ enum SnapshotBuilder {
                 lastActionAmount: encodeLastAction(player.lastAction).amount,
                 hasCards: !player.holeCards.isEmpty,
                 isDisconnected: disconnectedSeats.contains(seatIndex),
-                isAITakenOver: aiTakenOverSeats.contains(seatIndex),
+                isAway: awaySeats.contains(seatIndex) || player.isAway,
+                isAITakenOver: false,
                 revealedHoleCards: reveal ? player.holeCards.map { $0.dto } : nil
             )
         }
