@@ -117,10 +117,14 @@ final class PokerHostService {
     private var staleSeatTimers: [Int: Timer] = [:]
     /// Per-pending-join expiry timer (60s, see issue 4).
     private var pendingJoinExpiryTimers: [String: Timer] = [:]
+    /// Hard stop once the table is ending; delayed callbacks must not
+    /// resurrect a hand after the transport has been torn down.
+    private var isEnded: Bool = false
 
     /// Coalescing buffer for per-side-pot winner notifications.
     private var pendingWinners: [(player: Player, amount: Int, handDescription: String)] = []
     private var pendingWinnersFlush: DispatchWorkItem?
+    private var nextHandWorkItem: DispatchWorkItem?
 
     /// Latest broadcast snapshot. Cached so a freshly-attached observer
     /// (e.g. the `NetworkGameViewController` swapping in after the
@@ -167,6 +171,7 @@ final class PokerHostService {
     }
 
     deinit {
+        cancelDeferredWork()
         NotificationCenter.default.removeObserver(self)
     }
 
@@ -226,6 +231,7 @@ final class PokerHostService {
 
     @discardableResult
     func startGame() -> Bool {
+        guard !isEnded else { return false }
         guard !hasStarted else { return true }
 
         // Fill open seats with AI (if enabled), otherwise compact roster.
@@ -291,6 +297,8 @@ final class PokerHostService {
     }
 
     func beginNextHand() {
+        guard !isEnded else { return }
+        nextHandWorkItem = nil
         guard let gm = gameManager else { return }
 
         // Pause check — "friends mode" rule: if the host is alone at
@@ -441,6 +449,7 @@ final class PokerHostService {
     // MARK: Incoming
 
     private func handlePeerEvent(_ event: TransportPeerEvent) {
+        guard !isEnded else { return }
         switch event {
         case .receivedInvitation(let peerId, _, _):
             // Friends mode: auto-accept the MPC invitation. Actual seating
@@ -481,6 +490,7 @@ final class PokerHostService {
         pendingJoinExpiryTimers[peerId]?.invalidate()
         let timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: false) { [weak self] _ in
             guard let self else { return }
+            guard !self.isEnded else { return }
             guard self.pendingJoins.contains(where: { $0.peerId == peerId }) else { return }
             let wasHead = self.pendingJoins.first?.peerId == peerId
             self.pendingJoins.removeAll { $0.peerId == peerId }
@@ -495,6 +505,7 @@ final class PokerHostService {
     }
 
     private func handleIncoming(data: Data, fromPeer peerId: String) {
+        guard !isEnded else { return }
         let decoded: DecodedPokerMessage
         do { decoded = try PokerWireCodec.decode(data) }
         catch {
@@ -672,9 +683,13 @@ final class PokerHostService {
         seatRegistry.seats[seatId] = rec
 
         // Mirror onto the GameManager.
+        var currentPlayerWasReplaced = false
+        var replacedPlayerForTurn: Player?
         if let gm = gameManager {
+            currentPlayerWasReplaced = gm.currentPlayer?.id == seatId
             if let idx = gm.players.firstIndex(where: { $0.id == seatId }) {
                 let old = gm.players[idx]
+                replacedPlayerForTurn = old
                 let startingChips = kickedAI ? old.chips : config.startingChips
                 let replacement = Player(id: seatId, name: displayName,
                                          type: .human, chips: startingChips)
@@ -683,12 +698,16 @@ final class PokerHostService {
                 replacement.isFolded = true
                 replacement.isActive = false
                 gm.players[idx] = replacement
+                if !kickedAI {
+                    gm.adjustExpectedChipTotal(by: startingChips - old.chips)
+                }
             } else {
                 // Snapshot/gameManager out of sync (shouldn't happen) — append.
                 let p = Player(id: seatId, name: displayName, type: .human,
                                chips: config.startingChips)
                 p.isAway = true; p.isFolded = true; p.isActive = false
                 gm.players.append(p)
+                gm.adjustExpectedChipTotal(by: config.startingChips)
             }
         }
 
@@ -703,6 +722,10 @@ final class PokerHostService {
         broadcastLobbySnapshot()
         broadcastSnapshot()
         try? transport.updateAdvert(currentAdvert())
+
+        if currentPlayerWasReplaced {
+            advanceTurnAfterRemovedCurrent(replacedPlayerForTurn)
+        }
     }
 
     /// Host decision: accept the head pending join and kick the named
@@ -796,6 +819,12 @@ final class PokerHostService {
                                reason: "Not your turn.", to: peerId)
             return
         }
+        guard payload.clientKnownSequence == sequence else {
+            sendActionRejected(seatId: payload.seatId, action: payload.action,
+                               reason: "Stale game state.", to: peerId)
+            resyncSeat(seatId: payload.seatId)
+            return
+        }
         guard let action = SnapshotBuilder.decodeAction(name: payload.action,
                                                         raiseAmount: payload.raiseAmount) else {
             sendActionRejected(seatId: payload.seatId, action: payload.action,
@@ -804,21 +833,58 @@ final class PokerHostService {
         }
 
         let valid = gm.getValidActions(for: player)
-        guard SnapshotBuilder.actionsMatch(action, anyOf: valid) else {
+        guard validateIntentPayload(payload, action: action, validActions: valid, player: player, gameManager: gm) else {
             sendActionRejected(seatId: payload.seatId, action: payload.action,
                                reason: "Action not currently legal.", to: peerId)
             return
         }
 
-        sequence &+= 1
+        let appliedSequence = nextSequence()
         send(type: .actionAccepted, payload: ActionAcceptedPayload(
             seatId: payload.seatId,
             action: payload.action,
             raiseAmount: payload.raiseAmount,
-            appliedSequence: sequence
-        ), to: [peerId])
+            appliedSequence: appliedSequence
+        ), to: [peerId], sequence: appliedSequence)
 
         gm.processPlayerAction(action, for: player)
+    }
+
+    private func validateIntentPayload(_ payload: PlayerActionIntentPayload,
+                                       action: PlayerAction,
+                                       validActions: [PlayerAction],
+                                       player: Player,
+                                       gameManager gm: GameManager) -> Bool {
+        switch action {
+        case .raise(let amount):
+            guard validActions.contains(where: {
+                if case .raise = $0 { return true }
+                return false
+            }) else { return false }
+            let callAmount = max(0, gm.currentBet - player.currentBet)
+            let maxRaise = max(0, player.chips - callAmount)
+            return amount >= gm.minRaise && amount <= maxRaise
+        case .fold:
+            return payload.raiseAmount == nil && validActions.contains {
+                if case .fold = $0 { return true }
+                return false
+            }
+        case .check:
+            return payload.raiseAmount == nil && validActions.contains {
+                if case .check = $0 { return true }
+                return false
+            }
+        case .call:
+            return payload.raiseAmount == nil && validActions.contains {
+                if case .call = $0 { return true }
+                return false
+            }
+        case .allIn:
+            return payload.raiseAmount == nil && validActions.contains {
+                if case .allIn = $0 { return true }
+                return false
+            }
+        }
     }
 
     private func sendActionRejected(seatId: Int, action: String, reason: String, to peerId: String) {
@@ -944,12 +1010,17 @@ final class PokerHostService {
         broadcastSnapshot()
         scheduleStaleSeatReaper(seatId: seatId)
         if wasCurrent {
-            if gm.shouldEndBettingRound() {
-                gm.endBettingRound()
-            } else {
-                gm.moveToNextPlayer(after: p)
-                gm.processNextTurn()
-            }
+            advanceTurnAfterRemovedCurrent(p)
+        }
+    }
+
+    private func advanceTurnAfterRemovedCurrent(_ removedPlayer: Player?) {
+        guard !isEnded, let gm = gameManager else { return }
+        if gm.shouldEndBettingRound() {
+            gm.endBettingRound()
+        } else {
+            gm.moveToNextPlayer(after: removedPlayer)
+            gm.processNextTurn()
         }
     }
 
@@ -963,7 +1034,8 @@ final class PokerHostService {
             withTimeInterval: PokerProtocol.staleAwaySeatSeconds,
             repeats: false
         ) { [weak self] _ in
-            self?.recycleStaleSeat(seatId: seatId)
+            guard let self, !self.isEnded else { return }
+            self.recycleStaleSeat(seatId: seatId)
         }
         staleSeatTimers[seatId] = timer
     }
@@ -1005,9 +1077,26 @@ final class PokerHostService {
     }
 
     func endTable(reason: String) {
+        guard !isEnded else { return }
+        isEnded = true
+        cancelDeferredWork()
         broadcast(type: .hostEndingTable, payload: HostEndingTablePayload(reason: reason))
         transport.disconnect()
         observer?.host(self, didFinishWithReason: reason)
+    }
+
+    private func cancelDeferredWork() {
+        staleSeatTimers.values.forEach { $0.invalidate() }
+        staleSeatTimers.removeAll()
+        pendingJoinExpiryTimers.values.forEach { $0.invalidate() }
+        pendingJoinExpiryTimers.removeAll()
+        pendingJoins.removeAll()
+        pendingJoinPayloads.removeAll()
+        pendingWinnersFlush?.cancel()
+        pendingWinnersFlush = nil
+        pendingWinners.removeAll()
+        nextHandWorkItem?.cancel()
+        nextHandWorkItem = nil
     }
 
     /// Counts how many human seats are currently connected (not away).
@@ -1029,6 +1118,7 @@ final class PokerHostService {
     // MARK: Round result coalescer
 
     @objc private func handleShowWinnerAlert(_ note: Notification) {
+        guard !isEnded else { return }
         guard let info = note.userInfo,
               let player = info["player"] as? Player,
               let amount = info["amount"] as? Int,
@@ -1045,7 +1135,7 @@ final class PokerHostService {
     }
 
     private func flushPendingRoundResult() {
-        guard let gm = gameManager else { return }
+        guard !isEnded, let gm = gameManager else { return }
         let entries = pendingWinners
         pendingWinners.removeAll()
         pendingWinnersFlush = nil
@@ -1076,9 +1166,13 @@ final class PokerHostService {
         // Auto-advance to the next hand after the banner displays.
         let displayDuration: TimeInterval = entries.count > 1 ? 3.5 : 2.8
         let postBannerGap: TimeInterval = 0.8
-        DispatchQueue.main.asyncAfter(deadline: .now() + displayDuration + postBannerGap) { [weak self] in
-            self?.beginNextHand()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, !self.isEnded else { return }
+            self.beginNextHand()
         }
+        nextHandWorkItem?.cancel()
+        nextHandWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + displayDuration + postBannerGap, execute: work)
     }
 
     // MARK: Send helpers
@@ -1106,12 +1200,14 @@ final class PokerHostService {
 
     private func send<P: Codable>(type: PokerMessageType, payload: P,
                                   to peerIds: [String],
-                                  withHandSequence: Bool = false) {
+                                  withHandSequence: Bool = false,
+                                  sequence explicitSequence: UInt64? = nil) {
+        let messageSequence = explicitSequence ?? (withHandSequence ? nextSequence() : nil)
         let envelope = PokerMessage(
             sessionId: sessionId,
             tableId: tableId,
-            handNumber: withHandSequence ? handNumber : nil,
-            sequence: withHandSequence ? nextSequence() : nil,
+            handNumber: messageSequence == nil ? nil : handNumber,
+            sequence: messageSequence,
             senderPeerId: transport.localPeerId,
             type: type,
             payload: payload
@@ -1163,33 +1259,6 @@ final class PokerHostService {
     }
 }
 
-// MARK: - Action matching helper
-
-extension SnapshotBuilder {
-    /// `getValidActions(for:)` returns canonical entries (raise carries
-    /// only the *minimum* raise amount). For intent validation we match
-    /// kind-only — the actual chip amount is clamped inside
-    /// `executeAction → player.bet(amount:)`.
-    static func actionsMatch(_ proposed: PlayerAction, anyOf valid: [PlayerAction]) -> Bool {
-        let kind: String
-        switch proposed {
-        case .fold: kind = "fold"
-        case .check: kind = "check"
-        case .call: kind = "call"
-        case .raise: kind = "raise"
-        case .allIn: kind = "allIn"
-        }
-        return valid.contains { existing in
-            switch (existing, kind) {
-            case (.fold, "fold"), (.check, "check"), (.call, "call"),
-                 (.raise, "raise"), (.allIn, "allIn"):
-                return true
-            default:
-                return false
-            }
-        }
-    }
-}
 
 // MARK: - GameManagerDelegate
 

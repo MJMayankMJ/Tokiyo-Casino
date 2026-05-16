@@ -32,6 +32,7 @@ class GameManager {
     // Game settings
     let startingChips: Int
     let playerCount: Int
+    private(set) var expectedTotalChips: Int
     
     // MARK: - Computed Properties
     var activePlayers: [Player] {
@@ -53,6 +54,7 @@ class GameManager {
     init(playerCount: Int, startingChips: Int = 1000) {
         self.playerCount = playerCount
         self.startingChips = startingChips
+        self.expectedTotalChips = playerCount * startingChips
         setupPlayers()
     }
 
@@ -67,6 +69,7 @@ class GameManager {
         self.bigBlind = bigBlind
         self.minRaise = bigBlind
         self.lastRaiseAmount = bigBlind
+        self.expectedTotalChips = seats.reduce(0) { $0 + $1.chips }
     }
 
     func setupPlayers() {
@@ -88,13 +91,17 @@ class GameManager {
             players.append(aiPlayer)
         }
     }
+
+    func adjustExpectedChipTotal(by delta: Int) {
+        expectedTotalChips += delta
+    }
     
     // MARK: - Game Control
     func startNewHand() {
         // Chip conservation check (debug only)
         #if DEBUG
         let totalChips = players.reduce(0) { $0 + $1.chips } + mainPot.amount
-        let expected = playerCount * startingChips
+        let expected = expectedTotalChips
         assert(totalChips == expected,
                "CHIP LEAK: total=\(totalChips) expected=\(expected)")
         #endif

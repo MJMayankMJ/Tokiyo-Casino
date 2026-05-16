@@ -56,7 +56,8 @@ enum ReconnectTokenStore {
         all().first { $0.hostPeerId == hostPeerId && $0.tableId == tableId }?.token
     }
 
-    static func save(hostPeerId: String, tableId: String, token: String, seatId: Int) {
+    @discardableResult
+    static func save(hostPeerId: String, tableId: String, token: String, seatId: Int) -> Bool {
         var entries = all().filter { $0.hostPeerId != hostPeerId }
         entries.append(Entry(
             hostPeerId: hostPeerId, tableId: tableId,
@@ -68,21 +69,38 @@ enum ReconnectTokenStore {
         }
         if let data = try? JSONEncoder().encode(entries) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
+            return true
         }
+        #if DEBUG
+        print("⚠️ Poker MP: failed to encode reconnect token store")
+        #endif
+        return false
     }
 
-    static func clear(hostPeerId: String) {
+    @discardableResult
+    static func clear(hostPeerId: String) -> Bool {
         let entries = all().filter { $0.hostPeerId != hostPeerId }
         if let data = try? JSONEncoder().encode(entries) {
             UserDefaults.standard.set(data, forKey: defaultsKey)
+            return true
         }
+        #if DEBUG
+        print("⚠️ Poker MP: failed to encode reconnect token store while clearing")
+        #endif
+        return false
     }
 
     private static func all() -> [Entry] {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey),
-              let entries = try? JSONDecoder().decode([Entry].self, from: data)
-        else { return [] }
-        return entries
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return [] }
+        do {
+            return try JSONDecoder().decode([Entry].self, from: data)
+        } catch {
+            #if DEBUG
+            print("⚠️ Poker MP: corrupt reconnect token store removed: \(error)")
+            #endif
+            UserDefaults.standard.removeObject(forKey: defaultsKey)
+            return []
+        }
     }
 }
 

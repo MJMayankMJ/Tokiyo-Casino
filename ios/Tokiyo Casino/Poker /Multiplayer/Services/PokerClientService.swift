@@ -229,20 +229,21 @@ final class PokerClientService {
             return
         }
 
+        // Drop stale hand-bound messages before mutating any caches.
+        if let hand = decoded.header.handNumber {
+            if hand < lastAppliedHandNumber {
+                return
+            }
+            lastAppliedHandNumber = max(lastAppliedHandNumber, hand)
+        }
+
         // Drop stale authoritative messages with a lower sequence.
         if let seq = decoded.header.sequence,
-           [.tableSnapshot, .actionAccepted, .privateCards].contains(decoded.type) {
+           [.tableSnapshot, .actionAccepted, .privateCards, .actionRequest].contains(decoded.type) {
             if seq <= lastAppliedSequence && lastAppliedSequence > 0 {
                 return
             }
             lastAppliedSequence = seq
-        }
-        if let hand = decoded.header.handNumber {
-            // Snapshots tied to an older hand are also dropped.
-            if hand < lastAppliedHandNumber && decoded.type == .tableSnapshot {
-                return
-            }
-            lastAppliedHandNumber = max(lastAppliedHandNumber, hand)
         }
 
         switch decoded.type {
@@ -298,6 +299,21 @@ final class PokerClientService {
 
         case .lobbySettingsChanged:
             if let p: LobbySettingsChangedPayload = try? decoded.decodePayload() {
+                if let prev = lastLobby {
+                    let updated = LobbySnapshotPayload(
+                        tableId: prev.tableId,
+                        sessionId: prev.sessionId,
+                        smallBlind: p.smallBlind,
+                        bigBlind: p.bigBlind,
+                        startingChips: p.startingChips,
+                        totalSeats: p.totalSeats,
+                        aiFillEnabled: p.aiFillEnabled,
+                        seats: prev.seats,
+                        hostPeerId: prev.hostPeerId
+                    )
+                    lastLobby = updated
+                    observer?.client(self, didReceiveLobby: updated)
+                }
                 observer?.client(self, didReceiveSettings: p)
             }
 

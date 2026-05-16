@@ -47,8 +47,11 @@ extension GameManager {
             return
         }
         
-        // AI makes decision after a delay for better UX
+        // AI makes decision after a delay for better UX. Capture the seat id
+        // so a mid-delay seat replacement cannot act for the wrong player.
+        let scheduledPlayerId = current.id
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            guard self?.currentPlayer?.id == scheduledPlayerId else { return }
             self?.processAITurn()
         }
     }

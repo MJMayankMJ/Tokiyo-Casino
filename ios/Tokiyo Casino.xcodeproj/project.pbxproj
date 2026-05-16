@@ -6,8 +6,19 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXContainerItemProxy section */
+		9A00000A2F0000000000000A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 867507912DE825480055BE78 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 867507982DE825480055BE78;
+			remoteInfo = "Tokiyo Casino";
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		867507992DE825480055BE78 /* Tokiyo Casino.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Tokiyo Casino.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A0000012F00000000000001 /* Tokiyo CasinoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Tokiyo CasinoTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -29,10 +40,22 @@
 			path = "Tokiyo Casino";
 			sourceTree = "<group>";
 		};
+		9A0000022F00000000000002 /* Tokiyo CasinoTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Tokiyo CasinoTests";
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		867507962DE825480055BE78 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A0000032F00000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -46,6 +69,7 @@
 			isa = PBXGroup;
 			children = (
 				8675079B2DE825480055BE78 /* Tokiyo Casino */,
+				9A0000022F00000000000002 /* Tokiyo CasinoTests */,
 				8675079A2DE825480055BE78 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -54,6 +78,7 @@
 			isa = PBXGroup;
 			children = (
 				867507992DE825480055BE78 /* Tokiyo Casino.app */,
+				9A0000012F00000000000001 /* Tokiyo CasinoTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -83,6 +108,29 @@
 			productReference = 867507992DE825480055BE78 /* Tokiyo Casino.app */;
 			productType = "com.apple.product-type.application";
 		};
+		9A0000062F00000000000006 /* Tokiyo CasinoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9A0000092F00000000000009 /* Build configuration list for PBXNativeTarget "Tokiyo CasinoTests" */;
+			buildPhases = (
+				9A0000052F00000000000005 /* Sources */,
+				9A0000032F00000000000003 /* Frameworks */,
+				9A0000042F00000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				9A00000B2F0000000000000B /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				9A0000022F00000000000002 /* Tokiyo CasinoTests */,
+			);
+			name = "Tokiyo CasinoTests";
+			packageProductDependencies = (
+			);
+			productName = "Tokiyo CasinoTests";
+			productReference = 9A0000012F00000000000001 /* Tokiyo CasinoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -95,6 +143,10 @@
 				TargetAttributes = {
 					867507982DE825480055BE78 = {
 						CreatedOnToolsVersion = 16.3;
+					};
+					9A0000062F00000000000006 = {
+						CreatedOnToolsVersion = 16.3;
+						TestTargetID = 867507982DE825480055BE78;
 					};
 				};
 			};
@@ -113,12 +165,20 @@
 			projectRoot = "";
 			targets = (
 				867507982DE825480055BE78 /* Tokiyo Casino */,
+				9A0000062F00000000000006 /* Tokiyo CasinoTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		867507972DE825480055BE78 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9A0000042F00000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +195,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		9A0000052F00000000000005 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		9A00000B2F0000000000000B /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 867507982DE825480055BE78 /* Tokiyo Casino */;
+			targetProxy = 9A00000A2F0000000000000A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		867507B02DE825490055BE78 /* Debug */ = {
@@ -191,6 +266,55 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		9A0000072F00000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 23K8R8NFCJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mayank.Tokiyo-Casino-fianltwoTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Tokiyo Casino.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Tokiyo Casino";
+			};
+			name = Debug;
+		};
+		9A0000082F00000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 23K8R8NFCJ;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.4;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.mayank.Tokiyo-Casino-fianltwoTests";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Tokiyo Casino.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Tokiyo Casino";
 			};
 			name = Release;
 		};
@@ -332,6 +456,15 @@
 			buildConfigurations = (
 				867507B02DE825490055BE78 /* Debug */,
 				867507B12DE825490055BE78 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9A0000092F00000000000009 /* Build configuration list for PBXNativeTarget "Tokiyo CasinoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9A0000072F00000000000007 /* Debug */,
+				9A0000082F00000000000008 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

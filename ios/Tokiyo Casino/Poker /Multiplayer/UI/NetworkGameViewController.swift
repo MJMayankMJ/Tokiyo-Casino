@@ -50,6 +50,7 @@ final class NetworkGameViewController: UIViewController {
     private var lastSnapshot: TableSnapshotPayload?
     private var lastRoundResult: RoundResultPayload?
     private var pendingActionRequest: ActionRequestPayload?
+    private var didLeaveCurrentTable: Bool = false
     /// Synthesized roster mirroring the snapshot, rotated so the local
     /// seat is at index 0.
     private var renderedPlayers: [Player] = []
@@ -82,10 +83,8 @@ final class NetworkGameViewController: UIViewController {
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
-        switch role {
-        case .host(let h): h.endTable(reason: "Host left the table.")
-        case .client(let c): c.leaveTable()
-        }
+        guard isBeingDismissed || isMovingFromParent || navigationController?.isBeingDismissed == true else { return }
+        leaveCurrentTableIfNeeded(reason: "Left the table.")
     }
 
     // MARK: UI
@@ -403,6 +402,7 @@ final class NetworkGameViewController: UIViewController {
         let alert = UIAlertController(title: "Leave Table?", message: nil,
                                       preferredStyle: .actionSheet)
         alert.addAction(UIAlertAction(title: "Leave", style: .destructive) { [weak self] _ in
+            self?.leaveCurrentTableIfNeeded(reason: "Left the table.")
             self?.dismissBackToEntry()
         })
         alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
@@ -417,6 +417,17 @@ final class NetworkGameViewController: UIViewController {
             lobby.dismiss(animated: true)
         } else {
             dismiss(animated: true)
+        }
+    }
+
+    private func leaveCurrentTableIfNeeded(reason: String) {
+        guard !didLeaveCurrentTable else { return }
+        didLeaveCurrentTable = true
+        switch role {
+        case .host(let h):
+            h.endTable(reason: reason)
+        case .client(let c):
+            c.leaveTable()
         }
     }
 
@@ -477,6 +488,7 @@ final class NetworkGameViewController: UIViewController {
         let alert = UIAlertController(title: "Session ended", message: payload.reason,
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "Back to menu", style: .default) { [weak self] _ in
+            self?.leaveCurrentTableIfNeeded(reason: payload.reason)
             self?.dismissBackToEntry()
         })
         present(alert, animated: true)
@@ -487,6 +499,7 @@ final class NetworkGameViewController: UIViewController {
                                       message: "Table ended.\n\n\(reason)",
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.leaveCurrentTableIfNeeded(reason: reason)
             self?.dismissBackToEntry()
         })
         present(alert, animated: true)
@@ -530,9 +543,7 @@ final class NetworkGameViewController: UIViewController {
             // table via `viewWillDisappear`, but the chain is
             // implicit; calling endTable here makes the intent
             // obvious in code review.
-            if case .host(let h) = self.role {
-                h.endTable(reason: "Host chose to leave the lone table.")
-            }
+            self.leaveCurrentTableIfNeeded(reason: "Host chose to leave the lone table.")
             self.dismissBackToEntry()
         })
         loneHumanAlert = alert
@@ -639,6 +650,7 @@ extension NetworkGameViewController: PokerHostServiceObserver {
         presentActionRequest(payload)
     }
     func host(_ service: PokerHostService, didFinishWithReason reason: String) {
+        guard !didLeaveCurrentTable else { return }
         handleHostEnded(reason)
     }
     func host(_ service: PokerHostService, didRequestAIKickFor join: PendingHostJoin) {
