@@ -2,11 +2,12 @@
 //  MultiplayerEntryViewController.swift
 //  Tokiyo Casino — Offline Friends Poker
 //
-//  Entry chooser shown after the user picks "Play With Friends".
-//  Name capture is one-time: on first launch the user is prompted via
-//  an alert; on subsequent launches the saved name is reused and shown
-//  with a "Change" affordance so they can update it without being
-//  asked every visit.
+//  Screen A — "Play with friends". The entry chooser after the user picks
+//  Play With Friends from the main menu. Visual design mirrors the
+//  Claude Design handoff bundle (poker/project/Multiplayer.html — screen A):
+//  cancel text button top-left, title block with eyebrow, identity chip,
+//  chip-tray ornament, then primary "Create Table" + secondary "Join
+//  Nearby Table" CTAs stacked at the bottom.
 //
 
 import UIKit
@@ -106,12 +107,16 @@ enum ReconnectTokenStore {
 
 final class MultiplayerEntryViewController: UIViewController {
 
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let createButton = UIButton(type: .system)
-    private let joinButton = UIButton(type: .system)
-    private let closeButton = UIButton(type: .system)
-    private let nameChip = UIButton(type: .system)
+    private let backdrop = MPPageBackgroundView()
+    private let titleBlock = MPTitleView(
+        eyebrow: "Multiplayer",
+        title: "Play with friends",
+        subtitle: "Nearby — no Wi-Fi or router required"
+    )
+    private let identityChip = MPIdentityChip()
+    private let chipTray = MPChipTrayOrnament()
+    private let createButton = MPPrimaryButton(title: "Create Table")
+    private let joinButton = MPSecondaryButton(title: "Join Nearby Table")
 
     /// Cached name used for the next create/join flow. Set on
     /// `viewWillAppear` from the shared profile store.
@@ -119,106 +124,73 @@ final class MultiplayerEntryViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.05, green: 0.07, blue: 0.13, alpha: 1.0)
+        view.backgroundColor = MPTheme.pageBg
 
-        titleLabel.text = "Play With Friends"
-        titleLabel.font = UIFont(name: "Copperplate-Bold", size: 30) ?? .boldSystemFont(ofSize: 30)
-        titleLabel.textColor = .white
-        titleLabel.textAlignment = .center
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(titleLabel)
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(backdrop)
 
-        subtitleLabel.text = "Nearby — no Wi-Fi or router required"
-        subtitleLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        subtitleLabel.textColor = UIColor.white.withAlphaComponent(0.75)
-        subtitleLabel.textAlignment = .center
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(subtitleLabel)
+        titleBlock.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(titleBlock)
 
-        // Name chip — tappable label like "Playing as Mayank  ✎ Change".
-        // Replaces the previous always-on text field; the user enters
-        // their name once and can edit here whenever they want.
-        nameChip.backgroundColor = UIColor.white.withAlphaComponent(0.10)
-        nameChip.setTitleColor(.white, for: .normal)
-        nameChip.titleLabel?.font = .systemFont(ofSize: 14, weight: .semibold)
-        nameChip.layer.cornerRadius = 18
-        nameChip.layer.borderWidth = 1
-        nameChip.layer.borderColor = UIColor.white.withAlphaComponent(0.25).cgColor
-        nameChip.contentEdgeInsets = UIEdgeInsets(top: 8, left: 14, bottom: 8, right: 14)
-        nameChip.addTarget(self, action: #selector(changeNameTapped), for: .touchUpInside)
-        nameChip.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(nameChip)
+        identityChip.translatesAutoresizingMaskIntoConstraints = false
+        identityChip.addTarget(self, action: #selector(changeNameTapped), for: .touchUpInside)
+        view.addSubview(identityChip)
 
-        styleButton(createButton, title: "CREATE TABLE",
-                    background: UIColor(red: 0.18, green: 0.55, blue: 0.30, alpha: 1.0))
+        chipTray.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(chipTray)
+
+        createButton.translatesAutoresizingMaskIntoConstraints = false
         createButton.addTarget(self, action: #selector(createTapped), for: .touchUpInside)
         view.addSubview(createButton)
 
-        styleButton(joinButton, title: "JOIN NEARBY TABLE",
-                    background: UIColor(red: 0.20, green: 0.40, blue: 0.75, alpha: 1.0))
+        joinButton.translatesAutoresizingMaskIntoConstraints = false
         joinButton.addTarget(self, action: #selector(joinTapped), for: .touchUpInside)
         view.addSubview(joinButton)
 
-        closeButton.setTitle("Cancel", for: .normal)
-        closeButton.setTitleColor(UIColor.white.withAlphaComponent(0.7), for: .normal)
-        closeButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
-        closeButton.addTarget(self, action: #selector(closeTapped), for: .touchUpInside)
-        closeButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(closeButton)
-
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40),
-            titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            backdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
-            subtitleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            titleBlock.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            titleBlock.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            titleBlock.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            nameChip.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 28),
-            nameChip.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            nameChip.heightAnchor.constraint(equalToConstant: 36),
+            identityChip.topAnchor.constraint(equalTo: titleBlock.bottomAnchor, constant: 18),
+            identityChip.centerXAnchor.constraint(equalTo: view.centerXAnchor),
 
-            createButton.topAnchor.constraint(equalTo: nameChip.bottomAnchor, constant: 50),
-            createButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            createButton.widthAnchor.constraint(equalToConstant: 260),
-            createButton.heightAnchor.constraint(equalToConstant: 56),
+            chipTray.topAnchor.constraint(equalTo: identityChip.bottomAnchor, constant: 32),
+            chipTray.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            chipTray.widthAnchor.constraint(equalToConstant: 220),
+            chipTray.heightAnchor.constraint(equalToConstant: 90),
 
-            joinButton.topAnchor.constraint(equalTo: createButton.bottomAnchor, constant: 18),
-            joinButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            joinButton.widthAnchor.constraint(equalToConstant: 260),
-            joinButton.heightAnchor.constraint(equalToConstant: 56),
+            joinButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
+            joinButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            joinButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
 
-            closeButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -24),
-            closeButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            createButton.bottomAnchor.constraint(equalTo: joinButton.topAnchor, constant: -10),
+            createButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            createButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
         ])
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        // Inherit MenuViewController's transparent nav-bar styling so the
+        // system back button rides on the cream backdrop without a slab.
+        navigationItem.title = ""
+        navigationItem.backButtonDisplayMode = .minimal
+        navigationController?.setNavigationBarHidden(false, animated: false)
+
         if let saved = MultiplayerProfile.savedName {
             currentName = saved
-            updateNameChip()
+            identityChip.name = saved
         } else {
             // First-time user: prompt now so the name is set before
             // they pick create/join.
             promptForName(initialValue: nil, isFirstTime: true)
         }
-    }
-
-    private func styleButton(_ button: UIButton, title: String, background: UIColor) {
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
-        button.setTitleColor(.white, for: .normal)
-        button.backgroundColor = background
-        button.layer.cornerRadius = 24
-        button.layer.shadowColor = UIColor.black.cgColor
-        button.layer.shadowOffset = CGSize(width: 0, height: 4)
-        button.layer.shadowOpacity = 0.45
-        button.layer.shadowRadius = 8
-        button.translatesAutoresizingMaskIntoConstraints = false
-    }
-
-    private func updateNameChip() {
-        nameChip.setTitle("Playing as \(currentName)  •  Change", for: .normal)
     }
 
     // MARK: - Name prompt
@@ -250,7 +222,7 @@ final class MultiplayerEntryViewController: UIViewController {
             if MultiplayerProfile.save(entered),
                let saved = MultiplayerProfile.savedName {
                 self.currentName = saved
-                self.updateNameChip()
+                self.identityChip.name = saved
             } else {
                 // Empty input: reprompt.
                 self.promptForName(initialValue: nil, isFirstTime: isFirstTime)
@@ -268,21 +240,24 @@ final class MultiplayerEntryViewController: UIViewController {
         guard !currentName.isEmpty else {
             promptForName(initialValue: nil, isFirstTime: true); return
         }
-        let vc = HostLobbyViewController(displayName: currentName)
-        vc.modalPresentationStyle = .fullScreen
-        present(vc, animated: true)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        pushOrPresent(HostLobbyViewController(displayName: currentName))
     }
 
     @objc private func joinTapped() {
         guard !currentName.isEmpty else {
             promptForName(initialValue: nil, isFirstTime: true); return
         }
-        let vc = JoinLobbyViewController(displayName: currentName)
-        vc.modalPresentationStyle = .fullScreen
-        present(vc, animated: true)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        pushOrPresent(JoinLobbyViewController(displayName: currentName))
     }
 
-    @objc private func closeTapped() {
-        dismiss(animated: true)
+    private func pushOrPresent(_ vc: UIViewController) {
+        if let nav = navigationController {
+            nav.pushViewController(vc, animated: true)
+        } else {
+            vc.modalPresentationStyle = .fullScreen
+            present(vc, animated: true)
+        }
     }
 }

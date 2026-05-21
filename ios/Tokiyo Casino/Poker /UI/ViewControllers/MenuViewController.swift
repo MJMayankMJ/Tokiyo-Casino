@@ -2,511 +2,374 @@
 //  MenuViewController.swift
 //  Poker
 //
-//  Created by Mayank Jangid on 8/17/25.
+//  Screen E — "Texas Hold'em" solo-game setup. Mirrors the Claude Design
+//  handoff bundle (poker/project/Multiplayer.html — screen E).
+//
+//  Navigation: this VC is pushed onto the host nav stack (see
+//  HomeViewController.openPokerGame). Back navigation uses the system
+//  nav-bar back button — no custom cancel/back pill.
 //
 
 import UIKit
 
 class MenuViewController: UIViewController {
-    
-    // UI Elements
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let logoContainerView = UIView()
-    private let playButton = UIButton(type: .system)
-    private let playerCountSegment = UISegmentedControl(items: ["3", "4", "5"])
-    private let playerCountLabel = UILabel()
-    private let startingChipsSlider = UISlider()
-    private let startingChipsLabel = UILabel()
-    private let startingChipsValueLabel = UILabel()
-    private let settingsButton = UIButton(type: .system)
-    private let playWithFriendsButton = UIButton(type: .system)
-    private let gradientLayer = CAGradientLayer()
-    
-    // Decorative elements
-    private let chipDecoration1 = UIView()
-    private let chipDecoration2 = UIView()
-    
-    // MARK: - Coins
+
+    // MARK: Subviews
+    private let backdrop = MPPageBackgroundView()
+    private let gearButton = MPGearPill()
+    private let titleBlock = MPTitleView(
+        eyebrow: "Solo Game",
+        title: "Texas Hold'em",
+        subtitle: "Quick game vs AI"
+    )
+    private let miniDeck = MPMiniDeck()
+
+    private let playersEyebrow = mpSectionEyebrow("Number of players")
+    private let playerPicker = MPPlayerPicker(value: 5)
+
+    private let chipsHeaderRow = UIView()
+    private let chipsEyebrow = mpSectionEyebrow("Starting chips")
+    private let coinsPill = MPCoinsPill()
+    private let chipsValueLabel = UILabel()
+    private let chipsSlider: MPChipsSlider
+
+    private let startButton = MPPrimaryButton(title: "Start Game")
+    private let friendsButton: PlayWithFriendsButton
+
+    /// Discrete buy-in tiers — slider snaps to exactly these four values.
+    private static let buyInSteps: [Int] = [500, 1_000, 2_000, 4_000]
+
+    // MARK: Coins
     private var availableCoins: Int64 {
         return CoinsManager.shared.userStats?.totalCoins ?? 0
     }
-    private let minBuyIn = 100
-    
+    private var minBuyIn: Int { Self.buyInSteps.first ?? 500 }
+
+    init() {
+        self.chipsSlider = MPChipsSlider(
+            value: 1_000,
+            steps: Self.buyInSteps
+        )
+        self.friendsButton = PlayWithFriendsButton()
+        super.init(nibName: nil, bundle: nil)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         setupUI()
-        addDecorations()
-        refreshCoinsAndClampSlider()
     }
-    
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // When you come back from the game, show the updated balance and clamp slider
+        // Show the system navigation bar with a transparent appearance
+        // so the system back button is visible without painting a
+        // grey/cream slab over the cream backdrop.
+        configureTransparentNavBar()
         refreshCoinsAndClampSlider()
     }
-    
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        gradientLayer.frame = view.bounds
+
+    private func configureTransparentNavBar() {
+        guard let nav = navigationController else { return }
+        nav.setNavigationBarHidden(false, animated: false)
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithTransparentBackground()
+        appearance.backgroundColor = .clear
+        appearance.shadowColor = .clear
+        // Back chevron + "Back" label inherit nav-bar tint
+        nav.navigationBar.standardAppearance = appearance
+        nav.navigationBar.scrollEdgeAppearance = appearance
+        nav.navigationBar.compactAppearance = appearance
+        nav.navigationBar.tintColor = MPTheme.tint
+        navigationItem.title = ""
+        // Use a chevron-only back button on screens we push from here.
+        navigationItem.backButtonDisplayMode = .minimal
     }
-    
+
     private func setupUI() {
-        // Gradient background
-        gradientLayer.colors = [
-            UIColor(red: 0.02, green: 0.20, blue: 0.06, alpha: 1.0).cgColor,
-            UIColor(red: 0.01, green: 0.10, blue: 0.03, alpha: 1.0).cgColor
-        ]
-        gradientLayer.locations = [0.0, 1.0]
-        view.layer.insertSublayer(gradientLayer, at: 0)
-        
-        // Title with shadow
-        titleLabel.text = "TEXAS HOLD'EM"
-        titleLabel.font = UIFont(name: "Copperplate-Bold", size: 32) ?? .boldSystemFont(ofSize: 32)
-        titleLabel.textColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0) // Gold color
-        titleLabel.textAlignment = .center
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        titleLabel.layer.shadowColor = UIColor.black.cgColor
-        titleLabel.layer.shadowOffset = CGSize(width: 0, height: 2)
-        titleLabel.layer.shadowOpacity = 0.8
-        titleLabel.layer.shadowRadius = 3
-        view.addSubview(titleLabel)
-        
-        // Subtitle
-        subtitleLabel.text = "POKER"
-        subtitleLabel.font = UIFont(name: "Copperplate", size: 20) ?? .systemFont(ofSize: 20, weight: .medium)
-        subtitleLabel.textColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 1.0)
-        subtitleLabel.textAlignment = .center
-        subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
-        subtitleLabel.layer.shadowColor = UIColor.black.cgColor
-        subtitleLabel.layer.shadowOffset = CGSize(width: 0, height: 1)
-        subtitleLabel.layer.shadowOpacity = 0.6
-        subtitleLabel.layer.shadowRadius = 2
-        view.addSubview(subtitleLabel)
-        
-        // Logo container with enhanced styling
-        logoContainerView.backgroundColor = .clear
-        logoContainerView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(logoContainerView)
-        
-        // Draw poker logo
-        drawPokerLogo()
-        
-        // Player count label with better styling
-        playerCountLabel.text = "NUMBER OF PLAYERS"
-        playerCountLabel.font = UIFont(name: "Copperplate", size: 14) ?? .systemFont(ofSize: 14, weight: .semibold)
-        playerCountLabel.textColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9)
-        playerCountLabel.textAlignment = .center
-        playerCountLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(playerCountLabel)
-        
-        // Enhanced segment control
-        playerCountSegment.selectedSegmentIndex = 3 // (kept from old UI) default intended 6 players
-        playerCountSegment.backgroundColor = UIColor.black.withAlphaComponent(0.4)
-        playerCountSegment.selectedSegmentTintColor = UIColor(red: 0.2, green: 0.6, blue: 0.2, alpha: 1.0)
-        playerCountSegment.setTitleTextAttributes([
-            .foregroundColor: UIColor.white.withAlphaComponent(0.7),
-            .font: UIFont.boldSystemFont(ofSize: 16)
-        ], for: .normal)
-        playerCountSegment.setTitleTextAttributes([
-            .foregroundColor: UIColor.white,
-            .font: UIFont.boldSystemFont(ofSize: 16)
-        ], for: .selected)
-        playerCountSegment.layer.cornerRadius = 8
-        playerCountSegment.layer.borderWidth = 1
-        playerCountSegment.layer.borderColor = UIColor(red: 0.3, green: 0.7, blue: 0.3, alpha: 0.5).cgColor
-        playerCountSegment.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(playerCountSegment)
-        
-        // Starting chips label (+ we’ll append coins live)
-        startingChipsLabel.text = "STARTING CHIPS"
-        startingChipsLabel.font = UIFont(name: "Copperplate", size: 14) ?? .systemFont(ofSize: 14, weight: .semibold)
-        startingChipsLabel.textColor = UIColor(red: 0.9, green: 0.9, blue: 0.9, alpha: 0.9)
-        startingChipsLabel.textAlignment = .center
-        startingChipsLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(startingChipsLabel)
-        
-        // Chips value display
-        startingChipsValueLabel.text = "$1,000"
-        startingChipsValueLabel.font = UIFont(name: "Copperplate-Bold", size: 24) ?? .boldSystemFont(ofSize: 24)
-        startingChipsValueLabel.textColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        startingChipsValueLabel.textAlignment = .center
-        startingChipsValueLabel.translatesAutoresizingMaskIntoConstraints = false
-        startingChipsValueLabel.layer.shadowColor = UIColor.black.cgColor
-        startingChipsValueLabel.layer.shadowOffset = CGSize(width: 0, height: 1)
-        startingChipsValueLabel.layer.shadowOpacity = 0.6
-        startingChipsValueLabel.layer.shadowRadius = 2
-        view.addSubview(startingChipsValueLabel)
-        
-        // Enhanced slider (range set later from coins)
-        startingChipsSlider.minimumValue = Float(minBuyIn)
-        startingChipsSlider.maximumValue = 5000
-        startingChipsSlider.value = 1000
-        startingChipsSlider.minimumTrackTintColor = UIColor(red: 0.3, green: 0.7, blue: 0.3, alpha: 1.0)
-        startingChipsSlider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.3)
-        startingChipsSlider.thumbTintColor = UIColor(red: 1.0, green: 0.84, blue: 0.0, alpha: 1.0)
-        startingChipsSlider.addTarget(self, action: #selector(sliderChanged), for: .valueChanged)
-        startingChipsSlider.translatesAutoresizingMaskIntoConstraints = false
-        startingChipsSlider.layer.shadowColor = UIColor.black.cgColor
-        startingChipsSlider.layer.shadowOffset = CGSize(width: 0, height: 2)
-        startingChipsSlider.layer.shadowOpacity = 0.3
-        startingChipsSlider.layer.shadowRadius = 2
-        view.addSubview(startingChipsSlider)
-        
-        // Enhanced play button
-        playButton.setTitle("START GAME", for: .normal)
-        playButton.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 20) ?? .boldSystemFont(ofSize: 20)
-        playButton.setTitleColor(.white, for: .normal)
-        playButton.backgroundColor = UIColor(red: 0.2, green: 0.6, blue: 0.2, alpha: 1.0)
-        playButton.layer.cornerRadius = 28
-        playButton.layer.shadowColor = UIColor.black.cgColor
-        playButton.layer.shadowOffset = CGSize(width: 0, height: 4)
-        playButton.layer.shadowOpacity = 0.5
-        playButton.layer.shadowRadius = 8
-        playButton.layer.borderWidth = 2
-        playButton.layer.borderColor = UIColor(red: 0.3, green: 0.7, blue: 0.3, alpha: 1.0).cgColor
-        playButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
-        playButton.addTarget(self, action: #selector(buttonTouchDown), for: .touchDown)
-        playButton.addTarget(self, action: #selector(buttonTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        playButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(playButton)
-        
-        // Play With Friends — entry point to the offline-nearby flow.
-        playWithFriendsButton.setTitle("PLAY WITH FRIENDS", for: .normal)
-        playWithFriendsButton.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
-        playWithFriendsButton.setTitleColor(.white, for: .normal)
-        playWithFriendsButton.backgroundColor = UIColor(red: 0.45, green: 0.30, blue: 0.65, alpha: 1.0)
-        playWithFriendsButton.layer.cornerRadius = 24
-        playWithFriendsButton.layer.shadowColor = UIColor.black.cgColor
-        playWithFriendsButton.layer.shadowOffset = CGSize(width: 0, height: 4)
-        playWithFriendsButton.layer.shadowOpacity = 0.5
-        playWithFriendsButton.layer.shadowRadius = 8
-        playWithFriendsButton.layer.borderWidth = 2
-        playWithFriendsButton.layer.borderColor = UIColor(red: 0.6, green: 0.45, blue: 0.85, alpha: 1.0).cgColor
-        playWithFriendsButton.addTarget(self, action: #selector(playWithFriendsTapped), for: .touchUpInside)
-        playWithFriendsButton.addTarget(self, action: #selector(buttonTouchDown), for: .touchDown)
-        playWithFriendsButton.addTarget(self, action: #selector(buttonTouchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        playWithFriendsButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(playWithFriendsButton)
+        view.backgroundColor = MPTheme.pageBg
 
-        // Enhanced settings button
-        settingsButton.setTitle("⚙️ Settings", for: .normal)
-        settingsButton.titleLabel?.font = UIFont.systemFont(ofSize: 16, weight: .medium)
-        settingsButton.setTitleColor(.white.withAlphaComponent(0.9), for: .normal)
-        settingsButton.backgroundColor = UIColor.white.withAlphaComponent(0.15)
-        settingsButton.layer.cornerRadius = 22
-        settingsButton.layer.borderWidth = 1
-        settingsButton.layer.borderColor = UIColor.white.withAlphaComponent(0.3).cgColor
-        settingsButton.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
-        settingsButton.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(settingsButton)
-        
-        // Constraints
-        NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 30),
-            titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            
-            subtitleLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 5),
-            subtitleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            
-            logoContainerView.topAnchor.constraint(equalTo: subtitleLabel.bottomAnchor, constant: 25),
-            logoContainerView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            logoContainerView.widthAnchor.constraint(equalToConstant: 240),
-            logoContainerView.heightAnchor.constraint(equalToConstant: 140),
-            
-            playerCountLabel.topAnchor.constraint(equalTo: logoContainerView.bottomAnchor, constant: 35),
-            playerCountLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            
-            playerCountSegment.topAnchor.constraint(equalTo: playerCountLabel.bottomAnchor, constant: 12),
-            playerCountSegment.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            playerCountSegment.widthAnchor.constraint(equalToConstant: 260),
-            playerCountSegment.heightAnchor.constraint(equalToConstant: 44),
-            
-            startingChipsLabel.topAnchor.constraint(equalTo: playerCountSegment.bottomAnchor, constant: 30),
-            startingChipsLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            
-            startingChipsValueLabel.topAnchor.constraint(equalTo: startingChipsLabel.bottomAnchor, constant: 8),
-            startingChipsValueLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            
-            startingChipsSlider.topAnchor.constraint(equalTo: startingChipsValueLabel.bottomAnchor, constant: 12),
-            startingChipsSlider.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            startingChipsSlider.widthAnchor.constraint(equalToConstant: 260),
-            
-            playButton.topAnchor.constraint(equalTo: startingChipsSlider.bottomAnchor, constant: 45),
-            playButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            playButton.widthAnchor.constraint(equalToConstant: 240),
-            playButton.heightAnchor.constraint(equalToConstant: 56),
-            
-            playWithFriendsButton.topAnchor.constraint(equalTo: playButton.bottomAnchor, constant: 14),
-            playWithFriendsButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            playWithFriendsButton.widthAnchor.constraint(equalToConstant: 240),
-            playWithFriendsButton.heightAnchor.constraint(equalToConstant: 48),
+        backdrop.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(backdrop, at: 0)
 
-            settingsButton.topAnchor.constraint(equalTo: playWithFriendsButton.bottomAnchor, constant: 14),
-            settingsButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            settingsButton.widthAnchor.constraint(equalToConstant: 160),
-            settingsButton.heightAnchor.constraint(equalToConstant: 44)
-        ])
-    }
-    
-    private func addDecorations() {
-        // Add decorative poker chips
-        createChipDecoration(chipDecoration1, x: 30, y: 100)
-        createChipDecoration(chipDecoration2, x: view.bounds.width - 60, y: view.bounds.height - 150)
-        
-        view.addSubview(chipDecoration1)
-        view.addSubview(chipDecoration2)
-        
-        // Animate decorations
-        animateChips()
-    }
-    
-    private func createChipDecoration(_ chip: UIView, x: CGFloat, y: CGFloat) {
-        chip.frame = CGRect(x: x, y: y, width: 40, height: 40)
-        chip.backgroundColor = UIColor(red: 0.8, green: 0.2, blue: 0.2, alpha: 0.3)
-        chip.layer.cornerRadius = 20
-        chip.layer.borderWidth = 2
-        chip.layer.borderColor = UIColor.white.withAlphaComponent(0.2).cgColor
-        chip.alpha = 0.6
-        
-        // Add center circle
-        let centerCircle = UIView(frame: CGRect(x: 10, y: 10, width: 20, height: 20))
-        centerCircle.backgroundColor = .white.withAlphaComponent(0.2)
-        centerCircle.layer.cornerRadius = 10
-        chip.addSubview(centerCircle)
-    }
-    
-    private func animateChips() {
-        UIView.animate(withDuration: 3.0, delay: 0, options: [.repeat, .autoreverse, .curveEaseInOut], animations: {
-            self.chipDecoration1.transform = CGAffineTransform(translationX: 0, y: 20)
-            self.chipDecoration2.transform = CGAffineTransform(translationX: 0, y: -20)
-        })
-    }
-    
-    private func drawPokerLogo() {
-        // Create three overlapping cards for a more dynamic look
-        let card1 = createMiniCard(rank: "A", suit: "♠", color: .black)
-        let card2 = createMiniCard(rank: "K", suit: "♥", color: .red)
-        let card3 = createMiniCard(rank: "Q", suit: "♦", color: .red)
-        
-        card1.transform = CGAffineTransform(rotationAngle: -0.25)
-        card2.transform = CGAffineTransform(rotationAngle: 0.0)
-        card3.transform = CGAffineTransform(rotationAngle: 0.25)
-        
-        logoContainerView.addSubview(card1)
-        logoContainerView.addSubview(card2)
-        logoContainerView.addSubview(card3)
-        
-        card1.translatesAutoresizingMaskIntoConstraints = false
-        card2.translatesAutoresizingMaskIntoConstraints = false
-        card3.translatesAutoresizingMaskIntoConstraints = false
-        
+        gearButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(gearButton)
+        gearButton.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
+
+        // Build a vertical stack so spacing collapses naturally on
+        // shorter devices (the static AutoLayout constraints I had
+        // before left a giant dead band between the mini-deck and the
+        // player picker on tall devices).
+        let centerStack = UIStackView()
+        centerStack.axis = .vertical
+        centerStack.alignment = .fill
+        centerStack.spacing = 18
+        centerStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(centerStack)
+
+        // Title + mini-deck cluster
+        let titleCluster = UIStackView()
+        titleCluster.axis = .vertical
+        titleCluster.alignment = .center
+        titleCluster.spacing = 14
+        titleCluster.addArrangedSubview(titleBlock)
+        titleCluster.addArrangedSubview(miniDeck)
+        centerStack.addArrangedSubview(titleCluster)
+        centerStack.setCustomSpacing(28, after: titleCluster)
+
+        // Players section
+        let playersSection = UIStackView()
+        playersSection.axis = .vertical
+        playersSection.alignment = .fill
+        playersSection.spacing = 10
+        let playersHeader = UIView()
+        playersEyebrow.translatesAutoresizingMaskIntoConstraints = false
+        playersHeader.addSubview(playersEyebrow)
         NSLayoutConstraint.activate([
-            card1.centerXAnchor.constraint(equalTo: logoContainerView.centerXAnchor, constant: -35),
-            card1.centerYAnchor.constraint(equalTo: logoContainerView.centerYAnchor),
-            card1.widthAnchor.constraint(equalToConstant: 70),
-            card1.heightAnchor.constraint(equalToConstant: 95),
-            
-            card2.centerXAnchor.constraint(equalTo: logoContainerView.centerXAnchor),
-            card2.centerYAnchor.constraint(equalTo: logoContainerView.centerYAnchor),
-            card2.widthAnchor.constraint(equalToConstant: 70),
-            card2.heightAnchor.constraint(equalToConstant: 95),
-            
-            card3.centerXAnchor.constraint(equalTo: logoContainerView.centerXAnchor, constant: 35),
-            card3.centerYAnchor.constraint(equalTo: logoContainerView.centerYAnchor),
-            card3.widthAnchor.constraint(equalToConstant: 70),
-            card3.heightAnchor.constraint(equalToConstant: 95)
+            playersEyebrow.leadingAnchor.constraint(equalTo: playersHeader.leadingAnchor, constant: 4),
+            playersEyebrow.topAnchor.constraint(equalTo: playersHeader.topAnchor),
+            playersEyebrow.bottomAnchor.constraint(equalTo: playersHeader.bottomAnchor),
         ])
-        
-        // Add subtle animation to cards
-        animateCards([card1, card2, card3])
-    }
-    
-    private func animateCards(_ cards: [UIView]) {
-        for (index, card) in cards.enumerated() {
-            UIView.animate(withDuration: 2.5, delay: Double(index) * 0.2, options: [.repeat, .autoreverse, .curveEaseInOut], animations: {
-                card.transform = card.transform.translatedBy(x: 0, y: -8)
-            })
-        }
-    }
-    
-    private func createMiniCard(rank: String, suit: String, color: UIColor) -> UIView {
-        let cardView = UIView()
-        cardView.backgroundColor = .white
-        cardView.layer.cornerRadius = 8
-        cardView.layer.borderWidth = 2
-        cardView.layer.borderColor = UIColor.black.withAlphaComponent(0.2).cgColor
-        cardView.layer.shadowColor = UIColor.black.cgColor
-        cardView.layer.shadowOffset = CGSize(width: 0, height: 4)
-        cardView.layer.shadowOpacity = 0.4
-        cardView.layer.shadowRadius = 6
-        
-        // Top-left rank and suit
-        let topRankLabel = UILabel()
-        topRankLabel.text = rank
-        topRankLabel.font = .boldSystemFont(ofSize: 22)
-        topRankLabel.textColor = color
-        topRankLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(topRankLabel)
-        
-        let topSuitLabel = UILabel()
-        topSuitLabel.text = suit
-        topSuitLabel.font = .systemFont(ofSize: 18)
-        topSuitLabel.textColor = color
-        topSuitLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(topSuitLabel)
-        
-        // Center suit (larger)
-        let centerSuitLabel = UILabel()
-        centerSuitLabel.text = suit
-        centerSuitLabel.font = .systemFont(ofSize: 36)
-        centerSuitLabel.textColor = color
-        centerSuitLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(centerSuitLabel)
-        
-        // Bottom-right rank and suit (rotated)
-        let bottomRankLabel = UILabel()
-        bottomRankLabel.text = rank
-        bottomRankLabel.font = .boldSystemFont(ofSize: 22)
-        bottomRankLabel.textColor = color
-        bottomRankLabel.transform = CGAffineTransform(rotationAngle: .pi)
-        bottomRankLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(bottomRankLabel)
-        
-        let bottomSuitLabel = UILabel()
-        bottomSuitLabel.text = suit
-        bottomSuitLabel.font = .systemFont(ofSize: 18)
-        bottomSuitLabel.textColor = color
-        bottomSuitLabel.transform = CGAffineTransform(rotationAngle: .pi)
-        bottomSuitLabel.translatesAutoresizingMaskIntoConstraints = false
-        cardView.addSubview(bottomSuitLabel)
-        
+        playersSection.addArrangedSubview(playersHeader)
+        playersSection.addArrangedSubview(playerPicker)
+        centerStack.addArrangedSubview(playersSection)
+
+        // Chips section
+        let chipsSection = UIStackView()
+        chipsSection.axis = .vertical
+        chipsSection.alignment = .fill
+        chipsSection.spacing = 4
+
+        coinsPill.translatesAutoresizingMaskIntoConstraints = false
+        chipsEyebrow.translatesAutoresizingMaskIntoConstraints = false
+        chipsHeaderRow.addSubview(chipsEyebrow)
+        chipsHeaderRow.addSubview(coinsPill)
         NSLayoutConstraint.activate([
-            topRankLabel.topAnchor.constraint(equalTo: cardView.topAnchor, constant: 6),
-            topRankLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 6),
-            
-            topSuitLabel.topAnchor.constraint(equalTo: topRankLabel.bottomAnchor, constant: -2),
-            topSuitLabel.leadingAnchor.constraint(equalTo: cardView.leadingAnchor, constant: 6),
-            
-            centerSuitLabel.centerXAnchor.constraint(equalTo: cardView.centerXAnchor),
-            centerSuitLabel.centerYAnchor.constraint(equalTo: cardView.centerYAnchor),
-            
-            bottomRankLabel.bottomAnchor.constraint(equalTo: cardView.bottomAnchor, constant: -6),
-            bottomRankLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -6),
-            
-            bottomSuitLabel.bottomAnchor.constraint(equalTo: bottomRankLabel.topAnchor, constant: 2),
-            bottomSuitLabel.trailingAnchor.constraint(equalTo: cardView.trailingAnchor, constant: -6)
+            chipsEyebrow.leadingAnchor.constraint(equalTo: chipsHeaderRow.leadingAnchor, constant: 4),
+            chipsEyebrow.centerYAnchor.constraint(equalTo: chipsHeaderRow.centerYAnchor),
+            coinsPill.trailingAnchor.constraint(equalTo: chipsHeaderRow.trailingAnchor, constant: -4),
+            coinsPill.centerYAnchor.constraint(equalTo: chipsHeaderRow.centerYAnchor),
+            chipsHeaderRow.heightAnchor.constraint(equalToConstant: 32),
         ])
-        
-        return cardView
+
+        chipsValueLabel.textAlignment = .center
+        chipsValueLabel.translatesAutoresizingMaskIntoConstraints = false
+        chipsValueLabel.setContentHuggingPriority(.required, for: .vertical)
+
+        chipsSection.addArrangedSubview(chipsHeaderRow)
+        chipsSection.addArrangedSubview(chipsValueLabel)
+        chipsSection.setCustomSpacing(2, after: chipsValueLabel)
+        chipsSection.addArrangedSubview(chipsSlider)
+        centerStack.addArrangedSubview(chipsSection)
+
+        // CTA stack pinned to the bottom
+        let ctaStack = UIStackView(arrangedSubviews: [startButton, friendsButton])
+        ctaStack.axis = .vertical
+        ctaStack.alignment = .fill
+        ctaStack.spacing = 10
+        ctaStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(ctaStack)
+
+        // Wire actions
+        playerPicker.onChange = { [weak self] _ in self?.refreshCoinsAndClampSlider() }
+        chipsSlider.onChange = { [weak self] _ in self?.refreshChipsValueLabel() }
+        startButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
+        friendsButton.addTarget(self, action: #selector(playWithFriendsTapped), for: .touchUpInside)
+
+        NSLayoutConstraint.activate([
+            backdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            gearButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            gearButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+
+            centerStack.topAnchor.constraint(equalTo: gearButton.bottomAnchor, constant: 8),
+            centerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            centerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+
+            ctaStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
+            ctaStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            ctaStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+
+            // Lower bound so the center cluster never overlaps the CTAs
+            // — the stack just gets denser on shorter devices.
+            centerStack.bottomAnchor.constraint(lessThanOrEqualTo: ctaStack.topAnchor, constant: -16),
+
+            miniDeck.widthAnchor.constraint(equalToConstant: 200),
+            miniDeck.heightAnchor.constraint(equalToConstant: 116),
+        ])
     }
-    
-    // MARK: - Coins helpers
+
+    // MARK: Coins
+
     private func refreshCoinsAndClampSlider() {
-        // Update label to reflect available coins (shown right above the slider)
-        startingChipsLabel.text = "STARTING CHIPS  •  Available: \(formatCoin(availableCoins)) coins"
-        
-        // Clamp slider max to coin balance (min is fixed)
-        let maxFromCoins = max(Float(minBuyIn), Float(min( Int(availableCoins), 5000 )))
-        startingChipsSlider.maximumValue = maxFromCoins
-        
-        // If user has less than min buy-in, disable playing
+        coinsPill.setAmount(Int(availableCoins))
+
+        // Disable any buy-in tier above the player's coin balance.
         let canPlay = Int64(minBuyIn) <= availableCoins
-        playButton.isEnabled = canPlay
-        playButton.alpha = canPlay ? 1.0 : 0.5
-        
-        // Snap current value inside new bounds
-        let clamped = max(startingChipsSlider.minimumValue, min(startingChipsSlider.value, startingChipsSlider.maximumValue))
-        startingChipsSlider.value = clamped
-        sliderChanged()
-    }
-    
-    private func formatCoin(_ v: Int64) -> String {
-        let f = NumberFormatter()
-        f.numberStyle = .decimal
-        f.groupingSeparator = ","
-        return f.string(from: NSNumber(value: v)) ?? "\(v)"
-    }
-    
-    @objc private func sliderChanged() {
-        // Round to nearest 100
-        let chips = Int(startingChipsSlider.value / 100) * 100
-        startingChipsSlider.value = Float(chips)
-        
-        // Format with comma
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        formatter.groupingSeparator = ","
-        if let formatted = formatter.string(from: NSNumber(value: chips)) {
-            startingChipsValueLabel.text = "$\(formatted)"
+        startButton.isEnabled = canPlay
+        if !canPlay {
+            chipsSlider.setValue(minBuyIn, animated: false)
+        } else if Int64(chipsSlider.value) > availableCoins {
+            // Snap down to the highest affordable tier.
+            let affordable = Self.buyInSteps.filter { Int64($0) <= availableCoins }.last ?? minBuyIn
+            chipsSlider.setValue(affordable, animated: false)
         }
-        
-        // Add subtle bounce animation
-        UIView.animate(withDuration: 0.1, animations: {
-            self.startingChipsValueLabel.transform = CGAffineTransform(scaleX: 1.1, y: 1.1)
-        }) { _ in
-            UIView.animate(withDuration: 0.1) {
-                self.startingChipsValueLabel.transform = .identity
-            }
-        }
+        refreshChipsValueLabel()
     }
-    
-    @objc private func buttonTouchDown(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.1) {
-            sender.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
-            sender.alpha = 0.8
-        }
+
+    private func refreshChipsValueLabel() {
+        let f = NumberFormatter(); f.numberStyle = .decimal
+        let amount = chipsSlider.value
+        let attr = NSMutableAttributedString()
+        attr.append(NSAttributedString(string: "$", attributes: [
+            .font: MPFont.display(54, weight: .medium),
+            .foregroundColor: MPTheme.muted,
+        ]))
+        attr.append(NSAttributedString(string: f.string(from: NSNumber(value: amount)) ?? "\(amount)",
+                                       attributes: [
+            .font: MPFont.display(54, weight: .medium),
+            .foregroundColor: MPTheme.ink,
+            .kern: -1.0,
+        ]))
+        chipsValueLabel.attributedText = attr
     }
-    
-    @objc private func buttonTouchUp(_ sender: UIButton) {
-        UIView.animate(withDuration: 0.1) {
-            sender.transform = .identity
-            sender.alpha = 1.0
-        }
-    }
-    
+
+    // MARK: Actions
+
     @objc private func playTapped() {
-        let playerCount = playerCountSegment.selectedSegmentIndex + 3
-        let startingChips = Int(startingChipsSlider.value)
-        
-        // Hard guard: cannot start with more than coins
+        let playerCount = playerPicker.value
+        let startingChips = chipsSlider.value
+
         if Int64(startingChips) > availableCoins {
+            let f = NumberFormatter(); f.numberStyle = .decimal
+            let coinStr = f.string(from: NSNumber(value: availableCoins)) ?? "\(availableCoins)"
             let alert = UIAlertController(
                 title: "Not enough coins",
-                message: "You have \(formatCoin(availableCoins)) coins. Lower the starting chips or earn more coins.",
+                message: "You have \(coinStr) coins. Lower the starting chips or earn more coins.",
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "OK", style: .default))
             present(alert, animated: true)
             return
         }
-        
-        // Add haptic feedback
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
-        
+
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         let gameVC = GameViewController(playerCount: playerCount, startingChips: startingChips)
         gameVC.modalPresentationStyle = .fullScreen
         present(gameVC, animated: true)
     }
-    
-    @objc private func playWithFriendsTapped() {
-        let generator = UIImpactFeedbackGenerator(style: .medium)
-        generator.impactOccurred()
 
+    @objc private func playWithFriendsTapped() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         let lobby = MultiplayerEntryViewController()
-        lobby.modalPresentationStyle = .fullScreen
-        present(lobby, animated: true)
+        if let nav = navigationController {
+            nav.pushViewController(lobby, animated: true)
+        } else {
+            lobby.modalPresentationStyle = .fullScreen
+            present(lobby, animated: true)
+        }
     }
 
     @objc private func settingsTapped() {
-        // Add haptic feedback
-        let generator = UIImpactFeedbackGenerator(style: .light)
-        generator.impactOccurred()
-        
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let alert = UIAlertController(title: "Settings", message: "Coming soon!", preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
     }
 }
 
+// MARK: - "Play with Friends" secondary CTA with chip flourish
+
+/// Variant of MPSecondaryButton that prepends a two-chip flourish (coral
+/// + amber) on the leading edge — matches the JSX PlayWithFriendsCTA.
+final class PlayWithFriendsButton: UIControl {
+    private let bg = UIView()
+    private let chipCoral = MPChipView(size: 18, color: MPTheme.coral)
+    private let chipAmber = MPChipView(size: 18, color: MPTheme.amber)
+    private let label = UILabel()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        bg.isUserInteractionEnabled = false
+        bg.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(bg)
+        bg.layer.cornerRadius = 16
+        bg.layer.borderWidth = 1.5
+
+        let stack = UIStackView()
+        stack.axis = .horizontal
+        stack.alignment = .center
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.isUserInteractionEnabled = false
+
+        let chipWrap = UIView()
+        chipWrap.translatesAutoresizingMaskIntoConstraints = false
+        chipCoral.translatesAutoresizingMaskIntoConstraints = false
+        chipAmber.translatesAutoresizingMaskIntoConstraints = false
+        chipWrap.addSubview(chipCoral)
+        chipWrap.addSubview(chipAmber)
+        NSLayoutConstraint.activate([
+            chipCoral.leadingAnchor.constraint(equalTo: chipWrap.leadingAnchor),
+            chipCoral.topAnchor.constraint(equalTo: chipWrap.topAnchor),
+            chipCoral.bottomAnchor.constraint(equalTo: chipWrap.bottomAnchor),
+            chipCoral.widthAnchor.constraint(equalToConstant: 18),
+            chipAmber.leadingAnchor.constraint(equalTo: chipCoral.trailingAnchor, constant: -8),
+            chipAmber.centerYAnchor.constraint(equalTo: chipWrap.centerYAnchor),
+            chipAmber.widthAnchor.constraint(equalToConstant: 18),
+            chipAmber.heightAnchor.constraint(equalToConstant: 18),
+            chipWrap.widthAnchor.constraint(equalToConstant: 18 + 18 - 8),
+            chipWrap.heightAnchor.constraint(equalToConstant: 18),
+        ])
+
+        label.text = "Play with Friends"
+        label.font = MPFont.ui(15, weight: .bold)
+        label.translatesAutoresizingMaskIntoConstraints = false
+
+        stack.addArrangedSubview(chipWrap)
+        stack.addArrangedSubview(label)
+
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            bg.topAnchor.constraint(equalTo: topAnchor),
+            bg.leadingAnchor.constraint(equalTo: leadingAnchor),
+            bg.trailingAnchor.constraint(equalTo: trailingAnchor),
+            bg.bottomAnchor.constraint(equalTo: bottomAnchor),
+
+            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
+
+            heightAnchor.constraint(equalToConstant: 54),
+        ])
+
+        applyTheme()
+        addTarget(self, action: #selector(touchDown), for: .touchDown)
+        addTarget(self, action: #selector(touchUp), for: [.touchUpInside, .touchUpOutside, .touchCancel])
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyTheme()
+    }
+
+    private func applyTheme() {
+        bg.backgroundColor = MPTheme.glassMedium
+        bg.layer.borderColor = MPTheme.borderStrong.cgColor
+        label.textColor = MPTheme.ink
+        bg.layer.shadowColor = UIColor.black.cgColor
+        bg.layer.shadowOpacity = 0.15
+        bg.layer.shadowOffset = CGSize(width: 0, height: 1)
+        bg.layer.shadowRadius = 2
+    }
+
+    @objc private func touchDown() {
+        UIView.animate(withDuration: 0.08) { self.transform = .init(scaleX: 0.97, y: 0.97); self.alpha = 0.92 }
+    }
+    @objc private func touchUp() {
+        UIView.animate(withDuration: 0.12) { self.transform = .identity; self.alpha = 1 }
+    }
+}

@@ -2,9 +2,12 @@
 //  HostLobbyViewController.swift
 //  Tokiyo Casino — Offline Friends Poker
 //
-//  The host's pre-game lobby. Lists current seats (host + remote + AI +
-//  open), exposes blinds/buy-in/AI-fill knobs, and starts the game when
-//  the host taps "Start" (≥2 occupied seats required).
+//  Screen B — "Your table". The host's pre-game lobby. Mirrors the Claude
+//  Design handoff bundle (poker/project/Multiplayer.html — screen B):
+//  cancel top-left, "Live · X of N" badge top-right, eyebrow + title,
+//  recessed felt seat slots (host rail in gold, open seats show a card-back
+//  medallion), a 2×2 settings grid (Blinds, Buy-in, Seats, AI Fill), then
+//  a primary "Start Game" CTA pinned to the bottom.
 //
 
 import UIKit
@@ -15,20 +18,25 @@ final class HostLobbyViewController: UIViewController {
     private let hostService: PokerHostService
     private let transport: MPCTransport
 
-    private let titleLabel = UILabel()
-    private let codeLabel = UILabel()
+    // Layout
+    private let backdrop = MPPageBackgroundView()
+    private let liveBadge = MPLiveBadge(text: "Live · 1 of 6")
+    private let titleBlock = MPTitleView(
+        eyebrow: "Host Lobby",
+        title: "Your table",
+        subtitle: "Friends nearby can join now"
+    )
     private let seatsStack = UIStackView()
-    private let settingsStack = UIStackView()
-    private let aiToggle = UISwitch()
-    private let aiLabel = UILabel()
-    private let blindsLabel = UILabel()
-    private let buyInLabel = UILabel()
-    private let seatsLabel = UILabel()
-    private let blindsStepper = UIStepper()
-    private let buyInStepper = UIStepper()
-    private let seatsStepper = UIStepper()
-    private let startButton = UIButton(type: .system)
-    private let cancelButton = UIButton(type: .system)
+    private let gameEyebrow = mpSectionEyebrow("Game")
+
+    // Settings pills (held as properties so we can update their values
+    // when host service config changes).
+    private let blindsPill = MPStepperPill(label: "Blinds", value: "10 / 20")
+    private let buyInPill = MPStepperPill(label: "Buy-in", value: "$1,000")
+    private let seatsPill = MPStepperPill(label: "Seats", value: "6")
+    private let aiPill = MPTogglePill(label: "AI Fill", isOn: true)
+
+    private let startButton = MPPrimaryButton(title: "Start Game")
 
     init(displayName: String) {
         self.displayName = displayName
@@ -52,17 +60,25 @@ final class HostLobbyViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.05, green: 0.08, blue: 0.05, alpha: 1.0)
+        view.backgroundColor = MPTheme.pageBg
         setupUI()
         hostService.observer = self
         do {
             try hostService.startAdvertising()
         } catch {
             presentAlert(title: "Couldn't host", message: error.localizedDescription) { [weak self] in
-                self?.dismiss(animated: true)
+                self?.leaveScreen()
             }
         }
         refreshSeatsFromService()
+        refreshSettingsFromService()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationItem.title = ""
+        navigationItem.backButtonDisplayMode = .minimal
+        navigationController?.setNavigationBarHidden(false, animated: false)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -80,140 +96,111 @@ final class HostLobbyViewController: UIViewController {
     // MARK: UI
 
     private func setupUI() {
-        titleLabel.text = "Your Table"
-        titleLabel.font = UIFont(name: "Copperplate-Bold", size: 26) ?? .boldSystemFont(ofSize: 26)
-        titleLabel.textColor = .white
-        titleLabel.textAlignment = .center
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        codeLabel.text = "Friends nearby can join now"
-        codeLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        codeLabel.textColor = UIColor.white.withAlphaComponent(0.7)
-        codeLabel.textAlignment = .center
-        codeLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        seatsStack.axis = .vertical
-        seatsStack.spacing = 8
-        seatsStack.alignment = .fill
-        seatsStack.translatesAutoresizingMaskIntoConstraints = false
-
-        settingsStack.axis = .vertical
-        settingsStack.spacing = 10
-        settingsStack.alignment = .fill
-        settingsStack.translatesAutoresizingMaskIntoConstraints = false
-
-        blindsLabel.text = "Blinds: 10 / 20"
-        buyInLabel.text = "Buy-in: $1,000"
-        seatsLabel.text = "Seats: 6"
-        aiLabel.text = "Fill empty seats with AI"
-        [blindsLabel, buyInLabel, seatsLabel, aiLabel].forEach {
-            $0.textColor = .white
-            $0.font = .systemFont(ofSize: 14, weight: .medium)
+        [backdrop, liveBadge, titleBlock, seatsStack,
+         gameEyebrow, blindsPill, buyInPill, seatsPill, aiPill, startButton].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview($0)
         }
 
-        blindsStepper.minimumValue = 1
-        blindsStepper.maximumValue = 200
-        blindsStepper.stepValue = 5
-        blindsStepper.value = 10
-        blindsStepper.addTarget(self, action: #selector(blindsChanged), for: .valueChanged)
+        seatsStack.axis = .vertical
+        seatsStack.spacing = 6
+        seatsStack.alignment = .fill
 
-        buyInStepper.minimumValue = 100
-        buyInStepper.maximumValue = 5000
-        buyInStepper.stepValue = 100
-        buyInStepper.value = 1000
-        buyInStepper.addTarget(self, action: #selector(buyInChanged), for: .valueChanged)
+        // Settings grid — 2 columns × 2 rows, 6pt gutter (matches JSX).
+        let row1 = UIStackView(arrangedSubviews: [blindsPill, buyInPill])
+        let row2 = UIStackView(arrangedSubviews: [seatsPill, aiPill])
+        for row in [row1, row2] {
+            row.axis = .horizontal
+            row.spacing = 6
+            row.distribution = .fillEqually
+        }
+        let grid = UIStackView(arrangedSubviews: [row1, row2])
+        grid.axis = .vertical
+        grid.spacing = 6
+        grid.distribution = .fill
+        grid.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(grid)
 
-        seatsStepper.minimumValue = 2
-        seatsStepper.maximumValue = Double(PokerProtocol.maxTotalSeats)
-        seatsStepper.stepValue = 1
-        seatsStepper.value = 6
-        seatsStepper.addTarget(self, action: #selector(seatsChanged), for: .valueChanged)
+        // Wire stepper handlers
+        blindsPill.onMinus = { [weak self] in self?.bumpBlinds(by: -5) }
+        blindsPill.onPlus  = { [weak self] in self?.bumpBlinds(by:  5) }
+        buyInPill.onMinus  = { [weak self] in self?.bumpBuyIn(by: -100) }
+        buyInPill.onPlus   = { [weak self] in self?.bumpBuyIn(by:  100) }
+        seatsPill.onMinus  = { [weak self] in self?.bumpSeats(by: -1) }
+        seatsPill.onPlus   = { [weak self] in self?.bumpSeats(by:  1) }
+        aiPill.onValueChange = { [weak self] isOn in
+            self?.hostService.updateSettings { c in c.aiFillEnabled = isOn }
+        }
 
-        aiToggle.isOn = true
-        aiToggle.addTarget(self, action: #selector(aiToggled), for: .valueChanged)
-
-        settingsStack.addArrangedSubview(rowStack(blindsLabel, blindsStepper))
-        settingsStack.addArrangedSubview(rowStack(buyInLabel, buyInStepper))
-        settingsStack.addArrangedSubview(rowStack(seatsLabel, seatsStepper))
-        settingsStack.addArrangedSubview(rowStack(aiLabel, aiToggle))
-
-        startButton.setTitle("START GAME", for: .normal)
-        startButton.titleLabel?.font = UIFont(name: "Copperplate-Bold", size: 18) ?? .boldSystemFont(ofSize: 18)
-        startButton.setTitleColor(.white, for: .normal)
-        startButton.backgroundColor = UIColor(red: 0.18, green: 0.55, blue: 0.30, alpha: 1.0)
-        startButton.layer.cornerRadius = 24
-        startButton.translatesAutoresizingMaskIntoConstraints = false
         startButton.addTarget(self, action: #selector(startTapped), for: .touchUpInside)
 
-        cancelButton.setTitle("Cancel", for: .normal)
-        cancelButton.setTitleColor(UIColor.white.withAlphaComponent(0.7), for: .normal)
-        cancelButton.translatesAutoresizingMaskIntoConstraints = false
-        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
-
-        view.addSubview(titleLabel)
-        view.addSubview(codeLabel)
-        view.addSubview(seatsStack)
-        view.addSubview(settingsStack)
-        view.addSubview(startButton)
-        view.addSubview(cancelButton)
-
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
-            titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            backdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            codeLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 6),
-            codeLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            liveBadge.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            liveBadge.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
 
-            seatsStack.topAnchor.constraint(equalTo: codeLabel.bottomAnchor, constant: 22),
-            seatsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            seatsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            titleBlock.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
+            titleBlock.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            titleBlock.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            settingsStack.topAnchor.constraint(equalTo: seatsStack.bottomAnchor, constant: 22),
-            settingsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            settingsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            seatsStack.topAnchor.constraint(equalTo: titleBlock.bottomAnchor, constant: 18),
+            seatsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 18),
+            seatsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
 
-            startButton.bottomAnchor.constraint(equalTo: cancelButton.topAnchor, constant: -12),
-            startButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            startButton.widthAnchor.constraint(equalToConstant: 260),
-            startButton.heightAnchor.constraint(equalToConstant: 52),
+            gameEyebrow.topAnchor.constraint(equalTo: seatsStack.bottomAnchor, constant: 14),
+            gameEyebrow.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 22),
 
-            cancelButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-            cancelButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            grid.topAnchor.constraint(equalTo: gameEyebrow.bottomAnchor, constant: 8),
+            grid.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 18),
+            grid.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
+
+            startButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
+            startButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            startButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
         ])
-    }
-
-    private func rowStack(_ label: UILabel, _ control: UIView) -> UIStackView {
-        let s = UIStackView(arrangedSubviews: [label, UIView(), control])
-        s.axis = .horizontal
-        s.alignment = .center
-        return s
     }
 
     // MARK: Settings handlers
 
-    @objc private func blindsChanged() {
-        let sb = Int(blindsStepper.value)
-        blindsLabel.text = "Blinds: \(sb) / \(sb * 2)"
+    private func bumpBlinds(by delta: Int) {
+        let newSb = max(1, min(200, hostService.config.smallBlind + delta))
         hostService.updateSettings { c in
-            c.smallBlind = sb
-            c.bigBlind = sb * 2
+            c.smallBlind = newSb
+            c.bigBlind = newSb * 2
         }
+        refreshSettingsFromService()
     }
 
-    @objc private func buyInChanged() {
-        let v = Int(buyInStepper.value)
-        buyInLabel.text = "Buy-in: $\(formatted(v))"
+    private func bumpBuyIn(by delta: Int) {
+        let v = max(100, min(5000, hostService.config.startingChips + delta))
         hostService.updateSettings { c in c.startingChips = v }
+        refreshSettingsFromService()
     }
 
-    @objc private func seatsChanged() {
-        let v = Int(seatsStepper.value)
-        seatsLabel.text = "Seats: \(v)"
+    private func bumpSeats(by delta: Int) {
+        let occupied = hostService.seatRegistry.seats.filter { $0.kind != .open }.count
+        let v = max(occupied, max(2, min(PokerProtocol.maxTotalSeats, hostService.config.totalSeats + delta)))
         hostService.updateSettings { c in c.totalSeats = v }
+        refreshSettingsFromService()
     }
 
-    @objc private func aiToggled() {
-        hostService.updateSettings { c in c.aiFillEnabled = self.aiToggle.isOn }
+    private func refreshSettingsFromService() {
+        let cfg = hostService.config
+        blindsPill.value = "\(cfg.smallBlind) / \(cfg.bigBlind)"
+        buyInPill.value = "$\(formatted(cfg.startingChips))"
+        seatsPill.value = "\(cfg.totalSeats)"
+        blindsPill.minusEnabled = cfg.smallBlind > 1
+        blindsPill.plusEnabled = cfg.smallBlind < 200
+        buyInPill.minusEnabled = cfg.startingChips > 100
+        buyInPill.plusEnabled = cfg.startingChips < 5000
+        let occupied = hostService.seatRegistry.seats.filter { $0.kind != .open }.count
+        seatsPill.minusEnabled = cfg.totalSeats > max(2, occupied)
+        seatsPill.plusEnabled = cfg.totalSeats < PokerProtocol.maxTotalSeats
+        aiPill.isOn = cfg.aiFillEnabled
     }
 
     @objc private func startTapped() {
@@ -223,6 +210,7 @@ final class HostLobbyViewController: UIViewController {
                          message: "Wait for at least one friend to join, or turn on AI fill.")
             return
         }
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         // Present the network game BEFORE calling startGame so the new
         // VC is registered as the service's observer before any initial
         // `cardsDealt` / `gamePhaseDidChange` / `currentPlayerChanged`
@@ -242,61 +230,36 @@ final class HostLobbyViewController: UIViewController {
         }
     }
 
-    @objc private func cancelTapped() {
-        hostService.endTable(reason: "Host cancelled the table.")
-        dismiss(animated: true)
-    }
-
     // MARK: Seats UI
 
     private func refreshSeatsFromService() {
-        seatsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        seatsStack.arrangedSubviews.forEach {
+            seatsStack.removeArrangedSubview($0)
+            $0.removeFromSuperview()
+        }
         for seat in hostService.seatRegistry.seats {
             seatsStack.addArrangedSubview(seatRow(seat))
         }
+        let occupied = hostService.seatRegistry.seats.filter { $0.kind != .open }.count
+        let total = hostService.config.totalSeats
+        liveBadge.setText("Live · \(occupied) of \(total)")
     }
 
     private func seatRow(_ seat: SeatRegistry.SeatRecord) -> UIView {
-        let row = UIView()
-        row.backgroundColor = UIColor.white.withAlphaComponent(0.08)
-        row.layer.cornerRadius = 10
-
-        let title = UILabel()
-        title.text = "Seat \(seat.seatId + 1)"
-        title.font = .systemFont(ofSize: 12, weight: .semibold)
-        title.textColor = UIColor.white.withAlphaComponent(0.6)
-        title.translatesAutoresizingMaskIntoConstraints = false
-
-        let name = UILabel()
-        name.text = seat.displayName
-        name.font = .systemFont(ofSize: 16, weight: .bold)
-        name.textColor = .white
-        name.translatesAutoresizingMaskIntoConstraints = false
-
-        let kind = UILabel()
+        let kind: MPSeatSlot.Kind
+        let isDealer = seat.seatId == 0
         switch seat.kind {
-        case .host: kind.text = "Host (you)"
-        case .remote: kind.text = seat.isDisconnected ? "Reconnecting…" : "Remote"
-        case .ai: kind.text = "AI"
-        case .open: kind.text = "Open"
+        case .host:
+            kind = .host(name: seat.displayName, isDealer: isDealer)
+        case .remote:
+            let name = seat.isDisconnected ? "\(seat.displayName) · Reconnecting…" : seat.displayName
+            kind = .occupied(name: name, isAI: false, isDealer: isDealer)
+        case .ai:
+            kind = .occupied(name: seat.displayName, isAI: true, isDealer: isDealer)
+        case .open:
+            kind = .open
         }
-        kind.font = .systemFont(ofSize: 12, weight: .medium)
-        kind.textColor = UIColor.white.withAlphaComponent(0.75)
-        kind.translatesAutoresizingMaskIntoConstraints = false
-
-        row.addSubview(title)
-        row.addSubview(name)
-        row.addSubview(kind)
-        NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(equalToConstant: 56),
-            title.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            title.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
-            name.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            name.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 2),
-            kind.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
-            kind.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-        ])
-        return row
+        return MPSeatSlot(seatNumber: seat.seatId + 1, kind: kind)
     }
 
     // MARK: Helpers
@@ -311,11 +274,22 @@ final class HostLobbyViewController: UIViewController {
         alert.addAction(UIAlertAction(title: "OK", style: .default) { _ in then?() })
         present(alert, animated: true)
     }
+
+    /// Pop if pushed, otherwise dismiss — works in both navigation
+    /// modes so we don't need a separate code path for legacy callers.
+    private func leaveScreen() {
+        if let nav = navigationController, nav.viewControllers.first !== self {
+            nav.popViewController(animated: true)
+        } else {
+            dismiss(animated: true)
+        }
+    }
 }
 
 extension HostLobbyViewController: PokerHostServiceObserver {
     func host(_ service: PokerHostService, didUpdateLobby snapshot: LobbySnapshotPayload) {
         refreshSeatsFromService()
+        refreshSettingsFromService()
     }
     func host(_ service: PokerHostService, didUpdateSnapshot snapshot: TableSnapshotPayload) {}
     func host(_ service: PokerHostService, didReceivePrivateCards payload: PrivateCardsPayload) {}

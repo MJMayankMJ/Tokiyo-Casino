@@ -2,10 +2,17 @@
 //  JoinLobbyViewController.swift
 //  Tokiyo Casino — Offline Friends Poker
 //
-//  Guest's discovery + lobby flow:
-//   1. Browse for nearby tables (MPC).
-//   2. Tap a table → request to join.
-//   3. Wait in lobby until host starts the game.
+//  Screens C + D — "Nearby tables".
+//
+//   C · Scanning state — empty results: large central chip framed by an
+//       animated sonar, "Scanning hosts in range…" indicator, and a hint
+//       about Bluetooth proximity.
+//   D · Results state — once one or more tables are discovered: list of
+//       table-slot rows (host name, seat counts, blinds, buy-in) with a
+//       Join pill on the right, plus a Scan Again CTA.
+//
+//  Once the guest is admitted, the lobby fades into a waiting-for-host
+//  view that shares the seat-slot styling from Screen B.
 //
 
 import UIKit
@@ -16,17 +23,45 @@ final class JoinLobbyViewController: UIViewController {
     private let transport: MPCTransport
     private let clientService: PokerClientService
 
-    private let titleLabel = UILabel()
-    private let statusLabel = UILabel()
-    private let tableView = UITableView()
-    private let cancelButton = UIButton(type: .system)
-    private let lobbyContainer = UIStackView()
-    private let lobbySeatsStack = UIStackView()
-    private let lobbyTitleLabel = UILabel()
+    // Common chrome
+    private let backdrop = MPPageBackgroundView()
+    private let liveBadge = MPLiveBadge(text: "Scanning")
+    private let titleBlock = MPTitleView(
+        eyebrow: "Multiplayer",
+        title: "Nearby tables",
+        subtitle: "Scanning hosts in range…",
+        showLiveDot: true
+    )
 
+    // Scanning state
+    private let scanContainer = UIView()
+    private let scanArea = UIView()
+    private let sonar = MPSonarView()
+    private let scanFelt = UIView()
+    private let centerChip = MPChipView(size: 72, color: MPTheme.amber)
+    private let scanHint = UILabel()
+
+    // Results state
+    private let resultsStack = UIStackView()
+    private let scanAgainButton = MPSecondaryButton(
+        title: "Scan Again",
+        leadingIcon: UIImage(systemName: "arrow.clockwise")
+    )
+
+    // Joined-lobby (waiting for host) state
+    private let waitingTitle = MPTitleView(
+        eyebrow: "Joined",
+        title: "Waiting for host",
+        subtitle: "The host will start the game shortly"
+    )
+    private let waitingSeatsStack = UIStackView()
+    private let waitingContainer = UIView()
+
+    // State
     private var tables: [DiscoveredTable] = []
     private var currentLobby: LobbySnapshotPayload?
     private var hasPushedToGame: Bool = false
+    private var hasJoined: Bool = false
 
     init(displayName: String) {
         self.displayName = displayName
@@ -38,19 +73,29 @@ final class JoinLobbyViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.05, green: 0.07, blue: 0.13, alpha: 1.0)
+        view.backgroundColor = MPTheme.pageBg
         setupUI()
         clientService.observer = self
         do {
             try clientService.startBrowsing()
-            statusLabel.text = "Looking for nearby tables…"
         } catch {
-            statusLabel.text = error.localizedDescription
+            // Surface the error in the scan hint so the user sees what went wrong.
+            scanHint.text = error.localizedDescription
         }
+        applyState()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationItem.title = ""
+        navigationItem.backButtonDisplayMode = .minimal
+        navigationController?.setNavigationBarHidden(false, animated: false)
+        sonar.start()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        sonar.stop()
         // Avoid tearing down the live MPC session when we're just
         // presenting the network game on top of this lobby.
         guard isBeingDismissed || isMovingFromParent else { return }
@@ -58,122 +103,252 @@ final class JoinLobbyViewController: UIViewController {
     }
 
     private func setupUI() {
-        titleLabel.text = "Nearby Tables"
-        titleLabel.font = UIFont(name: "Copperplate-Bold", size: 26) ?? .boldSystemFont(ofSize: 26)
-        titleLabel.textColor = .white
-        titleLabel.textAlignment = .center
-        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Common
+        [backdrop, liveBadge, titleBlock,
+         scanContainer, resultsStack, scanAgainButton,
+         waitingContainer].forEach {
+            $0.translatesAutoresizingMaskIntoConstraints = false
+            view.addSubview($0)
+        }
 
-        statusLabel.text = "Looking for nearby tables…"
-        statusLabel.font = .systemFont(ofSize: 13, weight: .medium)
-        statusLabel.textColor = UIColor.white.withAlphaComponent(0.7)
-        statusLabel.textAlignment = .center
-        statusLabel.translatesAutoresizingMaskIntoConstraints = false
+        // Scanning area
+        scanArea.translatesAutoresizingMaskIntoConstraints = false
+        sonar.translatesAutoresizingMaskIntoConstraints = false
+        scanFelt.translatesAutoresizingMaskIntoConstraints = false
+        centerChip.translatesAutoresizingMaskIntoConstraints = false
+        scanHint.translatesAutoresizingMaskIntoConstraints = false
 
-        tableView.backgroundColor = .clear
-        tableView.translatesAutoresizingMaskIntoConstraints = false
-        tableView.dataSource = self
-        tableView.delegate = self
-        tableView.separatorStyle = .none
-        tableView.register(UITableViewCell.self, forCellReuseIdentifier: "row")
+        scanContainer.addSubview(scanArea)
+        scanArea.addSubview(scanFelt)
+        scanArea.addSubview(sonar)
+        scanArea.addSubview(centerChip)
+        scanContainer.addSubview(scanHint)
 
-        lobbyContainer.axis = .vertical
-        lobbyContainer.spacing = 12
-        lobbyContainer.translatesAutoresizingMaskIntoConstraints = false
-        lobbyContainer.isHidden = true
+        // Felt circle — radial gradient, then recessed inset shadow.
+        scanFelt.backgroundColor = MPTheme.feltDepth
+        scanFelt.layer.cornerRadius = 120
+        scanFelt.layer.borderColor = MPTheme.feltEdge.cgColor
+        scanFelt.layer.borderWidth = 1
+        let feltGlow = CAGradientLayer()
+        feltGlow.type = .radial
+        feltGlow.colors = [
+            MPTheme.felt.cgColor,
+            MPTheme.feltDepth.cgColor,
+            MPTheme.feltEdge.cgColor,
+        ]
+        feltGlow.locations = [0.0, 0.70, 1.0]
+        feltGlow.startPoint = CGPoint(x: 0.5, y: 0.3)
+        feltGlow.endPoint = CGPoint(x: 1.0, y: 1.0)
+        feltGlow.cornerRadius = 120
+        scanFelt.layer.insertSublayer(feltGlow, at: 0)
+        self.scanFeltGlow = feltGlow
 
-        lobbyTitleLabel.text = ""
-        lobbyTitleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        lobbyTitleLabel.textColor = .white
+        scanHint.text = "Keep Bluetooth on and stay in the same room as the host."
+        scanHint.textColor = MPTheme.muted
+        scanHint.font = MPFont.ui(12.5)
+        scanHint.textAlignment = .center
+        scanHint.numberOfLines = 0
 
-        lobbySeatsStack.axis = .vertical
-        lobbySeatsStack.spacing = 8
+        // Results
+        resultsStack.axis = .vertical
+        resultsStack.spacing = 8
+        resultsStack.alignment = .fill
+        scanAgainButton.addTarget(self, action: #selector(scanAgainTapped), for: .touchUpInside)
 
-        lobbyContainer.addArrangedSubview(lobbyTitleLabel)
-        lobbyContainer.addArrangedSubview(lobbySeatsStack)
-
-        cancelButton.setTitle("Cancel", for: .normal)
-        cancelButton.setTitleColor(UIColor.white.withAlphaComponent(0.7), for: .normal)
-        cancelButton.translatesAutoresizingMaskIntoConstraints = false
-        cancelButton.addTarget(self, action: #selector(cancelTapped), for: .touchUpInside)
-
-        view.addSubview(titleLabel)
-        view.addSubview(statusLabel)
-        view.addSubview(tableView)
-        view.addSubview(lobbyContainer)
-        view.addSubview(cancelButton)
+        // Waiting container holds the title + seat stack.
+        waitingContainer.translatesAutoresizingMaskIntoConstraints = false
+        waitingTitle.translatesAutoresizingMaskIntoConstraints = false
+        waitingSeatsStack.translatesAutoresizingMaskIntoConstraints = false
+        waitingContainer.addSubview(waitingTitle)
+        waitingContainer.addSubview(waitingSeatsStack)
+        waitingSeatsStack.axis = .vertical
+        waitingSeatsStack.spacing = 6
 
         NSLayoutConstraint.activate([
-            titleLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 24),
-            titleLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            backdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            statusLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 8),
-            statusLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            liveBadge.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            liveBadge.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
 
-            tableView.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 18),
-            tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            tableView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            tableView.bottomAnchor.constraint(equalTo: cancelButton.topAnchor, constant: -12),
+            titleBlock.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
+            titleBlock.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
+            titleBlock.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
-            lobbyContainer.topAnchor.constraint(equalTo: statusLabel.bottomAnchor, constant: 18),
-            lobbyContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            lobbyContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            // Scanning state fills the area between title and bottom safe area
+            scanContainer.topAnchor.constraint(equalTo: titleBlock.bottomAnchor, constant: 12),
+            scanContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scanContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scanContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
 
-            cancelButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
-            cancelButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            scanArea.topAnchor.constraint(equalTo: scanContainer.topAnchor),
+            scanArea.leadingAnchor.constraint(equalTo: scanContainer.leadingAnchor),
+            scanArea.trailingAnchor.constraint(equalTo: scanContainer.trailingAnchor),
+            scanArea.bottomAnchor.constraint(equalTo: scanHint.topAnchor, constant: -12),
+
+            scanFelt.centerXAnchor.constraint(equalTo: scanArea.centerXAnchor),
+            scanFelt.centerYAnchor.constraint(equalTo: scanArea.centerYAnchor),
+            scanFelt.widthAnchor.constraint(equalToConstant: 240),
+            scanFelt.heightAnchor.constraint(equalToConstant: 240),
+
+            sonar.centerXAnchor.constraint(equalTo: scanFelt.centerXAnchor),
+            sonar.centerYAnchor.constraint(equalTo: scanFelt.centerYAnchor),
+            sonar.widthAnchor.constraint(equalToConstant: 240),
+            sonar.heightAnchor.constraint(equalToConstant: 240),
+
+            centerChip.centerXAnchor.constraint(equalTo: scanFelt.centerXAnchor),
+            centerChip.centerYAnchor.constraint(equalTo: scanFelt.centerYAnchor),
+            centerChip.widthAnchor.constraint(equalToConstant: 72),
+            centerChip.heightAnchor.constraint(equalToConstant: 72),
+
+            scanHint.leadingAnchor.constraint(equalTo: scanContainer.leadingAnchor, constant: 32),
+            scanHint.trailingAnchor.constraint(equalTo: scanContainer.trailingAnchor, constant: -32),
+            scanHint.bottomAnchor.constraint(equalTo: scanContainer.bottomAnchor, constant: -18),
+
+            // Results state
+            resultsStack.topAnchor.constraint(equalTo: titleBlock.bottomAnchor, constant: 18),
+            resultsStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 18),
+            resultsStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
+
+            scanAgainButton.topAnchor.constraint(equalTo: resultsStack.bottomAnchor, constant: 14),
+            scanAgainButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            scanAgainButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+
+            // Waiting (joined) state
+            waitingContainer.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
+            waitingContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            waitingContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            waitingContainer.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -28),
+
+            waitingTitle.topAnchor.constraint(equalTo: waitingContainer.topAnchor),
+            waitingTitle.leadingAnchor.constraint(equalTo: waitingContainer.leadingAnchor, constant: 24),
+            waitingTitle.trailingAnchor.constraint(equalTo: waitingContainer.trailingAnchor, constant: -24),
+
+            waitingSeatsStack.topAnchor.constraint(equalTo: waitingTitle.bottomAnchor, constant: 18),
+            waitingSeatsStack.leadingAnchor.constraint(equalTo: waitingContainer.leadingAnchor, constant: 18),
+            waitingSeatsStack.trailingAnchor.constraint(equalTo: waitingContainer.trailingAnchor, constant: -18),
         ])
     }
 
-    @objc private func cancelTapped() {
-        dismiss(animated: true)
+    private weak var scanFeltGlow: CAGradientLayer?
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        scanFeltGlow?.frame = scanFelt.bounds
     }
 
-    private func showLobby(_ snapshot: LobbySnapshotPayload) {
-        currentLobby = snapshot
-        tableView.isHidden = true
-        lobbyContainer.isHidden = false
-        statusLabel.text = "Joined — waiting for the host to start the game."
-        lobbyTitleLabel.text = "Table seats"
-        lobbySeatsStack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        for seat in snapshot.seats {
-            lobbySeatsStack.addArrangedSubview(seatRow(seat))
+    // MARK: State machine
+
+    /// Routes the three states (scanning, results, joined) by toggling
+    /// the parent containers — keeps each block laid out independently
+    /// in `setupUI` so re-rendering is cheap.
+    private func applyState() {
+        if hasJoined {
+            scanContainer.isHidden = true
+            resultsStack.isHidden = true
+            scanAgainButton.isHidden = true
+            waitingContainer.isHidden = false
+            // (no Cancel button — nav-bar back handles dismissal)
+            liveBadge.isHidden = true
+            titleBlock.isHidden = true
+        } else if tables.isEmpty {
+            scanContainer.isHidden = false
+            resultsStack.isHidden = true
+            scanAgainButton.isHidden = true
+            waitingContainer.isHidden = true
+            titleBlock.setSubtitle("Scanning hosts in range…")
+            liveBadge.setText("Scanning")
+        } else {
+            scanContainer.isHidden = true
+            resultsStack.isHidden = false
+            scanAgainButton.isHidden = false
+            waitingContainer.isHidden = true
+            titleBlock.setSubtitle("Tap a table to join")
+            let openCount = tables.filter { !$0.advert.isStarted && $0.advert.humansJoined < $0.advert.totalSeats }.count
+            liveBadge.setText("\(openCount) Open")
         }
     }
 
-    private func seatRow(_ seat: LobbySeatPayload) -> UIView {
-        let row = UIView()
-        row.backgroundColor = UIColor.white.withAlphaComponent(0.08)
-        row.layer.cornerRadius = 10
+    private func rebuildResults() {
+        resultsStack.arrangedSubviews.forEach {
+            resultsStack.removeArrangedSubview($0); $0.removeFromSuperview()
+        }
+        // Stable chip colors based on table index (matches the design's
+        // varied chip palette per table row).
+        let palette: [UIColor] = [
+            MPTheme.coral,
+            UIColor(red: 0x9B/255.0, green: 0x7F/255.0, blue: 0xFF/255.0, alpha: 1),
+            MPTheme.amber,
+            MPTheme.forest,
+            MPTheme.coralDeep,
+        ]
+        for (i, t) in tables.enumerated() {
+            let advert = t.advert
+            let players = advert.humansJoined
+            let max = advert.totalSeats
+            let blindsStr = "\(advert.smallBlind)/\(advert.bigBlind)"
+            let row = MPTableSlot(
+                host: advert.hostName,
+                players: players,
+                max: max,
+                blinds: blindsStr,
+                buyIn: nil,
+                chipColor: palette[i % palette.count]
+            )
+            row.onJoin = { [weak self] in
+                self?.handleJoinTapped(t)
+            }
+            resultsStack.addArrangedSubview(row)
+        }
+    }
 
-        let title = UILabel()
-        title.text = "Seat \(seat.seatId + 1)"
-        title.font = .systemFont(ofSize: 12, weight: .semibold)
-        title.textColor = UIColor.white.withAlphaComponent(0.6)
-        title.translatesAutoresizingMaskIntoConstraints = false
+    private func handleJoinTapped(_ table: DiscoveredTable) {
+        do {
+            try clientService.join(table: table)
+        } catch {
+            presentAlert(title: "Couldn't join", message: error.localizedDescription)
+        }
+    }
 
-        let name = UILabel()
-        name.text = seat.displayName
-        name.font = .systemFont(ofSize: 16, weight: .bold)
-        name.textColor = .white
-        name.translatesAutoresizingMaskIntoConstraints = false
+    @objc private func scanAgainTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        tables = []
+        applyState()
+        clientService.leaveTable()
+        do { try clientService.startBrowsing() }
+        catch { scanHint.text = error.localizedDescription }
+    }
 
-        let kind = UILabel()
-        kind.text = seat.isHost ? "Host" : seat.kind.uppercased()
-        kind.font = .systemFont(ofSize: 12, weight: .medium)
-        kind.textColor = UIColor.white.withAlphaComponent(0.75)
-        kind.translatesAutoresizingMaskIntoConstraints = false
+    // MARK: Joined-lobby presentation
 
-        row.addSubview(title); row.addSubview(name); row.addSubview(kind)
-        NSLayoutConstraint.activate([
-            row.heightAnchor.constraint(equalToConstant: 56),
-            title.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            title.topAnchor.constraint(equalTo: row.topAnchor, constant: 8),
-            name.leadingAnchor.constraint(equalTo: row.leadingAnchor, constant: 14),
-            name.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 2),
-            kind.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -14),
-            kind.centerYAnchor.constraint(equalTo: row.centerYAnchor),
-        ])
-        return row
+    private func showLobby(_ snapshot: LobbySnapshotPayload) {
+        currentLobby = snapshot
+        hasJoined = true
+        waitingSeatsStack.arrangedSubviews.forEach {
+            waitingSeatsStack.removeArrangedSubview($0); $0.removeFromSuperview()
+        }
+        for seat in snapshot.seats {
+            waitingSeatsStack.addArrangedSubview(lobbySeatRow(seat))
+        }
+        applyState()
+    }
+
+    private func lobbySeatRow(_ seat: LobbySeatPayload) -> UIView {
+        // Treat the joining user's own seat as occupied; the host renders
+        // with the gold rail; AIs and other humans get a regular chip; open
+        // shows the cardback medallion.
+        let isDealer = seat.seatId == 0
+        let kind: MPSeatSlot.Kind
+        if seat.isHost {
+            kind = .host(name: seat.displayName, isDealer: isDealer)
+        } else if seat.kind == "open" {
+            kind = .open
+        } else {
+            let isAI = seat.kind.lowercased() == "ai"
+            kind = .occupied(name: seat.displayName, isAI: isAI, isDealer: isDealer)
+        }
+        return MPSeatSlot(seatNumber: seat.seatId + 1, kind: kind)
     }
 
     private func presentNetworkGame() {
@@ -183,33 +358,11 @@ final class JoinLobbyViewController: UIViewController {
         vc.modalPresentationStyle = .fullScreen
         present(vc, animated: true)
     }
-}
 
-// MARK: - Discovery list
-
-extension JoinLobbyViewController: UITableViewDataSource, UITableViewDelegate {
-    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        tables.count
-    }
-    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
-        let cell = tableView.dequeueReusableCell(withIdentifier: "row", for: indexPath)
-        let t = tables[indexPath.row]
-        cell.backgroundColor = UIColor.white.withAlphaComponent(0.08)
-        cell.textLabel?.textColor = .white
-        cell.detailTextLabel?.textColor = UIColor.white.withAlphaComponent(0.7)
-        cell.textLabel?.font = .systemFont(ofSize: 16, weight: .semibold)
-        cell.textLabel?.text = t.advert.displayName
-        cell.accessoryType = .disclosureIndicator
-        return cell
-    }
-    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: true)
-        let t = tables[indexPath.row]
-        statusLabel.text = "Joining \(t.advert.displayName)…"
-        do { try clientService.join(table: t) }
-        catch {
-            statusLabel.text = "Failed to join: \(error.localizedDescription)"
-        }
+    private func presentAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
 
@@ -217,13 +370,10 @@ extension JoinLobbyViewController: UITableViewDataSource, UITableViewDelegate {
 
 extension JoinLobbyViewController: PokerClientServiceObserver {
     func client(_ service: PokerClientService, didFindTables tables: [DiscoveredTable]) {
+        guard !hasJoined else { return }
         self.tables = tables
-        tableView.reloadData()
-        if tables.isEmpty {
-            statusLabel.text = "Looking for nearby tables…"
-        } else {
-            statusLabel.text = "Found \(tables.count) nearby — tap one to join."
-        }
+        rebuildResults()
+        applyState()
     }
 
     func client(_ service: PokerClientService, didReceiveJoinAccepted payload: JoinAcceptedPayload) {
@@ -231,10 +381,7 @@ extension JoinLobbyViewController: PokerClientServiceObserver {
     }
 
     func client(_ service: PokerClientService, didReceiveJoinRejected payload: JoinRejectedPayload) {
-        let alert = UIAlertController(title: "Couldn't join", message: payload.reason,
-                                      preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+        presentAlert(title: "Couldn't join", message: payload.reason)
     }
 
     func client(_ service: PokerClientService, didReceiveLobby snapshot: LobbySnapshotPayload) {
@@ -265,12 +412,17 @@ extension JoinLobbyViewController: PokerClientServiceObserver {
                                       message: "Table ended.",
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
-            self?.dismiss(animated: true)
+            guard let self else { return }
+            if let nav = self.navigationController, nav.viewControllers.first !== self {
+                nav.popViewController(animated: true)
+            } else {
+                self.dismiss(animated: true)
+            }
         })
         present(alert, animated: true)
     }
 
     func client(_ service: PokerClientService, transportError error: Error) {
-        statusLabel.text = "Network error: \(error.localizedDescription)"
+        scanHint.text = "Network error: \(error.localizedDescription)"
     }
 }
