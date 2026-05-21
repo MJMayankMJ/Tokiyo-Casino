@@ -23,6 +23,8 @@ extension GameViewController {
         // Back chip keeps the legacy menu (New Game / Mute / Exit) since the
         // top-right chip is now a hand-details affordance.
         topBar.backButton.addTarget(self, action: #selector(menuTapped), for: .touchUpInside)
+        topBar.rulesButton.tintColor = PokerTheme.ink
+        topBar.rulesButton.addTarget(self, action: #selector(rulesTapped), for: .touchUpInside)
         topBar.menuButton.tintColor = PokerTheme.ink
         topBar.menuButton.addTarget(self, action: #selector(handDetailsTapped), for: .touchUpInside)
         // Disabled until the first completed hand provides data to show.
@@ -57,11 +59,11 @@ extension GameViewController {
         }
         view.addSubview(bettingControls)
 
-        // New-hand button — restyled to match the design's forest accent.
+        // New-hand button.
         newHandButton.setTitle("New Hand", for: .normal)
         newHandButton.titleLabel?.font = .systemFont(ofSize: 16, weight: .heavy)
-        newHandButton.setTitleColor(.white, for: .normal)
-        newHandButton.backgroundColor = PokerTheme.forest
+        newHandButton.setTitleColor(PokerTheme.primaryActionText, for: .normal)
+        newHandButton.backgroundColor = PokerTheme.primaryAction
         newHandButton.layer.cornerRadius = 16
         newHandButton.layer.borderWidth = 0
         PokerTheme.applyShadowMd(newHandButton.layer)

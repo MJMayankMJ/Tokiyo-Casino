@@ -36,6 +36,8 @@ enum PokerTheme {
     static let forest = UIColor.dyn(light: 0x5E9466, dark: 0x7BB07A)
     static let forestDeep = UIColor.dyn(light: 0x4B7B53, dark: 0x5E8A60)
     static let amber = UIColor.dyn(light: 0xC99540, dark: 0xD9A958)
+    static let primaryAction = UIColor.dyn(light: 0xC99540, dark: 0xD9A958)
+    static let primaryActionText = UIColor.dyn(light: 0x2E220D, dark: 0x241A0A)
     static let warn = UIColor.dyn(light: 0xC24A4A, dark: 0xD86056)
 
     // Card back
@@ -474,6 +476,7 @@ final class PotPillView: UIView {
 
 final class TopInfoBar: UIView {
     let backButton = UIButton(type: .system)
+    let rulesButton = UIButton(type: .system)
     let menuButton = UIButton(type: .system)
     private let infoLabel = UILabel()
     private let infoPill = UIView()
@@ -498,13 +501,18 @@ final class TopInfoBar: UIView {
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
         infoPill.addSubview(infoLabel)
 
-        // Top-right chip — hand-details / info icon (was 3-dot ellipsis).
+        // Top-right chips — rules plus completed-hand details.
+        styleIconButton(rulesButton, systemImage: "questionmark.circle")
+        addSubview(rulesButton)
+
+        // Hand-details / info icon (was 3-dot ellipsis).
         // The hosting view controller toggles `isEnabled` once the first
         // hand finishes; until then it's a passive affordance.
         styleIconButton(menuButton, systemImage: "list.bullet.rectangle")
         addSubview(menuButton)
 
         backButton.translatesAutoresizingMaskIntoConstraints = false
+        rulesButton.translatesAutoresizingMaskIntoConstraints = false
         menuButton.translatesAutoresizingMaskIntoConstraints = false
 
         NSLayoutConstraint.activate([
@@ -518,9 +526,16 @@ final class TopInfoBar: UIView {
             menuButton.widthAnchor.constraint(equalToConstant: 36),
             menuButton.heightAnchor.constraint(equalToConstant: 36),
 
+            rulesButton.trailingAnchor.constraint(equalTo: menuButton.leadingAnchor, constant: -8),
+            rulesButton.centerYAnchor.constraint(equalTo: centerYAnchor),
+            rulesButton.widthAnchor.constraint(equalToConstant: 36),
+            rulesButton.heightAnchor.constraint(equalToConstant: 36),
+
             infoPill.centerXAnchor.constraint(equalTo: centerXAnchor),
             infoPill.centerYAnchor.constraint(equalTo: centerYAnchor),
             infoPill.heightAnchor.constraint(equalToConstant: 30),
+            infoPill.leadingAnchor.constraint(greaterThanOrEqualTo: backButton.trailingAnchor, constant: 10),
+            infoPill.trailingAnchor.constraint(lessThanOrEqualTo: rulesButton.leadingAnchor, constant: -10),
 
             infoLabel.topAnchor.constraint(equalTo: infoPill.topAnchor),
             infoLabel.bottomAnchor.constraint(equalTo: infoPill.bottomAnchor),

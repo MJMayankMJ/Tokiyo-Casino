@@ -112,12 +112,12 @@ class PlayerView: UIView {
         addSubview(actionLabel)
 
         // Your-turn pill (hero only)
-        turnPill.backgroundColor = PokerTheme.forest
+        turnPill.backgroundColor = PokerTheme.primaryAction
         turnPill.layer.cornerRadius = 10
         turnPill.isHidden = true
         addSubview(turnPill)
         turnPillLabel.text = "YOUR TURN · 12s"
-        turnPillLabel.textColor = .white
+        turnPillLabel.textColor = PokerTheme.primaryActionText
         turnPillLabel.font = .systemFont(ofSize: 9.5, weight: .heavy)
         turnPillLabel.textAlignment = .center
         turnPillLabel.adjustsFontSizeToFitWidth = true
@@ -130,7 +130,7 @@ class PlayerView: UIView {
         activeRingBg.strokeColor = PokerTheme.border.cgColor
         activeRingBg.lineWidth = 2
         timerRing.fillColor = UIColor.clear.cgColor
-        timerRing.strokeColor = PokerTheme.forest.cgColor
+        timerRing.strokeColor = PokerTheme.primaryAction.cgColor
         timerRing.lineWidth = 2.5
         timerRing.lineCap = .round
         activeRingBg.isHidden = true
@@ -212,7 +212,7 @@ class PlayerView: UIView {
             return
         }
         if isHighlighted && !isHumanPlayer {
-            showBadge(text: "12s", color: PokerTheme.forest)
+            showBadge(text: "12s", color: PokerTheme.primaryAction)
             return
         }
         statusBadge.isHidden = true

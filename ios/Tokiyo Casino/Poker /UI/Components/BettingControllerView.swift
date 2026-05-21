@@ -127,14 +127,14 @@ final class BettingControlsView: UIView {
         track.translatesAutoresizingMaskIntoConstraints = false
         sliderTouchArea.addSubview(track)
 
-        fill.backgroundColor = PokerTheme.forest
+        fill.backgroundColor = PokerTheme.primaryAction
         fill.layer.cornerRadius = 3
         fill.translatesAutoresizingMaskIntoConstraints = true
         track.addSubview(fill)
 
         thumb.backgroundColor = .white
         thumb.layer.borderWidth = 2
-        thumb.layer.borderColor = PokerTheme.forest.cgColor
+        thumb.layer.borderColor = PokerTheme.primaryAction.cgColor
         thumb.layer.cornerRadius = 10
         thumb.layer.shadowColor = UIColor.black.cgColor
         thumb.layer.shadowOpacity = 0.2
@@ -237,6 +237,17 @@ final class BettingControlsView: UIView {
         positionThumb()
     }
 
+    private func requestThumbLayout() {
+        setNeedsLayout()
+        sliderTouchArea.setNeedsLayout()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.layoutIfNeeded()
+            self.sliderTouchArea.layoutIfNeeded()
+            self.positionThumb()
+        }
+    }
+
     private func styleStepperButton(_ button: UIButton, glyph: String) {
         button.translatesAutoresizingMaskIntoConstraints = false
         button.backgroundColor = PokerTheme.surfaceAlt
@@ -317,12 +328,12 @@ final class BettingControlsView: UIView {
             : nil
         raiseButton.isEnabled = canRaise
 
-        rebuildQuickBets()
-        updateRaiseLabels()
-        positionThumb()
         setNeedsLayout()
         invalidateIntrinsicContentSize()
         onHeightChanged?(preferredHeight)
+        rebuildQuickBets()
+        updateRaiseLabels()
+        requestThumbLayout()
 
         // Slide-in animation
         transform = CGAffineTransform(translationX: 0, y: 60)
@@ -439,20 +450,21 @@ final class BettingControlsView: UIView {
     }
 
     private func positionThumb() {
+        sliderTouchArea.layoutIfNeeded()
+        track.layoutIfNeeded()
         guard !raisePanel.isHidden, track.bounds.width > 0 else {
             thumb.isHidden = true
             fill.frame = .zero
             return
         }
         thumb.isHidden = false
+        let trackFrame = track.convert(track.bounds, to: sliderTouchArea)
         guard maxRaise > minRaise else {
-            let trackFrame = track.frame
             thumb.frame = CGRect(x: trackFrame.minX - 10, y: trackFrame.midY - 10, width: 20, height: 20)
             fill.frame = .zero
             return
         }
         let pct = CGFloat(raiseValue - minRaise) / CGFloat(maxRaise - minRaise)
-        let trackFrame = track.frame
         let x = trackFrame.minX + trackFrame.width * pct
         thumb.frame = CGRect(x: x - 10, y: trackFrame.midY - 10, width: 20, height: 20)
         fill.frame = CGRect(x: 0, y: 0, width: track.bounds.width * pct, height: track.bounds.height)
@@ -536,6 +548,7 @@ final class BettingControlsView: UIView {
             self.raisePanel.alpha = 1
             self.raisePanel.transform = .identity
             self.layoutIfNeeded()
+            self.positionThumb()
         }
     }
 
@@ -579,6 +592,7 @@ private final class ActionButton: UIView {
 
     private let titleLabel = UILabel()
     private let sublabelLabel = UILabel()
+    private let textStack = UIStackView()
     private let kind: Kind
 
     init(kind: Kind) {
@@ -591,19 +605,26 @@ private final class ActionButton: UIView {
         titleLabel.font = .systemFont(ofSize: 16, weight: .heavy)
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(titleLabel)
 
         sublabelLabel.font = .systemFont(ofSize: 11, weight: .semibold)
         sublabelLabel.textAlignment = .center
         sublabelLabel.translatesAutoresizingMaskIntoConstraints = false
         sublabelLabel.isHidden = true
-        addSubview(sublabelLabel)
+
+        textStack.axis = .vertical
+        textStack.alignment = .center
+        textStack.spacing = 1
+        textStack.isUserInteractionEnabled = false
+        textStack.translatesAutoresizingMaskIntoConstraints = false
+        textStack.addArrangedSubview(titleLabel)
+        textStack.addArrangedSubview(sublabelLabel)
+        addSubview(textStack)
 
         NSLayoutConstraint.activate([
-            titleLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -7),
-            sublabelLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            sublabelLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 1),
+            textStack.centerXAnchor.constraint(equalTo: centerXAnchor),
+            textStack.centerYAnchor.constraint(equalTo: centerYAnchor),
+            textStack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 8),
+            textStack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -8),
         ])
 
         applyStyle()
@@ -678,9 +699,9 @@ private final class ActionButton: UIView {
             titleLabel.textColor = PokerTheme.ink
             sublabelLabel.textColor = PokerTheme.muted
         case .raise:
-            backgroundColor = PokerTheme.forest
-            titleLabel.textColor = .white
-            sublabelLabel.textColor = UIColor.white.withAlphaComponent(0.85)
+            backgroundColor = PokerTheme.primaryAction
+            titleLabel.textColor = PokerTheme.primaryActionText
+            sublabelLabel.textColor = PokerTheme.primaryActionText.withAlphaComponent(0.72)
         }
         PokerTheme.applyShadowMd(layer)
     }
@@ -725,9 +746,9 @@ private final class QuickBetButton: UIView {
         alpha = isEnabled ? 1.0 : 0.42
 
         if isSelectedBet && isEnabled {
-            backgroundColor = isAllIn ? PokerTheme.amber : PokerTheme.forest
+            backgroundColor = PokerTheme.primaryAction
             layer.borderColor = backgroundColor?.cgColor
-            label.textColor = .white
+            label.textColor = PokerTheme.primaryActionText
         } else {
             backgroundColor = PokerTheme.surfaceAlt
             label.textColor = PokerTheme.ink

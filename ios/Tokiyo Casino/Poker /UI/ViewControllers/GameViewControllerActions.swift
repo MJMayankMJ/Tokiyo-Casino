@@ -123,6 +123,11 @@ extension GameViewController {
         SoundManager.setMuted(!SoundManager.isMuted)
     }
 
+    @objc func rulesTapped() {
+        addHapticFeedback(.light)
+        present(PokerRulesViewController(), animated: true)
+    }
+
     // MARK: - Hand details (top-right icon)
     @objc func handDetailsTapped() {
         guard hasCompletedFirstHand, let summary = lastHandSummary else { return }

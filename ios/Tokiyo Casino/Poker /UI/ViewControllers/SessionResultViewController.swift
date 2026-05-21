@@ -113,7 +113,7 @@ final class SessionResultViewController: UIViewController {
         }
 
         styleSolidButton(playAgainButton, title: "Play Again",
-                         background: PokerTheme.forest, foreground: .white)
+                         background: PokerTheme.primaryAction, foreground: PokerTheme.primaryActionText)
         playAgainButton.addTarget(self, action: #selector(playAgainTapped), for: .touchUpInside)
         view.addSubview(playAgainButton)
 
