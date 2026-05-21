@@ -12,7 +12,7 @@ extension PokerTableView {
         self.players = players
         for (index, player) in players.enumerated() {
             if index < playerViews.count {
-                let side = index < cardSides.count ? cardSides[index] : .right
+                let side = cardSide(forPlayerIndex: index, totalPlayers: players.count)
                 playerViews[index].configureWith(player: player, isDealer: index == dealerIndex, cardSide: side)
                 updateBetPill(for: player, atIndex: index)
             }

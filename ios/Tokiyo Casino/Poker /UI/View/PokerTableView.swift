@@ -61,6 +61,32 @@ class PokerTableView: UIView {
 
     var players: [Player] = []
 
+    func visualSeatIndex(forPlayerIndex index: Int, totalPlayers: Int? = nil) -> Int {
+        let count = max(1, totalPlayers ?? players.count)
+        let order: [Int]
+        switch count {
+        case 2:
+            order = [0, 3]
+        case 3:
+            order = [0, 2, 4]
+        case 4:
+            order = [0, 2, 3, 4]
+        case 5:
+            order = [0, 1, 2, 4, 5]
+        default:
+            order = [0, 1, 2, 3, 4, 5]
+        }
+        guard index < order.count else {
+            return min(index, playerPositions.count - 1)
+        }
+        return order[index]
+    }
+
+    func cardSide(forPlayerIndex index: Int, totalPlayers: Int? = nil) -> PlayerView.TuckedCardSide {
+        let seatIndex = visualSeatIndex(forPlayerIndex: index, totalPlayers: totalPlayers)
+        return seatIndex < cardSides.count ? cardSides[seatIndex] : .right
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupView()

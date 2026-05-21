@@ -131,7 +131,7 @@ extension PokerTableView {
             playerView.frame = CGRect(origin: .zero, size: size)
             addSubview(playerView)
             playerViews.append(playerView)
-            let side = index < cardSides.count ? cardSides[index] : .right
+            let side = cardSide(forPlayerIndex: index, totalPlayers: players.count)
             playerView.configureWith(player: player, isDealer: index == dealerIndex, cardSide: side)
         }
 
@@ -146,9 +146,10 @@ extension PokerTableView {
         guard table.width > 0 else { return }
 
         for (index, playerView) in playerViews.enumerated() {
-            guard index < playerPositions.count else { continue }
+            let seatIndex = visualSeatIndex(forPlayerIndex: index, totalPlayers: playerViews.count)
+            guard seatIndex < playerPositions.count else { continue }
 
-            let pos = playerPositions[index]
+            let pos = playerPositions[seatIndex]
             let isHuman = index == 0
             let baseSize = isHuman ? humanPlayerBaseSize : aiPlayerBaseSize
             let size = CGSize(width: baseSize.width * designScale, height: baseSize.height * designScale)
@@ -175,9 +176,10 @@ extension PokerTableView {
         guard table.width > 0 else { return }
 
         for (index, player) in players.enumerated() {
-            guard index < betPillPositions.count else { continue }
+            let seatIndex = visualSeatIndex(forPlayerIndex: index, totalPlayers: players.count)
+            guard seatIndex < betPillPositions.count else { continue }
             guard let pill = betPills[player.id] else { continue }
-            let pos = betPillPositions[index]
+            let pos = betPillPositions[seatIndex]
             let size = pill.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize)
             pill.bounds.size = CGSize(width: max(56 * designScale, size.width), height: 24 * designScale)
             pill.center = CGPoint(
