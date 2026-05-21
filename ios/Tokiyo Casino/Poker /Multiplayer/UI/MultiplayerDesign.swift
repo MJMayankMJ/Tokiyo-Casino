@@ -46,6 +46,9 @@ enum MPTheme {
     static let forestDeep = UIColor.dyn(light: 0x4B7B53, dark: 0x5E8A60)
     static let amber      = UIColor.dyn(light: 0xC99540, dark: 0xD9B26A)
     static let amberDeep  = UIColor.dyn(light: 0xA87723, dark: 0xA8853E)
+    // Primary controls use the same amber as selected player pills.
+    static let primaryAction = UIColor.dyn(light: 0xC99540, dark: 0xD9B26A)
+    static let primaryActionText = UIColor.dyn(light: 0x3B2A0E, dark: 0x3B2A0E)
     // Card-back medallion (open seats)
     static let cardBack   = UIColor.dyn(light: 0xC9A674, dark: 0x2A3245)
     static let cardBackBg = UIColor.dyn(light: 0xF5E6C8, dark: 0x141823)
@@ -512,6 +515,7 @@ final class MPTitleView: UIView {
         self.titleText = title
         self.subtitleText = subtitle
         super.init(frame: .zero)
+        isUserInteractionEnabled = false
 
         self.eyebrow.textAlignment = .center
         titleLabel.textAlignment = .center
@@ -617,7 +621,7 @@ final class MPBackPill: UIButton {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = MPTheme.glass
-        layer.cornerRadius = 18
+        layer.cornerRadius = 22
         layer.borderColor = MPTheme.border.cgColor
         layer.borderWidth = 1
         layer.shadowColor = UIColor.black.cgColor
@@ -625,12 +629,12 @@ final class MPBackPill: UIButton {
         layer.shadowOffset = CGSize(width: 0, height: 1)
         layer.shadowRadius = 2
 
-        let cfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
         setImage(UIImage(systemName: "chevron.left", withConfiguration: cfg), for: .normal)
         applyTint()
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 36).isActive = true
-        heightAnchor.constraint(equalToConstant: 36).isActive = true
+        widthAnchor.constraint(equalToConstant: 44).isActive = true
+        heightAnchor.constraint(equalToConstant: 44).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -646,25 +650,39 @@ final class MPBackPill: UIButton {
     }
 }
 
+enum MPNavigationChrome {
+    static func hideSystemBackBar(for viewController: UIViewController, animated: Bool) {
+        viewController.navigationItem.title = ""
+        viewController.navigationItem.hidesBackButton = true
+        viewController.navigationController?.setNavigationBarHidden(true, animated: animated)
+    }
+
+    static func restoreSystemBackBarIfLeaving(_ viewController: UIViewController, animated: Bool) {
+        guard viewController.isMovingFromParent || viewController.isBeingDismissed else { return }
+        viewController.navigationItem.hidesBackButton = false
+        viewController.navigationController?.setNavigationBarHidden(false, animated: animated)
+    }
+}
+
 // MARK: - Gear pill
 
 final class MPGearPill: UIButton {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = MPTheme.glass
-        layer.cornerRadius = 12
+        layer.cornerRadius = 22
         layer.borderColor = MPTheme.border.cgColor
         layer.borderWidth = 1
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOpacity = 0.15
         layer.shadowOffset = CGSize(width: 0, height: 1)
         layer.shadowRadius = 2
-        let cfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 17, weight: .semibold)
         setImage(UIImage(systemName: "gearshape", withConfiguration: cfg), for: .normal)
         applyTint()
         translatesAutoresizingMaskIntoConstraints = false
-        widthAnchor.constraint(equalToConstant: 36).isActive = true
-        heightAnchor.constraint(equalToConstant: 36).isActive = true
+        widthAnchor.constraint(equalToConstant: 44).isActive = true
+        heightAnchor.constraint(equalToConstant: 44).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -678,56 +696,79 @@ final class MPGearPill: UIButton {
     private func applyTint() { tintColor = MPTheme.ink }
 }
 
-// MARK: - Primary CTA (sage gradient pill)
+// MARK: - Primary CTA (warm parchment pill)
 
 final class MPPrimaryButton: UIButton {
-    private let gradient = CAGradientLayer()
-
     init(title: String) {
         super.init(frame: .zero)
         setTitle(title, for: .normal)
-        setTitleColor(.white, for: .normal)
         titleLabel?.font = MPFont.ui(16, weight: .bold)
         layer.cornerRadius = 16
         layer.masksToBounds = false
 
-        gradient.startPoint = CGPoint(x: 0.5, y: 0)
-        gradient.endPoint = CGPoint(x: 0.5, y: 1)
-        gradient.cornerRadius = 16
-        layer.insertSublayer(gradient, at: 0)
-
-        applyShadowAndGradient()
+        applyPrimaryStyle()
         translatesAutoresizingMaskIntoConstraints = false
         heightAnchor.constraint(equalToConstant: 58).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        gradient.frame = bounds
-        // Keep title above the gradient layer
-        bringSubviewToFront(titleLabel ?? self)
-    }
-
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
         super.traitCollectionDidChange(previousTraitCollection)
-        applyShadowAndGradient()
+        applyPrimaryStyle()
     }
 
-    private func applyShadowAndGradient() {
+    private func applyPrimaryStyle() {
         let resolved = traitCollection
-        gradient.colors = [
-            MPTheme.forest.resolvedColor(with: resolved).cgColor,
-            MPTheme.forestDeep.resolvedColor(with: resolved).cgColor,
-        ]
-        layer.shadowColor = MPTheme.forestDeep.cgColor
-        layer.shadowOpacity = 0.45
+        backgroundColor = MPTheme.primaryAction
+        setTitleColor(MPTheme.primaryActionText, for: .normal)
+        layer.shadowColor = MPTheme.primaryAction.resolvedColor(with: resolved).cgColor
+        layer.shadowOpacity = resolved.userInterfaceStyle == .dark ? 0.30 : 0.36
         layer.shadowOffset = CGSize(width: 0, height: 8)
         layer.shadowRadius = 14
     }
 
     override var isEnabled: Bool {
         didSet { alpha = isEnabled ? 1 : 0.55 }
+    }
+}
+
+final class MPCompactPrimaryButton: UIButton {
+    init(title: String) {
+        super.init(frame: .zero)
+        setTitle(title, for: .normal)
+        titleLabel?.font = MPFont.ui(12, weight: .heavy)
+        contentEdgeInsets = UIEdgeInsets(top: 9, left: 16, bottom: 9, right: 16)
+        layer.cornerRadius = 999
+        layer.borderWidth = 1
+        applyPrimaryStyle()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var isEnabled: Bool {
+        didSet { applyPrimaryStyle() }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyPrimaryStyle()
+    }
+
+    private func applyPrimaryStyle() {
+        let isDark = traitCollection.userInterfaceStyle == .dark
+        if isEnabled {
+            setTitleColor(MPTheme.primaryActionText, for: .normal)
+            backgroundColor = MPTheme.primaryAction
+            layer.borderColor = UIColor.clear.cgColor
+            layer.shadowColor = MPTheme.primaryAction.resolvedColor(with: traitCollection).cgColor
+            layer.shadowOpacity = Float(isDark ? 0.38 : 0.30)
+            layer.shadowOffset = CGSize(width: 0, height: 4)
+            layer.shadowRadius = 8
+        } else {
+            setTitleColor(MPTheme.faint, for: .normal)
+            backgroundColor = MPTheme.glassWeak
+            layer.borderColor = MPTheme.border.cgColor
+            layer.shadowOpacity = 0
+        }
     }
 }
 
@@ -856,7 +897,7 @@ final class MPIdentityChip: UIButton {
         ]))
         nameLabel.attributedText = attr
 
-        changeLabel.attributedText = NSAttributedString(string: "Change", attributes: [
+        changeLabel.attributedText = NSAttributedString(string: "Change name", attributes: [
             .font: MPFont.ui(13.5, weight: .heavy),
             .foregroundColor: MPTheme.tint,
         ])
@@ -1527,7 +1568,7 @@ final class MPTableSlot: UIView {
     private let eyebrow = UILabel()
     private let titleLabel = UILabel()
     private let metaLabel = UILabel()
-    private let joinButton: UIButton
+    private let joinButton: MPCompactPrimaryButton
     private let chipColor: UIColor
     private let fullState: Bool
     private let hostName: String
@@ -1548,7 +1589,7 @@ final class MPTableSlot: UIView {
         self.blinds = blinds
         self.buyIn = buyIn
         self.chip = MPChipView(size: 40, color: chipColor)
-        self.joinButton = UIButton(type: .system)
+        self.joinButton = MPCompactPrimaryButton(title: full ? "FULL" : "JOIN")
         super.init(frame: .zero)
 
         layer.cornerRadius = 14
@@ -1567,16 +1608,11 @@ final class MPTableSlot: UIView {
         addSubview(metaLabel)
 
         joinButton.translatesAutoresizingMaskIntoConstraints = false
-        joinButton.layer.cornerRadius = 999
-        joinButton.titleLabel?.font = MPFont.ui(12, weight: .heavy)
-        joinButton.setTitle(full ? "FULL" : "JOIN", for: .normal)
-        joinButton.contentEdgeInsets = UIEdgeInsets(top: 9, left: 16, bottom: 9, right: 16)
         if !full {
             joinButton.addTarget(self, action: #selector(joinTapped), for: .touchUpInside)
         } else {
             joinButton.isEnabled = false
         }
-        joinButton.layer.borderWidth = 1
         addSubview(joinButton)
 
         NSLayoutConstraint.activate([
@@ -1663,17 +1699,9 @@ final class MPTableSlot: UIView {
         metaLabel.attributedText = meta
 
         if fullState {
-            joinButton.setTitleColor(MPTheme.faint, for: .normal)
-            joinButton.backgroundColor = MPTheme.glassWeak
-            joinButton.layer.borderColor = MPTheme.border.cgColor
+            joinButton.isEnabled = false
         } else {
-            joinButton.setTitleColor(.white, for: .normal)
-            joinButton.backgroundColor = MPTheme.forestDeep
-            joinButton.layer.borderColor = UIColor.clear.cgColor
-            joinButton.layer.shadowColor = MPTheme.forestDeep.cgColor
-            joinButton.layer.shadowOpacity = Float(isDark ? 0.45 : 0.30)
-            joinButton.layer.shadowOffset = CGSize(width: 0, height: 4)
-            joinButton.layer.shadowRadius = 8
+            joinButton.isEnabled = true
         }
     }
 
@@ -1933,11 +1961,11 @@ final class MPPlayerPicker: UIControl {
     }
 }
 
-// MARK: - Chips slider (Screen E — gold chip thumb on a forest-to-amber rail)
+// MARK: - Chips slider (Screen E — gold chip thumb on a warm rail)
 
 final class MPChipsSlider: UIControl {
     private let trackBg = UIView()
-    private let trackFill = CAGradientLayer()
+    private let trackFill = CALayer()
     private let thumb = MPChipView(size: 32, color: MPTheme.amber)
     private let minLabel = UILabel()
     private let maxLabel = UILabel()
@@ -1963,8 +1991,6 @@ final class MPChipsSlider: UIControl {
         addSubview(trackBg)
 
         trackFill.cornerRadius = 7
-        trackFill.startPoint = CGPoint(x: 0, y: 0.5)
-        trackFill.endPoint = CGPoint(x: 1, y: 0.5)
         trackBg.layer.addSublayer(trackFill)
 
         stepsContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -2069,10 +2095,8 @@ final class MPChipsSlider: UIControl {
         let resolved = traitCollection
         let isDark = resolved.userInterfaceStyle == .dark
         trackBg.backgroundColor = MPTheme.feltDepth
-        trackFill.colors = [
-            MPTheme.forest.resolvedColor(with: resolved).cgColor,
-            MPTheme.amber.resolvedColor(with: resolved).cgColor,
-        ]
+        let fillColor = MPTheme.primaryAction.resolvedColor(with: resolved).cgColor
+        trackFill.backgroundColor = fillColor
         for dot in stepDots {
             dot.backgroundColor = UIColor.black.withAlphaComponent(isDark ? 0.55 : 0.20)
         }

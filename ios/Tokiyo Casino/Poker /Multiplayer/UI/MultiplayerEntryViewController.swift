@@ -108,10 +108,11 @@ enum ReconnectTokenStore {
 final class MultiplayerEntryViewController: UIViewController {
 
     private let backdrop = MPPageBackgroundView()
+    private let backButton = MPBackPill()
     private let titleBlock = MPTitleView(
         eyebrow: "Multiplayer",
         title: "Play with friends",
-        subtitle: "Nearby — no Wi-Fi or router required"
+        subtitle: "Nearby — no internet required"
     )
     private let identityChip = MPIdentityChip()
     private let chipTray = MPChipTrayOrnament()
@@ -128,6 +129,10 @@ final class MultiplayerEntryViewController: UIViewController {
 
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(backdrop)
+
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        backButton.addTarget(self, action: #selector(backTapped), for: .touchUpInside)
+        view.addSubview(backButton)
 
         titleBlock.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(titleBlock)
@@ -153,7 +158,10 @@ final class MultiplayerEntryViewController: UIViewController {
             backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            titleBlock.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            backButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            backButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+
+            titleBlock.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
             titleBlock.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
             titleBlock.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
@@ -177,11 +185,7 @@ final class MultiplayerEntryViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // Inherit MenuViewController's transparent nav-bar styling so the
-        // system back button rides on the cream backdrop without a slab.
-        navigationItem.title = ""
-        navigationItem.backButtonDisplayMode = .minimal
-        navigationController?.setNavigationBarHidden(false, animated: false)
+        MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
 
         if let saved = MultiplayerProfile.savedName {
             currentName = saved
@@ -193,7 +197,17 @@ final class MultiplayerEntryViewController: UIViewController {
         }
     }
 
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        MPNavigationChrome.restoreSystemBackBarIfLeaving(self, animated: animated)
+    }
+
     // MARK: - Name prompt
+
+    @objc private func backTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        leaveScreen()
+    }
 
     @objc private func changeNameTapped() {
         promptForName(initialValue: currentName, isFirstTime: false)
@@ -258,6 +272,14 @@ final class MultiplayerEntryViewController: UIViewController {
         } else {
             vc.modalPresentationStyle = .fullScreen
             present(vc, animated: true)
+        }
+    }
+
+    private func leaveScreen() {
+        if let nav = navigationController, nav.viewControllers.first !== self {
+            nav.popViewController(animated: true)
+        } else {
+            dismiss(animated: true)
         }
     }
 }

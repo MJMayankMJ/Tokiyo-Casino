@@ -25,6 +25,7 @@ final class JoinLobbyViewController: UIViewController {
 
     // Common chrome
     private let backdrop = MPPageBackgroundView()
+    private let backButton = MPBackPill()
     private let liveBadge = MPLiveBadge(text: "Scanning")
     private let titleBlock = MPTitleView(
         eyebrow: "Multiplayer",
@@ -87,14 +88,13 @@ final class JoinLobbyViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        navigationItem.title = ""
-        navigationItem.backButtonDisplayMode = .minimal
-        navigationController?.setNavigationBarHidden(false, animated: false)
+        MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
         sonar.start()
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        MPNavigationChrome.restoreSystemBackBarIfLeaving(self, animated: animated)
         sonar.stop()
         // Avoid tearing down the live MPC session when we're just
         // presenting the network game on top of this lobby.
@@ -104,7 +104,7 @@ final class JoinLobbyViewController: UIViewController {
 
     private func setupUI() {
         // Common
-        [backdrop, liveBadge, titleBlock,
+        [backdrop, backButton, liveBadge, titleBlock,
          scanContainer, resultsStack, scanAgainButton,
          waitingContainer].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
@@ -154,6 +154,7 @@ final class JoinLobbyViewController: UIViewController {
         resultsStack.spacing = 8
         resultsStack.alignment = .fill
         scanAgainButton.addTarget(self, action: #selector(scanAgainTapped), for: .touchUpInside)
+        backButton.addTarget(self, action: #selector(backTapped), for: .touchUpInside)
 
         // Waiting container holds the title + seat stack.
         waitingContainer.translatesAutoresizingMaskIntoConstraints = false
@@ -169,6 +170,9 @@ final class JoinLobbyViewController: UIViewController {
             backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            backButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            backButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
             liveBadge.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             liveBadge.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
@@ -249,7 +253,7 @@ final class JoinLobbyViewController: UIViewController {
             resultsStack.isHidden = true
             scanAgainButton.isHidden = true
             waitingContainer.isHidden = false
-            // (no Cancel button — nav-bar back handles dismissal)
+            // (no Cancel button — the shared poker back pill handles dismissal)
             liveBadge.isHidden = true
             titleBlock.isHidden = true
         } else if tables.isEmpty {
@@ -311,6 +315,11 @@ final class JoinLobbyViewController: UIViewController {
         }
     }
 
+    @objc private func backTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        leaveScreen()
+    }
+
     @objc private func scanAgainTapped() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         tables = []
@@ -363,6 +372,14 @@ final class JoinLobbyViewController: UIViewController {
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+
+    private func leaveScreen() {
+        if let nav = navigationController, nav.viewControllers.first !== self {
+            nav.popViewController(animated: true)
+        } else {
+            dismiss(animated: true)
+        }
     }
 }
 

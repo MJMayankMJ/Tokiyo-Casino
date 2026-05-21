@@ -20,6 +20,7 @@ final class HostLobbyViewController: UIViewController {
 
     // Layout
     private let backdrop = MPPageBackgroundView()
+    private let backButton = MPBackPill()
     private let liveBadge = MPLiveBadge(text: "Live · 1 of 6")
     private let titleBlock = MPTitleView(
         eyebrow: "Host Lobby",
@@ -76,13 +77,12 @@ final class HostLobbyViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        navigationItem.title = ""
-        navigationItem.backButtonDisplayMode = .minimal
-        navigationController?.setNavigationBarHidden(false, animated: false)
+        MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        MPNavigationChrome.restoreSystemBackBarIfLeaving(self, animated: animated)
         // Only tear down when this VC is actually going away. A
         // modal full-screen presentation from this VC (e.g., the
         // NetworkGameViewController) also fires viewWillDisappear, and
@@ -96,7 +96,7 @@ final class HostLobbyViewController: UIViewController {
     // MARK: UI
 
     private func setupUI() {
-        [backdrop, liveBadge, titleBlock, seatsStack,
+        [backdrop, backButton, liveBadge, titleBlock, seatsStack,
          gameEyebrow, blindsPill, buyInPill, seatsPill, aiPill, startButton].forEach {
             $0.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview($0)
@@ -133,12 +133,16 @@ final class HostLobbyViewController: UIViewController {
         }
 
         startButton.addTarget(self, action: #selector(startTapped), for: .touchUpInside)
+        backButton.addTarget(self, action: #selector(backTapped), for: .touchUpInside)
 
         NSLayoutConstraint.activate([
             backdrop.topAnchor.constraint(equalTo: view.topAnchor),
             backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+
+            backButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            backButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
             liveBadge.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             liveBadge.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
@@ -165,6 +169,11 @@ final class HostLobbyViewController: UIViewController {
     }
 
     // MARK: Settings handlers
+
+    @objc private func backTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        leaveScreen()
+    }
 
     private func bumpBlinds(by delta: Int) {
         let newSb = max(1, min(200, hostService.config.smallBlind + delta))

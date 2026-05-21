@@ -6,8 +6,8 @@
 //  handoff bundle (poker/project/Multiplayer.html — screen E).
 //
 //  Navigation: this VC is pushed onto the host nav stack (see
-//  HomeViewController.openPokerGame). Back navigation uses the system
-//  nav-bar back button — no custom cancel/back pill.
+//  HomeViewController.openPokerGame). The system nav bar is hidden here so
+//  the custom poker back pill does not reserve an empty title row.
 //
 
 import UIKit
@@ -16,6 +16,7 @@ class MenuViewController: UIViewController {
 
     // MARK: Subviews
     private let backdrop = MPPageBackgroundView()
+    private let backButton = MPBackPill()
     private let gearButton = MPGearPill()
     private let titleBlock = MPTitleView(
         eyebrow: "Solo Game",
@@ -62,28 +63,13 @@ class MenuViewController: UIViewController {
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        // Show the system navigation bar with a transparent appearance
-        // so the system back button is visible without painting a
-        // grey/cream slab over the cream backdrop.
-        configureTransparentNavBar()
+        MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
         refreshCoinsAndClampSlider()
     }
 
-    private func configureTransparentNavBar() {
-        guard let nav = navigationController else { return }
-        nav.setNavigationBarHidden(false, animated: false)
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithTransparentBackground()
-        appearance.backgroundColor = .clear
-        appearance.shadowColor = .clear
-        // Back chevron + "Back" label inherit nav-bar tint
-        nav.navigationBar.standardAppearance = appearance
-        nav.navigationBar.scrollEdgeAppearance = appearance
-        nav.navigationBar.compactAppearance = appearance
-        nav.navigationBar.tintColor = MPTheme.tint
-        navigationItem.title = ""
-        // Use a chevron-only back button on screens we push from here.
-        navigationItem.backButtonDisplayMode = .minimal
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        MPNavigationChrome.restoreSystemBackBarIfLeaving(self, animated: animated)
     }
 
     private func setupUI() {
@@ -91,6 +77,10 @@ class MenuViewController: UIViewController {
 
         backdrop.translatesAutoresizingMaskIntoConstraints = false
         view.insertSubview(backdrop, at: 0)
+
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(backButton)
+        backButton.addTarget(self, action: #selector(backTapped), for: .touchUpInside)
 
         gearButton.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(gearButton)
@@ -182,10 +172,13 @@ class MenuViewController: UIViewController {
             backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
+            backButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            backButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
+
             gearButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
             gearButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
-            centerStack.topAnchor.constraint(equalTo: gearButton.bottomAnchor, constant: 8),
+            centerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
             centerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
             centerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
 
@@ -239,6 +232,11 @@ class MenuViewController: UIViewController {
 
     // MARK: Actions
 
+    @objc private func backTapped() {
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        leaveScreen()
+    }
+
     @objc private func playTapped() {
         let playerCount = playerPicker.value
         let startingChips = chipsSlider.value
@@ -278,6 +276,14 @@ class MenuViewController: UIViewController {
         let alert = UIAlertController(title: "Settings", message: "Coming soon!", preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default))
         present(alert, animated: true)
+    }
+
+    private func leaveScreen() {
+        if let nav = navigationController, nav.viewControllers.first !== self {
+            nav.popViewController(animated: true)
+        } else {
+            dismiss(animated: true)
+        }
     }
 }
 
