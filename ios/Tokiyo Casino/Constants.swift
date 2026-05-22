@@ -25,10 +25,10 @@ enum K {
     static let lose       = "3 In A Row"
     
     // MARK: - Button Texts
-    static let playSlots  = "PLAY SLOTS"
-    static let playLotto  = "PLAY LOTTO"
-    static let playCoino  = "PLAY COINO"
-    static let playPoker  = "PLAY POKER"
+    static let playSlots    = "PLAY SLOTS"
+    static let playLotto    = "PLAY LOTTO"
+    static let playJackaroo = "PLAY JACKAROO"
+    static let playPoker    = "PLAY POKER"
     
     // MARK: - Audio
     static let sound      = "Slots"
@@ -44,7 +44,8 @@ enum K {
     // MARK: - Segues
     static let toSlotVC   = "toSlotVC"
     static let toLottoVC  = "toLottoVC"
-    static let toCoinoVC  = "toCoinoVC"
+    // toCoinoVC removed — Coino was replaced by Jackaroo, which is
+    // pushed programmatically from HomeViewController.openJackarooGame.
     
     // MARK: - Font Helper Methods
     static func customFont(size: CGFloat) -> UIFont {

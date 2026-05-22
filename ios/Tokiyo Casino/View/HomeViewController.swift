@@ -273,14 +273,19 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             case self.imageTokioLotto:
                 self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
             case self.imageTokioCoino:
-                self.performSegue(withIdentifier: K.toCoinoVC, sender: nil)
+                // Coino has been replaced by Jackaroo. The IBOutlet
+                // name is preserved to avoid touching the storyboard
+                // hierarchy; the storyboard label now reads
+                // "JACKAROO". The toCoinoVC segue is intentionally
+                // unused — we push the Jackaroo entry directly.
+                self.openJackarooGame()
             case self.imageTokioPoker:
                 self.openPokerGame()
             default: break
             }
         }
     }
-    
+
     @objc private func didTapPlayButton(_ sender: UITapGestureRecognizer) {
         guard let iv = sender.view as? UIImageView else { return }
         animateImageButtonTap(iv) {
@@ -290,7 +295,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             case self.buttonPlayLotto:
                 self.performSegue(withIdentifier: K.toLottoVC, sender: nil)
             case self.buttonPlayCoino:
-                self.performSegue(withIdentifier: K.toCoinoVC, sender: nil)
+                self.openJackarooGame()
             case self.buttonPlayPoker:
                 self.openPokerGame()
             default: break
@@ -301,11 +306,25 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     private func openPokerGame() {
         let pokerVC = MenuViewController()
         pokerVC.modalPresentationStyle = .fullScreen
-        
+
         if let navigationController = navigationController {
             navigationController.pushViewController(pokerVC, animated: true)
         } else {
             present(pokerVC, animated: true)
+        }
+    }
+
+    private func openJackarooGame() {
+        // Phase 1 entry point. The full game UI (board, hand, hot-seat
+        // flow) lands in Phase 2; for now this opens a debug/placeholder
+        // screen that exercises the deterministic engine so the tile is
+        // wired end-to-end.
+        let jackarooVC = JackarooEntryViewController()
+        jackarooVC.modalPresentationStyle = .fullScreen
+        if let navigationController = navigationController {
+            navigationController.pushViewController(jackarooVC, animated: true)
+        } else {
+            present(jackarooVC, animated: true)
         }
     }
     
