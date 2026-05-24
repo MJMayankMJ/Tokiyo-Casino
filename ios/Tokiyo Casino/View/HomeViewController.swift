@@ -315,11 +315,9 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     }
 
     private func openJackarooGame() {
-        // Phase 1 entry point. The full game UI (board, hand, hot-seat
-        // flow) lands in Phase 2; for now this opens a debug/placeholder
-        // screen that exercises the deterministic engine so the tile is
-        // wired end-to-end.
-        let jackarooVC = JackarooEntryViewController()
+        // Phase 2 entry point — the real board UI. Solo vs 3 AIs; hot-
+        // seat lobby + variant presets land in Phase 3 / Phase 5.
+        let jackarooVC = JackarooGameViewController()
         jackarooVC.modalPresentationStyle = .fullScreen
         if let navigationController = navigationController {
             navigationController.pushViewController(jackarooVC, animated: true)
