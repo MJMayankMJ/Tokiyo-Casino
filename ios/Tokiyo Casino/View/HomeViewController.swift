@@ -1,6 +1,6 @@
 //
 //  HomeViewController.swift
-//  Spin Royale
+//  Tokiyo Casino
 //
 //  Created by Mayank Jangid on 5/28/25.
 //
@@ -11,12 +11,6 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
     // MARK: - Outlets
     @IBOutlet weak var labelTotalCoins: UILabel!
-    @IBOutlet weak var imageTokioSlots: UIImageView!
-    @IBOutlet weak var imageTokioLotto: UIImageView!
-    @IBOutlet weak var imageTokioCoino: UIImageView!
-    @IBOutlet weak var buttonPlaySlots: UIImageView!
-    @IBOutlet weak var buttonPlayLotto: UIImageView!
-    @IBOutlet weak var buttonPlayCoino: UIImageView!
     @IBOutlet weak var treasureChestImage: UIImageView!
 
     private enum HomeGame: Int {
@@ -45,13 +39,19 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         )
     }
 
+    private weak var disclaimerPill: UIView?
+    private weak var disclaimerInfoButton: UIButton?
+    private static let disclaimerSeenKey = "homeDisclaimerSeen.v1"
+
     private func setupDisclaimerLabel() {
+        // Expanded pill
         let pill = UIView()
-        pill.backgroundColor = UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 0.78)
+        pill.backgroundColor = UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 0.85)
         pill.layer.cornerRadius = 10
         pill.layer.borderWidth = 1
         pill.layer.borderColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 0.55).cgColor
         pill.translatesAutoresizingMaskIntoConstraints = false
+        pill.isUserInteractionEnabled = true
         view.addSubview(pill)
 
         let disclaimer = UILabel()
@@ -63,6 +63,24 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         disclaimer.translatesAutoresizingMaskIntoConstraints = false
         pill.addSubview(disclaimer)
 
+        let pillTap = UITapGestureRecognizer(target: self, action: #selector(collapseDisclaimer))
+        pill.addGestureRecognizer(pillTap)
+
+        // Collapsed info button (SF Symbol)
+        var cfg = UIButton.Configuration.plain()
+        cfg.image = UIImage(systemName: "info.circle.fill",
+                            withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular))
+        cfg.baseForegroundColor = UIColor(red: 0.18, green: 0.14, blue: 0.10, alpha: 0.70)
+        cfg.contentInsets = .zero
+
+        let infoButton = UIButton(configuration: cfg)
+        infoButton.translatesAutoresizingMaskIntoConstraints = false
+        infoButton.backgroundColor = .clear
+        infoButton.accessibilityLabel = "Show disclaimer"
+        infoButton.alpha = 0
+        infoButton.addTarget(self, action: #selector(expandDisclaimer), for: .touchUpInside)
+        view.addSubview(infoButton)
+
         NSLayoutConstraint.activate([
             pill.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
             pill.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
@@ -71,8 +89,59 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             disclaimer.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 12),
             disclaimer.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -12),
             disclaimer.topAnchor.constraint(equalTo: pill.topAnchor, constant: 8),
-            disclaimer.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -8)
+            disclaimer.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -8),
+
+            infoButton.widthAnchor.constraint(equalToConstant: 32),
+            infoButton.heightAnchor.constraint(equalToConstant: 32),
+            infoButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
+            infoButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -6)
         ])
+
+        self.disclaimerPill = pill
+        self.disclaimerInfoButton = infoButton
+
+        // Decide initial state
+        let alreadySeen = UserDefaults.standard.bool(forKey: Self.disclaimerSeenKey)
+        if alreadySeen {
+            // Start collapsed
+            pill.alpha = 0
+            pill.isHidden = true
+            infoButton.alpha = 1
+        } else {
+            // Show full pill, auto-collapse after 4s
+            UserDefaults.standard.set(true, forKey: Self.disclaimerSeenKey)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
+                self?.collapseDisclaimer()
+            }
+        }
+    }
+
+    @objc private func collapseDisclaimer() {
+        guard let pill = disclaimerPill, let button = disclaimerInfoButton, !pill.isHidden else { return }
+        UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut], animations: {
+            pill.alpha = 0
+            pill.transform = CGAffineTransform(scaleX: 0.6, y: 0.6).translatedBy(x: pill.bounds.width / 2 - 40, y: 0)
+            button.alpha = 1
+        }, completion: { _ in
+            pill.isHidden = true
+            pill.transform = .identity
+        })
+    }
+
+    @objc private func expandDisclaimer() {
+        guard let pill = disclaimerPill, let button = disclaimerInfoButton else { return }
+        pill.isHidden = false
+        pill.alpha = 0
+        pill.transform = CGAffineTransform(scaleX: 0.6, y: 0.6).translatedBy(x: pill.bounds.width / 2 - 40, y: 0)
+        UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut], animations: {
+            pill.alpha = 1
+            pill.transform = .identity
+            button.alpha = 0
+        })
+        // Auto-collapse again after a few seconds
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            self?.collapseDisclaimer()
+        }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -147,15 +216,6 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             stackView.removeArrangedSubview($0)
             $0.removeFromSuperview()
         }
-
-        [
-            imageTokioSlots,
-            imageTokioLotto,
-            imageTokioCoino,
-            buttonPlaySlots,
-            buttonPlayLotto,
-            buttonPlayCoino
-        ].forEach { $0?.isUserInteractionEnabled = false }
     }
 
     private func makeGameCard(game: HomeGame,

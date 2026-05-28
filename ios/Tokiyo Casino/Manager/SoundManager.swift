@@ -1,6 +1,6 @@
 //
 //  SoundManager.swift
-//  Spin Royale
+//  Tokiyo Casino
 //
 //  Created by Mayank Jangid on 3/19/25.
 //

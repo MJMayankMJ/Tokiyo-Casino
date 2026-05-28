@@ -1,6 +1,6 @@
 //
 //  CoinManager.swift
-//  Spin Royale
+//  Tokiyo Casino
 //
 //  Created by Mayank Jangid on 3/28/25.
 //

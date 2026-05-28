@@ -72,7 +72,7 @@
                                             <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="center" spacing="10" translatesAutoresizingMaskIntoConstraints="NO" id="gQl-Qs-VEg">
                                                 <rect key="frame" x="49" y="29" width="295" height="368"/>
                                                 <subviews>
-                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="tYi-Wg-YAc" userLabel="Button Section 1">
+                                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="tYi-Wg-YAc" userLabel="Placeholder Card (replaced at runtime)">
                                                         <rect key="frame" x="0.0" y="0.0" width="295" height="116"/>
                                                         <subviews>
                                                             <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="u87-5h-XSL" customClass="CustomShapeView" customModule="Tokiyo_Casino" customModuleProvider="target">
@@ -99,7 +99,7 @@
                                                                             <constraint firstAttribute="height" constant="100" id="dTg-Cw-5g7"/>
                                                                         </constraints>
                                                                     </imageView>
-                                                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="TOKIO SLOTS" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="fkP-41-ngh">
+                                                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="fkP-41-ngh">
                                                                         <rect key="frame" x="108" y="48" width="127" height="20.333333333333329"/>
                                                                         <fontDescription key="fontDescription" type="boldSystem" pointSize="17"/>
                                                                         <color key="textColor" red="1" green="0.70588235294117652" blue="0.20392156862745098" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
@@ -155,7 +155,7 @@
                                                                             <constraint firstAttribute="width" secondItem="arm-5o-Zwk" secondAttribute="height" multiplier="1:1" id="YPX-5r-PAa"/>
                                                                         </constraints>
                                                                     </imageView>
-                                                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="TOKIO LOTTO" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Ifk-Hf-lCh">
+                                                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="" textAlignment="natural" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="Ifk-Hf-lCh">
                                                                         <rect key="frame" x="108" y="48" width="127" height="20.333333333333329"/>
                                                                         <fontDescription key="fontDescription" type="boldSystem" pointSize="17"/>
                                                                         <color key="textColor" red="1" green="0.70588235290000001" blue="0.20392156859999999" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
@@ -290,12 +290,6 @@
                     </view>
                     <navigationItem key="navigationItem" id="Nkl-ky-Sip"/>
                     <connections>
-                        <outlet property="buttonPlayCoino" destination="tZU-hE-Qug" id="eeP-8y-DUw"/>
-                        <outlet property="buttonPlayLotto" destination="VP4-DN-5f1" id="9ai-Te-i98"/>
-                        <outlet property="buttonPlaySlots" destination="rhn-JS-jy3" id="On3-t6-sSs"/>
-                        <outlet property="imageTokioCoino" destination="9Q8-jB-Nb5" id="0c1-Mq-QML"/>
-                        <outlet property="imageTokioLotto" destination="arm-5o-Zwk" id="u48-ob-uCj"/>
-                        <outlet property="imageTokioSlots" destination="e93-go-wlc" id="zNp-rz-3PE"/>
                         <outlet property="labelTotalCoins" destination="XQP-7F-KHo" id="9AI-25-IwY"/>
                         <outlet property="treasureChestImage" destination="Npm-W7-qjS" id="cUS-wS-M6W"/>
                         <segue destination="uNG-1k-zbZ" kind="presentation" identifier="toSlotVC" modalPresentationStyle="fullScreen" id="9EK-6e-ld4"/>
@@ -344,7 +338,7 @@
                                     <stackView opaque="NO" contentMode="scaleToFill" spacing="10" translatesAutoresizingMaskIntoConstraints="NO" id="Faz-UA-vXg" userLabel="bet stack">
                                         <rect key="frame" x="0.0" y="215" width="297" height="55"/>
                                         <subviews>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="-button" translatesAutoresizingMaskIntoConstraints="NO" id="Zwe-ie-PSk">
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="Zwe-ie-PSk">
                                                 <rect key="frame" x="0.0" y="0.0" width="55" height="55"/>
                                                 <constraints>
                                                     <constraint firstAttribute="width" secondItem="Zwe-ie-PSk" secondAttribute="height" multiplier="1:1" id="64j-Gl-tZN"/>
@@ -355,7 +349,7 @@
                                                 <fontDescription key="fontDescription" type="system" pointSize="14"/>
                                                 <textInputTraits key="textInputTraits"/>
                                             </textField>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="+button" translatesAutoresizingMaskIntoConstraints="NO" id="leO-E6-5mL">
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="leO-E6-5mL">
                                                 <rect key="frame" x="242" y="0.0" width="55" height="55"/>
                                                 <constraints>
                                                     <constraint firstAttribute="width" secondItem="leO-E6-5mL" secondAttribute="height" multiplier="1:1" id="SCB-A7-YtX"/>
