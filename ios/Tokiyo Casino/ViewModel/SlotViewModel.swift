@@ -40,14 +40,24 @@ class SlotViewModel {
     var dataArray: [[Int]] = [[], [], [], []]
 
     private(set) var currentBetAmount: Int = 250
+    private let dailySpinManager: DailySpinManager
 
     var totalCoins: Int64 {
         return CoinsManager.shared.userStats?.totalCoins ?? 0
     }
 
+    var remainingDailySpins: Int {
+        return dailySpinManager.remainingSpinsToday
+    }
+
+    var canSpinForCoins: Bool {
+        return remainingDailySpins > 0
+    }
+
     // MARK: - Init
 
-    init() {
+    init(dailySpinManager: DailySpinManager = .shared) {
+        self.dailySpinManager = dailySpinManager
         loadData()
         observeCoinsChange()
     }
@@ -216,33 +226,22 @@ class SlotViewModel {
         }
     }
 
-    // MARK: - Daily Bonus
-
-    func checkDailyReward() {
-        guard let stats = CoinsManager.shared.userStats else { return }
-        let today = Date()
-        let claimed = KeychainHelper.shared.isDayClaimed(today, for: "claimedCoinsDates")
-        stats.collectedCoinsToday = claimed
-        CoreDataManager.shared.saveContext()
-        onUpdate?()
-    }
-
-    func collectDailyBonus(completion: @escaping (Bool) -> Void) {
-        guard let stats = CoinsManager.shared.userStats, !stats.collectedCoinsToday else {
-            completion(false)
-            return
-        }
-
-        CoinsManager.shared.addCoins(amount: 1000) { result in
-            switch result {
-            case .success:
-                stats.collectedCoinsToday = true
-                CoreDataManager.shared.saveContext()
-                KeychainHelper.shared.addClaimedDay(Date(), for: "claimedCoinsDates")
-                completion(true)
-            case .failure:
-                completion(false)
+    func performDailyRewardSpin(completion: @escaping (Result<DailySpinResult, Error>) -> Void) {
+        do {
+            let spinResult = try dailySpinManager.performSpin()
+            CoinsManager.shared.addCoins(amount: spinResult.reward) { addResult in
+                DispatchQueue.main.async {
+                    switch addResult {
+                    case .success:
+                        completion(.success(spinResult))
+                    case .failure(let error):
+                        completion(.failure(error))
+                    }
+                }
             }
+        } catch {
+            completion(.failure(error))
         }
     }
+
 }

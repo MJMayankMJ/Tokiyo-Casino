@@ -69,6 +69,41 @@ class KeychainHelper {
             return []
         }
     }
+
+    // MARK: - Store raw data
+    func storeData(_ data: Data, for key: String) {
+        let query: [String: Any] = [
+            kSecClass as String       : kSecClassGenericPassword,
+            kSecAttrAccount as String : key,
+            kSecValueData as String   : data
+        ]
+
+        SecItemDelete(query as CFDictionary)
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status != errSecSuccess {
+            print("Error saving data to keychain: \(status)")
+        }
+    }
+
+    // MARK: - Retrieve raw data
+    func retrieveData(for key: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String       : kSecClassGenericPassword,
+            kSecAttrAccount as String : key,
+            kSecReturnData as String  : true,
+            kSecMatchLimit as String  : kSecMatchLimitOne
+        ]
+
+        var item: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+
+        guard status == errSecSuccess else {
+            return nil
+        }
+
+        return item as? Data
+    }
     
     // MARK: - Add a single date to the existing array
     func addClaimedDay(_ date: Date, for key: String) {

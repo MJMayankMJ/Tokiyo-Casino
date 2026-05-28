@@ -8,6 +8,11 @@
 import UIKit
 import CoreHaptics
 
+enum SlotViewControllerMode {
+    case casinoGame
+    case dailyReward
+}
+
 class SlotViewController: UIViewController {
     // MARK: - IBOutlets
     @IBOutlet weak var pickerView: UIPickerView!
@@ -28,6 +33,8 @@ class SlotViewController: UIViewController {
     private var originalSpinButtonImage: UIImage?
     private var pressedSpinButtonImage: UIImage?
     private var toolbar: UIToolbar!
+    private var isReturningHomeAfterDailySpins = false
+    var mode: SlotViewControllerMode = .casinoGame
     var impactGenerator: UIImpactFeedbackGenerator = UIImpactFeedbackGenerator(style: .heavy)
     var notificationImpact: UINotificationFeedbackGenerator = UINotificationFeedbackGenerator()
 
@@ -44,6 +51,7 @@ class SlotViewController: UIViewController {
         setupSounds()
         setupGestureRecognizers()
         setupTextFieldToolbar()
+        configureModeVisibility()
         updateUI()
 
         // Pick random rows at start
@@ -73,8 +81,11 @@ class SlotViewController: UIViewController {
             self.spinButtonImageView.transform = .identity
             self.spinButtonImageView.alpha = 1.0
         }
+    }
 
-        checkDailyBonus()
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        BackgroundSoundManager.shared.stop()
     }
 
     // MARK: - UI Setup
@@ -154,6 +165,16 @@ class SlotViewController: UIViewController {
         betAmountTextField.inputAccessoryView = toolbar
     }
 
+    private func configureModeVisibility() {
+        let shouldShowBetControls = mode == .casinoGame
+        betAmountTextField.isHidden = !shouldShowBetControls
+        betAmountTextField.isUserInteractionEnabled = shouldShowBetControls
+        plusButtonImageView.isHidden = !shouldShowBetControls
+        plusButtonImageView.isUserInteractionEnabled = shouldShowBetControls
+        minusButtonImageView.isHidden = !shouldShowBetControls
+        minusButtonImageView.isUserInteractionEnabled = shouldShowBetControls
+    }
+
     // MARK: - Actions
 
     @objc private func spinButtonTapped() {
@@ -164,6 +185,16 @@ class SlotViewController: UIViewController {
         
         impactGenerator.prepare()
         impactGenerator.impactOccurred()
+
+        if mode == .dailyReward {
+            guard viewModel.canSpinForCoins else {
+                showNoDailySpinsAlert()
+                return
+            }
+
+            performDailyRewardSpin()
+            return
+        }
         
         // Validate the typed bet
         let validation = viewModel.validateBetInput(betAmountTextField.text)
@@ -178,6 +209,8 @@ class SlotViewController: UIViewController {
     }
 
     @objc private func plusButtonTapped() {
+        guard mode == .casinoGame else { return }
+
         buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
         buttonTapSound.play()
         
@@ -190,6 +223,8 @@ class SlotViewController: UIViewController {
     }
 
     @objc private func minusButtonTapped() {
+        guard mode == .casinoGame else { return }
+
         buttonTapSound.setupPlayer(soundName: "button_press_sound", soundType: .mp3)
         buttonTapSound.play()
         
@@ -215,13 +250,18 @@ class SlotViewController: UIViewController {
     @objc private func backButtonTapped() {
         buttonTapSound.play()
         animateButtonTap(on: backButton)
-        BackgroundSoundManager.shared.pause()
+        BackgroundSoundManager.shared.stop()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             self.dismiss(animated: true)
         }
     }
 
     @objc private func doneButtonTapped() {
+        guard mode == .casinoGame else {
+            dismissKeyboard()
+            return
+        }
+
         let validation = viewModel.validateBetInput(betAmountTextField.text)
         updateUI()
         if let error = validation.error {
@@ -268,6 +308,48 @@ class SlotViewController: UIViewController {
                         self.spinButtonImageView.image = self.originalSpinButtonImage
                         self.isSpinning = false
                         self.updateUI()
+                    }
+                }
+            }
+        }
+    }
+
+    private func performDailyRewardSpin() {
+        isSpinning = true
+        buttonTapSound.play()
+
+        spinButtonImageView.image = pressedSpinButtonImage
+        UIView.animate(withDuration: 0.1, animations: {
+            self.spinButtonImageView.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
+        }) { _ in
+            UIView.animate(withDuration: 0.1) {
+                self.spinButtonImageView.transform = .identity
+            }
+        }
+
+        let rows = viewModel.spinSlots()
+        for (col, row) in rows.enumerated() {
+            pickerView.selectRow(row, inComponent: col, animated: true)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            self.viewModel.performDailyRewardSpin { [weak self] result in
+                guard let self else { return }
+
+                DispatchQueue.main.async {
+                    self.spinButtonImageView.image = self.originalSpinButtonImage
+                    self.isSpinning = false
+                    self.updateUI()
+
+                    switch result {
+                    case .success(let spinResult):
+                        self.handleDailySpinResult(spinResult)
+                    case .failure(let error):
+                        if (error as? DailySpinError) == .noSpinsRemaining {
+                            self.showNoDailySpinsAlert()
+                        } else {
+                            self.showErrorAlert(message: "Something went wrong. Try again.")
+                        }
                     }
                 }
             }
@@ -349,32 +431,71 @@ class SlotViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    private func checkDailyBonus() {
-        viewModel.checkDailyReward()
+    private func handleDailySpinResult(_ result: DailySpinResult) {
+        winSound.play()
+        notificationImpact.prepare()
+        notificationImpact.notificationOccurred(.success)
 
-        if let stats = CoinsManager.shared.userStats, !stats.collectedCoinsToday {
-            let alert = UIAlertController(title: "Daily Bonus Available!",
-                                          message: "Collect 1000 coins now!",
-                                          preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "Collect", style: .default) { _ in
-                self.viewModel.collectDailyBonus { success in
-                    DispatchQueue.main.async {
-                        if success {
-                            self.updateUI()
-                            let bonusAlert = UIAlertController(title: "🎁 Bonus Collected!",
-                                                               message: "You got 1000 coins!",
-                                                               preferredStyle: .alert)
-                            bonusAlert.addAction(UIAlertAction(title: "Sweet!", style: .default))
-                            self.present(bonusAlert, animated: true)
-                        } else {
-                            self.showErrorAlert(message: "Couldn't collect bonus. Try again.")
-                        }
-                    }
-                }
-            })
-            alert.addAction(UIAlertAction(title: "Later", style: .cancel))
-            present(alert, animated: true)
+        let remaining = result.remainingSpins
+        let noun = remaining == 1 ? "spin" : "spins"
+        let message: String
+        if remaining > 0 {
+            message = "You collected \(result.reward) coins.\n\(remaining) \(noun) left today."
+        } else {
+            message = "You collected \(result.reward) coins.\nCome back tomorrow for more spins."
         }
+
+        let alert = UIAlertController(
+            title: "Coins Collected",
+            message: message,
+            preferredStyle: .alert
+        )
+
+        if remaining > 0 {
+            alert.addAction(UIAlertAction(title: "Spin Again", style: .default))
+            alert.addAction(UIAlertAction(title: "Done", style: .cancel))
+        } else {
+            alert.addAction(UIAlertAction(title: "Back Home", style: .default) { [weak self, weak alert] _ in
+                self?.returnHomeAfterDailySpins(from: alert)
+            })
+        }
+
+        present(alert, animated: true) {
+            guard remaining == 0 else { return }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak alert] in
+                self?.returnHomeAfterDailySpins(from: alert)
+            }
+        }
+    }
+
+    private func returnHomeAfterDailySpins(from alert: UIAlertController?) {
+        guard !isReturningHomeAfterDailySpins else { return }
+        isReturningHomeAfterDailySpins = true
+
+        let dismissSlotScreen: () -> Void = { [weak self] in
+            self?.dismiss(animated: true)
+        }
+
+        if alert?.presentingViewController != nil {
+            alert?.dismiss(animated: true, completion: dismissSlotScreen)
+        } else if presentedViewController != nil {
+            presentedViewController?.dismiss(animated: true, completion: dismissSlotScreen)
+        } else {
+            dismissSlotScreen()
+        }
+    }
+
+    private func showNoDailySpinsAlert() {
+        let alert = UIAlertController(
+            title: "Daily Spins",
+            message: "No spins left today. Come back tomorrow.",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "Back Home", style: .default) { _ in
+            self.dismiss(animated: true)
+        })
+        present(alert, animated: true)
     }
 }
 
@@ -426,6 +547,11 @@ extension SlotViewController: UITextFieldDelegate {
     }
 
     func textFieldDidEndEditing(_ textField: UITextField) {
+        guard mode == .casinoGame else {
+            updateUI()
+            return
+        }
+
         let validation = viewModel.validateBetInput(textField.text)
         updateUI()
         if let error = validation.error {
@@ -438,4 +564,3 @@ extension SlotViewController: UITextFieldDelegate {
         return true
     }
 }
-
