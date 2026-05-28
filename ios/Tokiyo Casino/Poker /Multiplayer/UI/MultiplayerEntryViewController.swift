@@ -73,7 +73,7 @@ enum ReconnectTokenStore {
             return true
         }
         #if DEBUG
-        print("⚠️ Poker MP: failed to encode reconnect token store")
+        dprint("⚠️ Poker MP: failed to encode reconnect token store")
         #endif
         return false
     }
@@ -86,7 +86,7 @@ enum ReconnectTokenStore {
             return true
         }
         #if DEBUG
-        print("⚠️ Poker MP: failed to encode reconnect token store while clearing")
+        dprint("⚠️ Poker MP: failed to encode reconnect token store while clearing")
         #endif
         return false
     }
@@ -97,7 +97,7 @@ enum ReconnectTokenStore {
             return try JSONDecoder().decode([Entry].self, from: data)
         } catch {
             #if DEBUG
-            print("⚠️ Poker MP: corrupt reconnect token store removed: \(error)")
+            dprint("⚠️ Poker MP: corrupt reconnect token store removed: \(error)")
             #endif
             UserDefaults.standard.removeObject(forKey: defaultsKey)
             return []

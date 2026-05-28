@@ -26,14 +26,18 @@ final class BackgroundSoundManager {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [])
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
+            #if DEBUG
             print("Failed to set up audio session:", error)
+            #endif
         }
     }
 
     // MARK: - Setup Player
     func setupPlayer(soundName: String, soundType: SoundType) {
         guard let url = Bundle.main.url(forResource: soundName, withExtension: soundType.rawValue) else {
+            #if DEBUG
             print("Sound file missing or mis-named: \(soundName).\(soundType.rawValue)")
+            #endif
             return
         }
         do {
@@ -41,7 +45,9 @@ final class BackgroundSoundManager {
             player?.prepareToPlay()
             player?.volume = Self.isMuted ? 0 : 0.20
         } catch {
+            #if DEBUG
             print("Error loading sound:", error)
+            #endif
         }
     }
 

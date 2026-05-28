@@ -169,9 +169,35 @@ final class PokerRulesViewController: UIViewController {
     }
 
     private func layoutHands() {
+        contentStack.addArrangedSubview(makeDisclaimerCard())
         for (index, hand) in hands.enumerated() {
             contentStack.addArrangedSubview(makeHandRow(rank: index + 1, hand: hand))
         }
+    }
+
+    private func makeDisclaimerCard() -> UIView {
+        let card = UIView()
+        card.backgroundColor = PokerTheme.surface
+        card.layer.cornerRadius = 12
+        card.layer.borderWidth = 1
+        card.layer.borderColor = PokerTheme.border.cgColor
+
+        let label = UILabel()
+        label.text = "For entertainment only. Coins are virtual and have no cash value. No real-money gambling, no purchases, no redemptions."
+        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.textColor = PokerTheme.muted
+        label.numberOfLines = 0
+        label.translatesAutoresizingMaskIntoConstraints = false
+        card.addSubview(label)
+
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 12),
+            label.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
+            label.topAnchor.constraint(equalTo: card.topAnchor, constant: 10),
+            label.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -10)
+        ])
+
+        return card
     }
 
     private func makeHandRow(rank: Int, hand: RuleHand) -> UIView {

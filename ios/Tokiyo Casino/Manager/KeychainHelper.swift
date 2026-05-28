@@ -25,7 +25,9 @@ class KeychainHelper {
     // MARK: - Store an array of day-strings
     func storeClaimedDays(_ days: [String], for key: String) {
         guard let data = try? JSONEncoder().encode(days) else {
+            #if DEBUG
             print("Error: Could not encode days array to JSON.")
+            #endif
             return
         }
         
@@ -41,10 +43,12 @@ class KeychainHelper {
         // Add the new item
         let status = SecItemAdd(query as CFDictionary, nil)
         if status != errSecSuccess {
+            #if DEBUG
             print("Error saving array to keychain: \(status)")
+            #endif
         }
     }
-    
+
     // MARK: - Retrieve an array of day-strings
     func retrieveClaimedDays(for key: String) -> [String] {
         let query: [String: Any] = [
@@ -65,7 +69,9 @@ class KeychainHelper {
         if let dayArray = try? JSONDecoder().decode([String].self, from: data) {
             return dayArray
         } else {
+            #if DEBUG
             print("Error: Could not decode JSON from keychain data.")
+            #endif
             return []
         }
     }
@@ -82,7 +88,9 @@ class KeychainHelper {
 
         let status = SecItemAdd(query as CFDictionary, nil)
         if status != errSecSuccess {
+            #if DEBUG
             print("Error saving data to keychain: \(status)")
+            #endif
         }
     }
 
@@ -139,11 +147,13 @@ class KeychainHelper {
         for itemClass in secItemClasses {
             let query: [CFString: Any] = [kSecClass: itemClass]
             let status = SecItemDelete(query as CFDictionary)
+            #if DEBUG
             if status == errSecSuccess || status == errSecItemNotFound {
                 print("Successfully deleted items for class \(itemClass)")
             } else {
                 print("Error deleting items for class \(itemClass): \(status)")
             }
+            #endif
         }
     }
 }

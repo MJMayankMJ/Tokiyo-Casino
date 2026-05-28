@@ -32,14 +32,14 @@ extension GameManager {
     }
 
     func revealAllPlayerCards() {
-        print("Revealing all player cards")
+        dprint("Revealing all player cards")
         delegate?.gameDidEnd() // This will trigger card reveals in the UI
     }
 
 
 
     func determineWinnersWithDelay() {
-        print("Determining winners with side pot logic")
+        dprint("Determining winners with side pot logic")
         
         // 1. Get all players who haven't folded (including All-In players)
         let candidates = players.filter { $0.isActive && !$0.isFolded && $0.holeCards.count == 2 }
@@ -132,7 +132,7 @@ extension GameManager {
         // Reconcile any unclaimed remainder (e.g., from rounding mismatches)
         if remainingPot > 0 {
             assertionFailure("Unclaimed chips remained after side-pot distribution: \(remainingPot)")
-            print("WARNING: \(remainingPot) unclaimed chips in pot – awarding only to an eligible contributor")
+            dprint("WARNING: \(remainingPot) unclaimed chips in pot – awarding only to an eligible contributor")
             
             let originalEligibleFallback = candidates
                 .filter { $0.totalInvested > 0 }
@@ -146,7 +146,7 @@ extension GameManager {
                 fallback.win(amount: remainingPot)
                 self.showWinnerAlert(player: fallback, amount: remainingPot, handDescription: "Unclaimed remainder")
             } else {
-                print("ERROR: No eligible contributor found for unclaimed remainder")
+                dprint("ERROR: No eligible contributor found for unclaimed remainder")
             }
         }
         

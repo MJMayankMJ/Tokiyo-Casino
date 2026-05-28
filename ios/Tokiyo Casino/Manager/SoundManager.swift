@@ -20,16 +20,19 @@ struct SoundManager {
     // MARK: – Setup
     mutating func setupPlayer(soundName: String, soundType: SoundType) {
         guard let url = Bundle.main.url(forResource: soundName, withExtension: soundType.rawValue) else {
+            #if DEBUG
             print("Sound file missing or mis-named: \(soundName).\(soundType.rawValue)")
+            #endif
             return
         }
         do {
             player = try AVAudioPlayer(contentsOf: url)
             player?.prepareToPlay()
-            // mute setting immediately applied
             player?.volume = SoundManager.isMuted ? 0 : 1
         } catch {
+            #if DEBUG
             print("Error loading sound \(soundName):", error)
+            #endif
         }
     }
 

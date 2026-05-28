@@ -224,7 +224,7 @@ final class PokerClientService {
         do { decoded = try PokerWireCodec.decode(data) }
         catch {
             #if DEBUG
-            print("Client: decode failure from \(peerId): \(error)")
+            dprint("Client: decode failure from \(peerId): \(error)")
             #endif
             return
         }
@@ -453,7 +453,7 @@ final class PokerClientService {
             try transport.send(data, to: peerIds)
         } catch {
             #if DEBUG
-            print("Client send \(type) failed: \(error)")
+            dprint("Client send \(type) failed: \(error)")
             #endif
         }
     }

@@ -78,7 +78,7 @@ enum PokerWireCodec {
         }
         if data.count > PokerProtocol.warnPayloadBytes {
             #if DEBUG
-            print("⚠️ Poker MP: large message (\(data.count) bytes) type=\(message.type.rawValue)")
+            dprint("⚠️ Poker MP: large message (\(data.count) bytes) type=\(message.type.rawValue)")
             #endif
         }
         return data

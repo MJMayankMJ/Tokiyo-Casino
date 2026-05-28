@@ -11,7 +11,7 @@ extension GameManager {
     
     // MARK: - Card Dealing
     func dealHoleCards() {
-        print("Dealing hole cards to \(players.count) players") // Debug
+        dprint("Dealing hole cards to \(players.count) players") // Debug
         
         // Deal two cards to each active player. `isAway` seats are
         // multiplayer humans who have left/disconnected; they're held
@@ -21,9 +21,9 @@ extension GameManager {
             for player in players where player.chips > 0 && !player.isFolded && !player.isAway {
                 if let card = deck.deal() {
                     player.holeCards.append(card)
-                    print("Dealt \(card.description) to \(player.name)") // Debug
+                    dprint("Dealt \(card.description) to \(player.name)") // Debug
                 } else {
-                    print("Error: No more cards in deck!") // Debug
+                    dprint("Error: No more cards in deck!") // Debug
                 }
             }
         }
@@ -78,7 +78,7 @@ extension GameManager {
     }
     
     func dealRemainingCommunityCards() {
-        print("Dealing remaining community cards. Current count: \(communityCards.count)")
+        dprint("Dealing remaining community cards. Current count: \(communityCards.count)")
         
         // Deal remaining streets following Texas Hold'em burn/deal rules:
         // Flop:  burn 1, deal 3
@@ -90,7 +90,7 @@ extension GameManager {
             _ = deck.deal() // Burn
             let flopCards = deck.dealMultiple(3 - communityCards.count)
             communityCards.append(contentsOf: flopCards)
-            print("Flop: \(flopCards.map { $0.description }.joined(separator: ", "))")
+            dprint("Flop: \(flopCards.map { $0.description }.joined(separator: ", "))")
         }
         
         if communityCards.count < 4 {
@@ -98,7 +98,7 @@ extension GameManager {
             _ = deck.deal() // Burn
             if let turnCard = deck.deal() {
                 communityCards.append(turnCard)
-                print("Turn: \(turnCard.description)")
+                dprint("Turn: \(turnCard.description)")
             }
         }
         
@@ -107,7 +107,7 @@ extension GameManager {
             _ = deck.deal() // Burn
             if let riverCard = deck.deal() {
                 communityCards.append(riverCard)
-                print("River: \(riverCard.description)")
+                dprint("River: \(riverCard.description)")
             }
         }
         
@@ -117,7 +117,7 @@ extension GameManager {
     
     // Enhanced flop dealing
     func dealFlop() {
-        print("Dealing flop")
+        dprint("Dealing flop")
         
         // Burn one card
         _ = deck.deal()
@@ -126,7 +126,7 @@ extension GameManager {
         let flopCards = deck.dealMultiple(3)
         communityCards.append(contentsOf: flopCards)
         
-        print("Flop: \(flopCards.map { $0.description }.joined(separator: ", "))")
+        dprint("Flop: \(flopCards.map { $0.description }.joined(separator: ", "))")
         
         currentPhase = .flop
         delegate?.gamePhaseDidChange(currentPhase)
@@ -142,7 +142,7 @@ extension GameManager {
     }
     
     func dealTurn() {
-        print("Dealing turn")
+        dprint("Dealing turn")
         
         // Burn one card
         _ = deck.deal()
@@ -150,7 +150,7 @@ extension GameManager {
         // Deal turn card
         if let turnCard = deck.deal() {
             communityCards.append(turnCard)
-            print("Turn: \(turnCard.description)")
+            dprint("Turn: \(turnCard.description)")
         }
         
         currentPhase = .turn
@@ -165,7 +165,7 @@ extension GameManager {
     }
     
     func dealRiver() {
-        print("Dealing river")
+        dprint("Dealing river")
         
         // Burn one card
         _ = deck.deal()
@@ -173,7 +173,7 @@ extension GameManager {
         // Deal river card
         if let riverCard = deck.deal() {
             communityCards.append(riverCard)
-            print("River: \(riverCard.description)")
+            dprint("River: \(riverCard.description)")
         }
         
         currentPhase = .river

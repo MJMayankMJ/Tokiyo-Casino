@@ -35,6 +35,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         setupGameCards()
         setupTapGestures()
         setupInitialAnimations()
+        setupDisclaimerLabel()
 
         NotificationCenter.default.addObserver(
             self,
@@ -42,6 +43,36 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             name: CoinsManager.coinsDidChangeNotification,
             object: nil
         )
+    }
+
+    private func setupDisclaimerLabel() {
+        let pill = UIView()
+        pill.backgroundColor = UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 0.78)
+        pill.layer.cornerRadius = 10
+        pill.layer.borderWidth = 1
+        pill.layer.borderColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 0.55).cgColor
+        pill.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(pill)
+
+        let disclaimer = UILabel()
+        disclaimer.text = "For entertainment only. Coins are virtual and have no cash value. No real-money gambling."
+        disclaimer.font = .systemFont(ofSize: 11, weight: .semibold)
+        disclaimer.textColor = UIColor(red: 1, green: 0.95, blue: 0.85, alpha: 1)
+        disclaimer.textAlignment = .center
+        disclaimer.numberOfLines = 0
+        disclaimer.translatesAutoresizingMaskIntoConstraints = false
+        pill.addSubview(disclaimer)
+
+        NSLayoutConstraint.activate([
+            pill.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            pill.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            pill.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
+
+            disclaimer.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 12),
+            disclaimer.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -12),
+            disclaimer.topAnchor.constraint(equalTo: pill.topAnchor, constant: 8),
+            disclaimer.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -8)
+        ])
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -73,7 +104,9 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     // MARK: - Setup
     private func setupGameCards() {
         guard let stackView = findGameCardsStackView() else {
+            #if DEBUG
             print("Warning: Could not find game cards stack view")
+            #endif
             return
         }
 
@@ -347,11 +380,6 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         super.prepare(for: segue, sender: sender)
-
-        if segue.identifier == K.toSlotVC,
-           let slotViewController = segue.destination as? SlotViewController {
-            slotViewController.mode = .dailyReward
-        }
     }
 
     @objc private func didTapTreasureChest() {
@@ -464,7 +492,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         let noun = remaining == 1 ? "spin" : "spins"
         let alert = UIAlertController(
             title: "Daily Spins",
-            message: "Spin to collect coins.\n\(remaining) \(noun) available today.",
+            message: "Spin to collect free virtual coins.\n\(remaining) \(noun) available today.\n\nCoins have no cash value.",
             preferredStyle: .alert
         )
 

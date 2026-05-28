@@ -42,12 +42,12 @@ extension GameManager {
     
     // Enhanced betting round end check
     func endBettingRound() {
-        print("Ending betting round. Phase: \(currentPhase)")
+        dprint("Ending betting round. Phase: \(currentPhase)")
         
         // Check if only one player remains (early end)
         let nonFoldedPlayers = players.filter { $0.isActive && !$0.isFolded }
         if nonFoldedPlayers.count == 1 {
-            print("Only one player remaining, ending hand early")
+            dprint("Only one player remaining, ending hand early")
             
             if let winner = nonFoldedPlayers.first {
                 let winAmount = mainPot.amount
@@ -77,7 +77,7 @@ extension GameManager {
         // there is no more betting to do on later streets.
         let activeBettingPlayers = activePlayers.filter { !$0.isAllIn && !$0.isFolded }
         if activeBettingPlayers.isEmpty {
-            print("All remaining players are all-in – skipping further betting rounds and going to showdown.")
+            dprint("All remaining players are all-in – skipping further betting rounds and going to showdown.")
             showdown()
             return
         }

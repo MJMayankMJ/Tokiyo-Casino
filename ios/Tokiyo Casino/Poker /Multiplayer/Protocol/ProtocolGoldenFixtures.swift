@@ -76,9 +76,9 @@ enum ProtocolGoldenFixtures {
     private static func runSelfTest<P: Codable>(_ json: String, as: P.Type, label: String) {
         do {
             try verify(json, as: P.self, label: label)
-            print("✅ Poker MP fixture \(label) round-trip OK (\(json.utf8.count) bytes)")
+            dprint("✅ Poker MP fixture \(label) round-trip OK (\(json.utf8.count) bytes)")
         } catch {
-            print("⚠️ Poker MP fixture \(label): \(error)")
+            dprint("⚠️ Poker MP fixture \(label): \(error)")
         }
     }
 

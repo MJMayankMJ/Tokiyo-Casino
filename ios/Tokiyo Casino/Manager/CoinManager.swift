@@ -23,10 +23,19 @@ class CoinsManager {
             completion(.failure(error))
             return
         }
+        guard amount >= 0 else {
+            let error = NSError(domain:"CoinsManager", code:3, userInfo: [NSLocalizedDescriptionKey:"Deduction amount must be non-negative."])
+            completion(.failure(error))
+            return
+        }
+        guard stats.totalCoins >= amount else {
+            let error = NSError(domain:"CoinsManager", code:2, userInfo: [NSLocalizedDescriptionKey:"Insufficient coin balance."])
+            completion(.failure(error))
+            return
+        }
         stats.totalCoins -= amount
         CoreDataManager.shared.saveContext()
-        
-        // Notify listeners that coins have changed.
+
         NotificationCenter.default.post(name: CoinsManager.coinsDidChangeNotification, object: nil)
         completion(.success(()))
     }

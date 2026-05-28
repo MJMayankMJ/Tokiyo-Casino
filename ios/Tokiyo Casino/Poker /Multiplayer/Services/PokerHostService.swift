@@ -510,7 +510,7 @@ final class PokerHostService {
         do { decoded = try PokerWireCodec.decode(data) }
         catch {
             #if DEBUG
-            print("Host: decode failure from \(peerId): \(error)")
+            dprint("Host: decode failure from \(peerId): \(error)")
             #endif
             return
         }
@@ -1193,7 +1193,7 @@ final class PokerHostService {
             try transport.broadcast(data)
         } catch {
             #if DEBUG
-            print("Host broadcast \(type) failed: \(error)")
+            dprint("Host broadcast \(type) failed: \(error)")
             #endif
         }
     }
@@ -1217,7 +1217,7 @@ final class PokerHostService {
             try transport.send(data, to: peerIds)
         } catch {
             #if DEBUG
-            print("Host send \(type) failed: \(error)")
+            dprint("Host send \(type) failed: \(error)")
             #endif
         }
     }
