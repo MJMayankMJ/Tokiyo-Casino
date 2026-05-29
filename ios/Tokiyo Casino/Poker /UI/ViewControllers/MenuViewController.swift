@@ -18,10 +18,11 @@ class MenuViewController: UIViewController {
     private let backdrop = MPPageBackgroundView()
     private let backButton = MPBackPill()
     private let gearButton = MPGearPill()
+    private let scrollView = UIScrollView()
     private let titleBlock = MPTitleView(
         eyebrow: "Solo Game",
         title: "Texas Hold'em",
-        subtitle: "Quick game vs AI"
+        subtitle: nil
     )
     private let miniDeck = MPMiniDeck()
 
@@ -29,9 +30,7 @@ class MenuViewController: UIViewController {
     private let playerPicker = MPPlayerPicker(value: 5)
 
     private let difficultyEyebrow = mpSectionEyebrow("AI difficulty")
-    private let difficultySegment = UISegmentedControl(
-        items: Difficulty.allCases.map { $0.displayName }
-    )
+    private let difficultyPicker = MPDifficultyPicker(value: PokerAIConfigStore.load().difficulty)
     /// Persisted AI config (difficulty + style). Loaded on appear, saved on change.
     private var aiConfig = PokerAIConfigStore.load()
 
@@ -74,12 +73,17 @@ class MenuViewController: UIViewController {
         refreshCoinsAndClampSlider()
         // Re-sync in case the config changed elsewhere (e.g. settings sheet).
         aiConfig = PokerAIConfigStore.load()
-        difficultySegment.selectedSegmentIndex = difficultyIndex(for: aiConfig.difficulty)
+        difficultyPicker.setValue(aiConfig.difficulty, animated: false)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         MPNavigationChrome.restoreSystemBackBarIfLeaving(self, animated: animated)
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        refreshChipsValueLabel()
     }
 
     private func setupUI() {
@@ -96,32 +100,36 @@ class MenuViewController: UIViewController {
         view.addSubview(gearButton)
         gearButton.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
 
-        // Build a vertical stack so spacing collapses naturally on
-        // shorter devices (the static AutoLayout constraints I had
-        // before left a giant dead band between the mini-deck and the
-        // player picker on tall devices).
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceVertical = false
+        scrollView.keyboardDismissMode = .interactive
+        view.addSubview(scrollView)
+
+        // Build a vertical stack inside a scroll view. Short landscape/small
+        // devices can scroll instead of clipping labels against the edges.
         let centerStack = UIStackView()
         centerStack.axis = .vertical
         centerStack.alignment = .fill
-        centerStack.spacing = 18
+        centerStack.spacing = 12
         centerStack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(centerStack)
+        scrollView.addSubview(centerStack)
 
         // Title + mini-deck cluster
         let titleCluster = UIStackView()
         titleCluster.axis = .vertical
         titleCluster.alignment = .center
-        titleCluster.spacing = 14
+        titleCluster.spacing = 64
         titleCluster.addArrangedSubview(titleBlock)
         titleCluster.addArrangedSubview(miniDeck)
         centerStack.addArrangedSubview(titleCluster)
-        centerStack.setCustomSpacing(28, after: titleCluster)
+        centerStack.setCustomSpacing(2, after: titleCluster)
 
         // Players section
         let playersSection = UIStackView()
         playersSection.axis = .vertical
         playersSection.alignment = .fill
-        playersSection.spacing = 10
+        playersSection.spacing = 8
         let playersHeader = UIView()
         playersEyebrow.translatesAutoresizingMaskIntoConstraints = false
         playersHeader.addSubview(playersEyebrow)
@@ -138,7 +146,7 @@ class MenuViewController: UIViewController {
         let difficultySection = UIStackView()
         difficultySection.axis = .vertical
         difficultySection.alignment = .fill
-        difficultySection.spacing = 10
+        difficultySection.spacing = 8
         let difficultyHeader = UIView()
         difficultyEyebrow.translatesAutoresizingMaskIntoConstraints = false
         difficultyHeader.addSubview(difficultyEyebrow)
@@ -147,20 +155,16 @@ class MenuViewController: UIViewController {
             difficultyEyebrow.topAnchor.constraint(equalTo: difficultyHeader.topAnchor),
             difficultyEyebrow.bottomAnchor.constraint(equalTo: difficultyHeader.bottomAnchor),
         ])
-        difficultySegment.selectedSegmentTintColor = MPTheme.ink
-        difficultySegment.setTitleTextAttributes([.foregroundColor: MPTheme.ink, .font: MPFont.ui(13, weight: .semibold)], for: .normal)
-        difficultySegment.setTitleTextAttributes([.foregroundColor: UIColor.white, .font: MPFont.ui(13, weight: .bold)], for: .selected)
-        difficultySegment.selectedSegmentIndex = difficultyIndex(for: aiConfig.difficulty)
-        difficultySegment.addTarget(self, action: #selector(difficultyChanged), for: .valueChanged)
+        difficultyPicker.addTarget(self, action: #selector(difficultyChanged), for: .valueChanged)
         difficultySection.addArrangedSubview(difficultyHeader)
-        difficultySection.addArrangedSubview(difficultySegment)
+        difficultySection.addArrangedSubview(difficultyPicker)
         centerStack.addArrangedSubview(difficultySection)
 
         // Chips section
         let chipsSection = UIStackView()
         chipsSection.axis = .vertical
         chipsSection.alignment = .fill
-        chipsSection.spacing = 4
+        chipsSection.spacing = 0
 
         coinsPill.translatesAutoresizingMaskIntoConstraints = false
         chipsEyebrow.translatesAutoresizingMaskIntoConstraints = false
@@ -176,21 +180,24 @@ class MenuViewController: UIViewController {
 
         chipsValueLabel.textAlignment = .center
         chipsValueLabel.translatesAutoresizingMaskIntoConstraints = false
+        chipsValueLabel.numberOfLines = 1
+        chipsValueLabel.adjustsFontSizeToFitWidth = true
+        chipsValueLabel.minimumScaleFactor = 0.72
         chipsValueLabel.setContentHuggingPriority(.required, for: .vertical)
 
         chipsSection.addArrangedSubview(chipsHeaderRow)
         chipsSection.addArrangedSubview(chipsValueLabel)
-        chipsSection.setCustomSpacing(2, after: chipsValueLabel)
+        chipsSection.setCustomSpacing(0, after: chipsValueLabel)
         chipsSection.addArrangedSubview(chipsSlider)
         centerStack.addArrangedSubview(chipsSection)
+        centerStack.setCustomSpacing(10, after: chipsSection)
 
-        // CTA stack pinned to the bottom
         let ctaStack = UIStackView(arrangedSubviews: [startButton, friendsButton])
         ctaStack.axis = .vertical
         ctaStack.alignment = .fill
-        ctaStack.spacing = 10
+        ctaStack.spacing = 8
         ctaStack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(ctaStack)
+        centerStack.addArrangedSubview(ctaStack)
 
         // Wire actions
         playerPicker.onChange = { [weak self] _ in self?.refreshCoinsAndClampSlider() }
@@ -198,47 +205,48 @@ class MenuViewController: UIViewController {
         startButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
         friendsButton.addTarget(self, action: #selector(playWithFriendsTapped), for: .touchUpInside)
 
+        let preferredStackWidth = centerStack.widthAnchor.constraint(
+            equalTo: scrollView.frameLayoutGuide.widthAnchor,
+            constant: -40
+        )
+        preferredStackWidth.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             backdrop.topAnchor.constraint(equalTo: view.topAnchor),
             backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             backdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             backdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
 
-            backButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
+            backButton.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 8),
             backButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
-            gearButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            gearButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
             gearButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
-            centerStack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
-            centerStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 24),
-            centerStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -24),
+            scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
+            scrollView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            scrollView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
-            ctaStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -20),
-            ctaStack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
-            ctaStack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            scrollView.contentLayoutGuide.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            centerStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 2),
+            centerStack.centerXAnchor.constraint(equalTo: scrollView.frameLayoutGuide.centerXAnchor),
+            preferredStackWidth,
+            centerStack.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
+            centerStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -20),
 
-            // Lower bound so the center cluster never overlaps the CTAs
-            // — the stack just gets denser on shorter devices.
-            centerStack.bottomAnchor.constraint(lessThanOrEqualTo: ctaStack.topAnchor, constant: -16),
-
+            titleBlock.widthAnchor.constraint(equalTo: titleCluster.widthAnchor),
+            chipsValueLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
             miniDeck.widthAnchor.constraint(equalToConstant: 200),
-            miniDeck.heightAnchor.constraint(equalToConstant: 116),
+            miniDeck.heightAnchor.constraint(equalToConstant: 104),
         ])
     }
 
     // MARK: Difficulty
 
-    private func difficultyIndex(for difficulty: Difficulty) -> Int {
-        Difficulty.allCases.firstIndex(of: difficulty) ?? 0
-    }
-
     @objc private func difficultyChanged() {
-        let cases = Difficulty.allCases
-        let idx = difficultySegment.selectedSegmentIndex
-        guard cases.indices.contains(idx) else { return }
         UISelectionFeedbackGenerator().selectionChanged()
-        aiConfig.difficulty = cases[idx]
+        aiConfig.difficulty = difficultyPicker.value
         PokerAIConfigStore.save(aiConfig)
     }
 
@@ -263,14 +271,15 @@ class MenuViewController: UIViewController {
     private func refreshChipsValueLabel() {
         let f = NumberFormatter(); f.numberStyle = .decimal
         let amount = chipsSlider.value
+        let fontSize: CGFloat = traitCollection.verticalSizeClass == .compact || view.bounds.height < 520 ? 40 : 48
         let attr = NSMutableAttributedString()
         attr.append(NSAttributedString(string: "$", attributes: [
-            .font: MPFont.display(54, weight: .medium),
+            .font: MPFont.display(fontSize, weight: .medium),
             .foregroundColor: MPTheme.muted,
         ]))
         attr.append(NSAttributedString(string: f.string(from: NSNumber(value: amount)) ?? "\(amount)",
                                        attributes: [
-            .font: MPFont.display(54, weight: .medium),
+            .font: MPFont.display(fontSize, weight: .medium),
             .foregroundColor: MPTheme.ink,
             .kern: -1.0,
         ]))

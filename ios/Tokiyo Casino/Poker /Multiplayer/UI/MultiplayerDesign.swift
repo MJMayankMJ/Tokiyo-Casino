@@ -1753,7 +1753,7 @@ final class MPMiniDeck: UIView {
             cardViews.append(v)
         }
         translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 116).isActive = true
+        heightAnchor.constraint(equalToConstant: 104).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -1956,6 +1956,121 @@ final class MPPlayerPicker: UIControl {
                 b.layer.shadowOpacity = 0
                 b.setTitleColor(MPTheme.muted, for: .normal)
                 b.titleLabel?.font = MPFont.ui(14, weight: .bold)
+            }
+        }
+    }
+}
+
+// MARK: - Difficulty picker (Screen E — same rail/chip treatment as player count)
+
+final class MPDifficultyPicker: UIControl {
+
+    private let track = UIView()
+    private let stack = UIStackView()
+    private let options: [Difficulty]
+    private var buttons: [UIButton] = []
+    private(set) var value: Difficulty
+
+    init(value: Difficulty, options: [Difficulty] = Difficulty.allCases) {
+        self.value = value
+        self.options = options
+        super.init(frame: .zero)
+
+        track.layer.cornerRadius = 999
+        track.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(track)
+
+        stack.axis = .horizontal
+        stack.spacing = 4
+        stack.distribution = .fillEqually
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 8, leading: 8, bottom: 8, trailing: 8)
+        track.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            track.topAnchor.constraint(equalTo: topAnchor),
+            track.leadingAnchor.constraint(equalTo: leadingAnchor),
+            track.trailingAnchor.constraint(equalTo: trailingAnchor),
+            track.bottomAnchor.constraint(equalTo: bottomAnchor),
+            heightAnchor.constraint(equalToConstant: 60),
+
+            stack.topAnchor.constraint(equalTo: track.topAnchor),
+            stack.leadingAnchor.constraint(equalTo: track.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: track.trailingAnchor),
+            stack.bottomAnchor.constraint(equalTo: track.bottomAnchor),
+        ])
+
+        for (index, difficulty) in options.enumerated() {
+            let button = UIButton(type: .system)
+            button.tag = index
+            button.setTitle(difficulty.displayName, for: .normal)
+            button.titleLabel?.adjustsFontSizeToFitWidth = true
+            button.titleLabel?.minimumScaleFactor = 0.78
+            button.titleLabel?.lineBreakMode = .byClipping
+            button.addTarget(self, action: #selector(optionTapped(_:)), for: .touchUpInside)
+            button.translatesAutoresizingMaskIntoConstraints = false
+            button.heightAnchor.constraint(equalToConstant: 44).isActive = true
+            stack.addArrangedSubview(button)
+            buttons.append(button)
+        }
+
+        applyTheme()
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyTheme()
+    }
+
+    func setValue(_ newValue: Difficulty, animated: Bool) {
+        guard newValue != value else {
+            applyTheme()
+            return
+        }
+        value = newValue
+        if animated {
+            UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseInOut]) {
+                self.applyTheme()
+            }
+        } else {
+            applyTheme()
+        }
+    }
+
+    @objc private func optionTapped(_ sender: UIButton) {
+        guard options.indices.contains(sender.tag) else { return }
+        let selected = options[sender.tag]
+        guard selected != value else { return }
+        setValue(selected, animated: true)
+        sendActions(for: .valueChanged)
+    }
+
+    private func applyTheme() {
+        track.backgroundColor = MPTheme.feltDepth
+        for (index, button) in buttons.enumerated() {
+            guard options.indices.contains(index) else { continue }
+            let isSelected = options[index] == value
+            if isSelected {
+                button.backgroundColor = MPTheme.amber
+                button.layer.cornerRadius = 22
+                button.layer.borderColor = MPTheme.amber.withAlphaComponent(0.7).cgColor
+                button.layer.borderWidth = 2
+                button.layer.shadowColor = MPTheme.amber.cgColor
+                button.layer.shadowOpacity = 0.45
+                button.layer.shadowOffset = CGSize(width: 0, height: 6)
+                button.layer.shadowRadius = 12
+                button.setTitleColor(UIColor(hex: 0x3B2A0E), for: .normal)
+                button.titleLabel?.font = MPFont.ui(15, weight: .heavy)
+            } else {
+                button.backgroundColor = .clear
+                button.layer.cornerRadius = 22
+                button.layer.borderWidth = 0
+                button.layer.shadowOpacity = 0
+                button.setTitleColor(MPTheme.muted, for: .normal)
+                button.titleLabel?.font = MPFont.ui(14, weight: .bold)
             }
         }
     }
