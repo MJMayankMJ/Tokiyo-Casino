@@ -149,6 +149,8 @@ class GameManager {
         // that actually received hole cards (skips busted / away seats).
         handHistory.handStarted(
             button: dealerIndex,
+            smallBlind: smallBlind,
+            bigBlind: bigBlind,
             seats: players.filter { $0.holeCards.count == 2 }.map { $0.id }
         )
         delegate?.gamePhaseDidChange(currentPhase)

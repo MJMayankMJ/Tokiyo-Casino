@@ -260,6 +260,24 @@ final class OpponentModelingTests: XCTestCase {
         XCTAssertLessThan(out.bluffFrequency, AIProfile.solverInspired.bluffFrequency)
     }
 
+    func testExploitIsInertBelowMinSampleThenAdapts() {
+        // A model that clearly reads as a maniac (capped AF) ...
+        var s = OpponentStats()
+        s.postflopBets = 30
+        s.postflopCalls = 0
+        s.handsDealt = Exploit.minHandsToAdapt - 1   // just under the floor
+        let thin = OpponentModel(stats: s, prior: .populationBaseline)
+        XCTAssertEqual(thin.af, 10.0, accuracy: 1e-9)
+        // ... is still ignored because the sample is too thin: identity.
+        XCTAssertEqual(Exploit.adjusted(profile: .solverInspired, vs: thin, intensity: .on), .solverInspired)
+
+        // At the floor the same read starts tilting (maniac → tighter calling).
+        s.handsDealt = Exploit.minHandsToAdapt
+        let atFloor = OpponentModel(stats: s, prior: .populationBaseline)
+        let out = Exploit.adjusted(profile: .solverInspired, vs: atFloor, intensity: .on)
+        XCTAssertLessThan(out.looseness, AIProfile.solverInspired.looseness)
+    }
+
     func testExploitClampsAndAggressiveTiltsHarder() {
         let station = bigSample(vpip: 0.9, foldToCbet: 0.0, af: 0.2)
         let aggressive = Exploit.adjusted(profile: .solverInspired, vs: station, intensity: .aggressive)

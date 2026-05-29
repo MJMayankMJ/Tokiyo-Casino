@@ -9,8 +9,9 @@
 //  and mistake rate so a tier governs *strength* regardless of which stylistic
 //  preset a seat draws.
 //
-//  The `exploitation` flag is stored here but consumed only in Phase 3
-//  (OpponentModel / Exploit). It is intentionally inert today.
+//  The `exploitation` flag gates the Phase 3 opponent-modeling layer
+//  (OpponentModel / Exploit): `.off` on Easy/Medium, `.on` on Hard, and
+//  `.aggressive` on Expert. It is consumed in `GameManager.processAITurn`.
 //
 
 import Foundation

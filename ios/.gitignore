@@ -1,0 +1,12 @@
+# Xcode user-specific state — should never be committed
+*.xcuserstate
+xcuserdata/
+*.xcuserdatad/
+
+# Build products / derived data
+build/
+DerivedData/
+*.moved-aside
+
+# macOS
+.DS_Store

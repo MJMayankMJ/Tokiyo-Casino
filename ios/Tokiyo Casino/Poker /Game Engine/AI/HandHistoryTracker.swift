@@ -48,13 +48,17 @@ enum ActionClass {
 
 // MARK: - Event log
 
-/// Structured events, retained for debugging / testing the fold logic. The live
-/// stats are accumulated incrementally as events arrive (see `models`).
+/// Structured events forming the per-session hand history (the `ActionLog`).
+/// Carries enough to replay/debug a hand — blinds, board per street, the running
+/// aggressor, and the winning seats — while the live stats are accumulated
+/// incrementally as events arrive (see `statsBySeat`). Mirrors the event set in
+/// POKER_AI_DESIGN.md §6.1.
 enum HandEvent {
-    case handStarted(handId: Int, button: Int, seats: [Int])
-    case streetBegan(handId: Int, street: PokerStreet)
+    case handStarted(handId: Int, button: Int, smallBlind: Int, bigBlind: Int, seats: [Int])
+    case streetBegan(handId: Int, street: PokerStreet, board: [Card])
     case playerActed(handId: Int, seat: Int, street: PokerStreet, action: ActionClass, amountToCall: Int, isVoluntary: Bool, isFacingRaise: Bool)
-    case handEnded(handId: Int, wentToShowdown: Bool)
+    case aggressorChanged(handId: Int, street: PokerStreet, seat: Int)
+    case handEnded(handId: Int, wentToShowdown: Bool, winners: [Int])
 }
 
 // MARK: - Tracker
@@ -99,7 +103,7 @@ final class HandHistoryTracker {
     // MARK: Lifecycle
 
     /// Begin a new hand. `seats` are the ids actually dealt in this hand.
-    func handStarted(button: Int, seats: [Int]) {
+    func handStarted(button: Int, smallBlind: Int = 0, bigBlind: Int = 0, seats: [Int]) {
         handId += 1
         currentStreet = .preflop
         seatsDealt = seats
@@ -118,12 +122,12 @@ final class HandHistoryTracker {
         for seat in seats {
             statsBySeat[seat, default: .init()].handsDealt += 1
         }
-        log.append(.handStarted(handId: handId, button: button, seats: seats))
+        log.append(.handStarted(handId: handId, button: button, smallBlind: smallBlind, bigBlind: bigBlind, seats: seats))
     }
 
     /// A new betting street started. Resets per-street aggression state and, on
     /// the flop, marks which dealt-in seats saw the flop (WTSD denominator).
-    func streetBegan(_ street: PokerStreet) {
+    func streetBegan(_ street: PokerStreet, board: [Card] = []) {
         currentStreet = street
         streetAggressor = nil
         streetHasBet = false
@@ -133,7 +137,7 @@ final class HandHistoryTracker {
                 markSawFlop(seat)
             }
         }
-        log.append(.streetBegan(handId: handId, street: street))
+        log.append(.streetBegan(handId: handId, street: street, board: board))
     }
 
     /// Record a resolved action. `callAmount` is the pre-action amount-to-call;
@@ -160,7 +164,7 @@ final class HandHistoryTracker {
     /// End the current hand. `wentToShowdown` is true when the hand was decided
     /// at showdown (river bet matched, or all-in run-out) rather than everyone
     /// else folding.
-    func handEnded(wentToShowdown: Bool) {
+    func handEnded(wentToShowdown: Bool, winners: [Int] = []) {
         if wentToShowdown {
             for seat in seatsDealt where !foldedThisHand.contains(seat) {
                 // Safety net: an all-in-preflop run-out skips `streetBegan(.flop)`,
@@ -169,7 +173,7 @@ final class HandHistoryTracker {
                 statsBySeat[seat, default: .init()].wentToShowdown += 1
             }
         }
-        log.append(.handEnded(handId: handId, wentToShowdown: wentToShowdown))
+        log.append(.handEnded(handId: handId, wentToShowdown: wentToShowdown, winners: winners))
     }
 
     // MARK: Model access
@@ -182,6 +186,11 @@ final class HandHistoryTracker {
     func rawStats(for seat: Int) -> OpponentStats {
         statsBySeat[seat] ?? .init()
     }
+
+    /// Seat that made the last bet/raise on the current street, if any. The
+    /// exploit layer uses this to adapt against the actual pressure source in a
+    /// multi-human game rather than an arbitrary opponent.
+    var currentAggressorSeat: Int? { streetAggressor }
 
     // MARK: Derivation helpers
 
@@ -234,6 +243,7 @@ final class HandHistoryTracker {
             }
             streetAggressor = seat
             streetHasBet = true
+            log.append(.aggressorChanged(handId: handId, street: currentStreet, seat: seat))
         case .fold:
             foldedThisHand.insert(seat)
         default:

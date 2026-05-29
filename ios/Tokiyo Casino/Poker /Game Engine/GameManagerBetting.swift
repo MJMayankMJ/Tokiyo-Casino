@@ -55,7 +55,7 @@ extension GameManager {
                 mainPot.reset()
 
                 // Phase 3 — hand ended by everyone else folding (no showdown).
-                handHistory.handEnded(wentToShowdown: false)
+                handHistory.handEnded(wentToShowdown: false, winners: [winner.id])
                 
                 // 1) Reveal cards (only this non-folded player will show)
                 DispatchQueue.main.async {

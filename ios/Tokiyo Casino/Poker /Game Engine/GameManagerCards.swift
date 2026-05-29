@@ -129,7 +129,7 @@ extension GameManager {
         dprint("Flop: \(flopCards.map { $0.description }.joined(separator: ", "))")
         
         currentPhase = .flop
-        handHistory.streetBegan(.flop)
+        handHistory.streetBegan(.flop, board: communityCards)
         delegate?.gamePhaseDidChange(currentPhase)
         delegate?.cardsDealt()
         
@@ -155,7 +155,7 @@ extension GameManager {
         }
         
         currentPhase = .turn
-        handHistory.streetBegan(.turn)
+        handHistory.streetBegan(.turn, board: communityCards)
         delegate?.gamePhaseDidChange(currentPhase)
         delegate?.cardsDealt()
         
@@ -179,7 +179,7 @@ extension GameManager {
         }
         
         currentPhase = .river
-        handHistory.streetBegan(.river)
+        handHistory.streetBegan(.river, board: communityCards)
         delegate?.gamePhaseDidChange(currentPhase)
         delegate?.cardsDealt()
         
