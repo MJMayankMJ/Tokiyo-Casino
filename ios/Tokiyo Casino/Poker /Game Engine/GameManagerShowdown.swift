@@ -40,7 +40,11 @@ extension GameManager {
 
     func determineWinnersWithDelay() {
         dprint("Determining winners with side pot logic")
-        
+
+        // Phase 3 — record that the hand reached showdown (drives WTSD); the
+        // tracker credits every non-folded dealt-in seat as having shown down.
+        handHistory.handEnded(wentToShowdown: true)
+
         // 1. Get all players who haven't folded (including All-In players)
         let candidates = players.filter { $0.isActive && !$0.isFolded && $0.holeCards.count == 2 }
         

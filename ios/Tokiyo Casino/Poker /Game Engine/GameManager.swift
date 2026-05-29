@@ -39,6 +39,12 @@ class GameManager {
     /// so a manager created without explicit config still behaves reasonably.
     var aiConfig: PokerAIConfig = .default
 
+    /// Phase 3 — passive observer that accumulates per-seat opponent stats for
+    /// the current session. Hard/Expert AI seats consult it (via `Exploit`) to
+    /// adapt to the human's tendencies. Resets implicitly each session because
+    /// it lives for the lifetime of this manager.
+    let handHistory = HandHistoryTracker()
+
     // Game settings
     let startingChips: Int
     let playerCount: Int
@@ -139,6 +145,12 @@ class GameManager {
         postBlinds()
         
         currentPhase = .preFlop
+        // Phase 3 — open the hand history for this deal. Seats dealt in are those
+        // that actually received hole cards (skips busted / away seats).
+        handHistory.handStarted(
+            button: dealerIndex,
+            seats: players.filter { $0.holeCards.count == 2 }.map { $0.id }
+        )
         delegate?.gamePhaseDidChange(currentPhase)
         delegate?.gameDidStart()
         

@@ -40,6 +40,12 @@ struct AIProfile: Codable, Equatable {
 
     /// Default used by the Phase 1 MVP before the difficulty UI exists.
     static let `default` = solverInspired
+
+    /// Phase 3 — notional "average villain" used purely as the Bayesian prior in
+    /// `OpponentModel` while real data on a human seat is still thin. It is never
+    /// installed on a seat; it only seeds the blended stats (a loose-ish,
+    /// moderately passive recreational baseline).
+    static let populationBaseline = AIProfile(aggression: 0.40, looseness: 0.50, bluffFrequency: 0.15, callStation: 0.50, trickiness: 0.20, mistakeRate: 0.0, equitySamples: 0)
 }
 
 // MARK: - AIPersonality bridge

@@ -53,6 +53,9 @@ extension GameManager {
                 let winAmount = mainPot.amount
                 winner.win(amount: winAmount)
                 mainPot.reset()
+
+                // Phase 3 — hand ended by everyone else folding (no showdown).
+                handHistory.handEnded(wentToShowdown: false)
                 
                 // 1) Reveal cards (only this non-folded player will show)
                 DispatchQueue.main.async {

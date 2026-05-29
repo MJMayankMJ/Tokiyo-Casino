@@ -62,7 +62,20 @@ extension GameManager {
         // Phase 2: behaviour is driven by the resolved AIProfile (difficulty +
         // style), not the personality directly. Personality remains only the
         // visible label/avatar.
-        let profile = current.resolvedProfile
+        var profile = current.resolvedProfile
+
+        // Phase 3: on Hard/Expert, tilt the profile to exploit the human's
+        // observed tendencies. Easy/Medium (`.off`) skip this entirely so newer
+        // players aren't punished for predictable play. We exploit the active
+        // human opponent we have the most data on.
+        let exploitation = aiConfig.difficulty.exploitation
+        if exploitation != .off,
+           let target = activePlayers
+               .filter({ $0.isHuman && $0.id != current.id })
+               .map({ handHistory.model(for: $0.id) })
+               .max(by: { $0.handsObserved < $1.handsObserved }) {
+            profile = Exploit.adjusted(profile: profile, vs: target, intensity: exploitation)
+        }
 
         let gameState = GameState(
             pot: mainPot.amount,

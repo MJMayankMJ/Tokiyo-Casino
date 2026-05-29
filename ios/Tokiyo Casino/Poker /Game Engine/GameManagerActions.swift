@@ -158,8 +158,23 @@ extension GameManager {
     // MARK: - Action Processing
     func processPlayerAction(_ action: PlayerAction, for player: Player) {
         guard player.id == currentPlayer?.id else { return }
-        
+
+        // Phase 3 — snapshot the pre-action context BEFORE executeAction mutates
+        // currentBet / the pot, so the opponent model reads the amount-to-call as
+        // the player actually faced it (see POKER_AI_DESIGN.md §6.1).
+        let preCallAmount = max(0, currentBet - player.currentBet)
+        let preCurrentBet = currentBet
+
         let executedAction = executeAction(action, for: player)
+
+        // `raisedBet` distinguishes a bet/raise from a call/check/fold — including
+        // an all-in that raises vs. an all-in that only calls.
+        let raisedBet = currentBet > preCurrentBet
+        handHistory.recordAction(
+            seat: player.id, action: executedAction,
+            callAmount: preCallAmount, raisedBet: raisedBet
+        )
+
         delegate?.playerDidAct(player, action: executedAction)
         
         // Determine delay based on action type
