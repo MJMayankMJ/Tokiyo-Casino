@@ -57,25 +57,41 @@ extension GameManager {
     }
 
     func processAITurn() {
-        guard let current = currentPlayer,
-              let personality = current.personality else { return }
-        
+        guard let current = currentPlayer, !current.isHuman else { return }
+
+        // Phase 2: behaviour is driven by the resolved AIProfile (difficulty +
+        // style), not the personality directly. Personality remains only the
+        // visible label/avatar.
+        let profile = current.resolvedProfile
+
         let gameState = GameState(
             pot: mainPot.amount,
             currentBet: currentBet,
             minRaise: minRaise,
             communityCards: communityCards,
             activePlayers: activePlayers,
-            dealerIndex: dealerIndex
+            dealerIndex: dealerIndex,
+            wasRaisedPreflop: handWasRaisedPreflop
         )
-        
-        let decision = AIEngine.makeDecision(
-            for: current,
-            gameState: gameState,
-            personality: personality
-        )
-        
-        processPlayerAction(decision, for: current)
+
+        // The decision includes a multi-thousand-iteration Monte Carlo rollout,
+        // which must NOT run on the main thread (it would freeze the UI). Run it
+        // on a background queue, then hop back to main to apply the action.
+        // Capture the acting seat id so a mid-think seat replacement cannot act
+        // for the wrong player (same guard pattern as processNextTurn).
+        let scheduledPlayerId = current.id
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let decision = AIEngine.makeDecision(
+                for: current,
+                gameState: gameState,
+                profile: profile
+            )
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.currentPlayer?.id == scheduledPlayerId else { return }
+                self.processPlayerAction(decision, for: current)
+            }
+        }
     }
     
     func moveToNextPlayer() {

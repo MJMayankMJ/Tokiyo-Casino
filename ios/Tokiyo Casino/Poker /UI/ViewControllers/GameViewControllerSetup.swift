@@ -127,6 +127,10 @@ extension GameViewController {
         gameManager = GameManager(playerCount: playerCount, startingChips: startingChips)
         gameManager.delegate = self
 
+        // Phase 2 — install the chosen difficulty/style onto the AI seats.
+        gameManager.aiConfig = aiConfig
+        gameManager.applyAIConfigToAISeats()
+
         topInfoBar?.setInfo(
             blinds: "\(gameManager.smallBlind)/\(gameManager.bigBlind)",
             hand: nil,

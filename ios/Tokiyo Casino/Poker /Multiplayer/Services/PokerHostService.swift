@@ -286,6 +286,10 @@ final class PokerHostService {
             startingChips: config.startingChips
         )
         gm.delegate = self
+        // Phase 2 — host-driven bots use the same persisted difficulty/style
+        // config the host picked on the solo setup screen.
+        gm.aiConfig = PokerAIConfigStore.load()
+        gm.applyAIConfigToAISeats()
         self.gameManager = gm
         hasStarted = true
 

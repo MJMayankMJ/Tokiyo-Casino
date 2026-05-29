@@ -28,6 +28,13 @@ class MenuViewController: UIViewController {
     private let playersEyebrow = mpSectionEyebrow("Number of players")
     private let playerPicker = MPPlayerPicker(value: 5)
 
+    private let difficultyEyebrow = mpSectionEyebrow("AI difficulty")
+    private let difficultySegment = UISegmentedControl(
+        items: Difficulty.allCases.map { $0.displayName }
+    )
+    /// Persisted AI config (difficulty + style). Loaded on appear, saved on change.
+    private var aiConfig = PokerAIConfigStore.load()
+
     private let chipsHeaderRow = UIView()
     private let chipsEyebrow = mpSectionEyebrow("Starting chips")
     private let coinsPill = MPCoinsPill()
@@ -65,6 +72,9 @@ class MenuViewController: UIViewController {
         super.viewWillAppear(animated)
         MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
         refreshCoinsAndClampSlider()
+        // Re-sync in case the config changed elsewhere (e.g. settings sheet).
+        aiConfig = PokerAIConfigStore.load()
+        difficultySegment.selectedSegmentIndex = difficultyIndex(for: aiConfig.difficulty)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -123,6 +133,28 @@ class MenuViewController: UIViewController {
         playersSection.addArrangedSubview(playersHeader)
         playersSection.addArrangedSubview(playerPicker)
         centerStack.addArrangedSubview(playersSection)
+
+        // Difficulty section
+        let difficultySection = UIStackView()
+        difficultySection.axis = .vertical
+        difficultySection.alignment = .fill
+        difficultySection.spacing = 10
+        let difficultyHeader = UIView()
+        difficultyEyebrow.translatesAutoresizingMaskIntoConstraints = false
+        difficultyHeader.addSubview(difficultyEyebrow)
+        NSLayoutConstraint.activate([
+            difficultyEyebrow.leadingAnchor.constraint(equalTo: difficultyHeader.leadingAnchor, constant: 4),
+            difficultyEyebrow.topAnchor.constraint(equalTo: difficultyHeader.topAnchor),
+            difficultyEyebrow.bottomAnchor.constraint(equalTo: difficultyHeader.bottomAnchor),
+        ])
+        difficultySegment.selectedSegmentTintColor = MPTheme.ink
+        difficultySegment.setTitleTextAttributes([.foregroundColor: MPTheme.ink, .font: MPFont.ui(13, weight: .semibold)], for: .normal)
+        difficultySegment.setTitleTextAttributes([.foregroundColor: UIColor.white, .font: MPFont.ui(13, weight: .bold)], for: .selected)
+        difficultySegment.selectedSegmentIndex = difficultyIndex(for: aiConfig.difficulty)
+        difficultySegment.addTarget(self, action: #selector(difficultyChanged), for: .valueChanged)
+        difficultySection.addArrangedSubview(difficultyHeader)
+        difficultySection.addArrangedSubview(difficultySegment)
+        centerStack.addArrangedSubview(difficultySection)
 
         // Chips section
         let chipsSection = UIStackView()
@@ -195,6 +227,21 @@ class MenuViewController: UIViewController {
         ])
     }
 
+    // MARK: Difficulty
+
+    private func difficultyIndex(for difficulty: Difficulty) -> Int {
+        Difficulty.allCases.firstIndex(of: difficulty) ?? 0
+    }
+
+    @objc private func difficultyChanged() {
+        let cases = Difficulty.allCases
+        let idx = difficultySegment.selectedSegmentIndex
+        guard cases.indices.contains(idx) else { return }
+        UISelectionFeedbackGenerator().selectionChanged()
+        aiConfig.difficulty = cases[idx]
+        PokerAIConfigStore.save(aiConfig)
+    }
+
     // MARK: Coins
 
     private func refreshCoinsAndClampSlider() {
@@ -255,7 +302,7 @@ class MenuViewController: UIViewController {
         }
 
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        let gameVC = GameViewController(playerCount: playerCount, startingChips: startingChips)
+        let gameVC = GameViewController(playerCount: playerCount, startingChips: startingChips, aiConfig: aiConfig)
         gameVC.modalPresentationStyle = .fullScreen
         present(gameVC, animated: true)
     }

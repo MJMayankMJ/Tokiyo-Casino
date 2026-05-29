@@ -3,360 +3,304 @@
 //  Poker
 //
 //  Created by Mayank Jangid on 8/17/25.
+//  Phase 1 refactor: thin orchestrator over EquityCalculator + PreflopRanges +
+//  AIProfile. The old per-personality strategy functions and the ad-hoc
+//  hand-strength heuristic are gone; all variation now flows through AIProfile
+//  knobs (see POKER_AI_DESIGN.md §4.3).
 //
 
 import Foundation
 
 // MARK: - AI Decision Engine
-class AIEngine {
-    
-    // MARK: - Main Decision Method
+enum AIEngine {
+
+    // MARK: - Entry points
+
+    /// Back-compatible entry: resolves the personality to its AIProfile preset.
+    /// Runs the full decision (including the Monte Carlo rollout) synchronously,
+    /// so callers MUST invoke this off the main thread (see §3 and
+    /// `GameManager.processAITurn`).
     static func makeDecision(
         for player: Player,
         gameState: GameState,
         personality: AIPersonality
     ) -> PlayerAction {
-        
-        let handStrength = calculateHandStrength(
-            player: player,
-            communityCards: gameState.communityCards
+        makeDecision(for: player, gameState: gameState, profile: personality.profile)
+    }
+
+    static func makeDecision(
+        for player: Player,
+        gameState: GameState,
+        profile: AIProfile
+    ) -> PlayerAction {
+        var rng = SystemRandomNumberGenerator()
+        return decide(for: player, gameState: gameState, profile: profile, rng: &rng)
+    }
+
+    /// Pure, seedable decision core (used by tests for determinism).
+    static func decide(
+        for player: Player,
+        gameState: GameState,
+        profile: AIProfile,
+        rng: inout some RandomNumberGenerator
+    ) -> PlayerAction {
+        let callAmount = max(0, gameState.currentBet - player.currentBet)
+        let liveOpponents = gameState.activePlayers.filter {
+            $0.id != player.id && !$0.isAllIn && !$0.isFolded
+        }
+        let canRaise = !liveOpponents.isEmpty
+        let opponents = max(1, gameState.activePlayers.count - 1)
+
+        let chosen: PlayerAction
+        if gameState.communityCards.isEmpty {
+            chosen = preflopDecision(
+                player: player, gameState: gameState, profile: profile,
+                callAmount: callAmount, canRaise: canRaise, rng: &rng
+            )
+        } else {
+            chosen = postflopDecision(
+                player: player, gameState: gameState, profile: profile,
+                callAmount: callAmount, canRaise: canRaise, opponents: opponents, rng: &rng
+            )
+        }
+
+        // Overlay #1: random sub-optimal action (mistakeRate). legalize is the
+        // final step inside each branch, so the overlay only swaps among legal
+        // actions it builds itself.
+        return applyMistakeOverlay(
+            to: chosen, player: player, gameState: gameState, profile: profile,
+            callAmount: callAmount, canRaise: canRaise, rng: &rng
         )
-        
-        let potOdds = calculatePotOdds(
-            pot: gameState.pot,
-            callAmount: gameState.currentBet - player.currentBet
-        )
-        
+    }
+
+    // MARK: - Preflop
+
+    private static func preflopDecision(
+        player: Player,
+        gameState: GameState,
+        profile: AIProfile,
+        callAmount: Int,
+        canRaise: Bool,
+        rng: inout some RandomNumberGenerator
+    ) -> PlayerAction {
+        guard player.holeCards.count == 2 else {
+            return callAmount > 0 ? affordableCall(callAmount, player) : .check
+        }
+
         let position = calculatePosition(
             player: player,
             dealerIndex: gameState.dealerIndex,
             playerCount: gameState.activePlayers.count
         )
-        
-        // Decision based on personality
-        switch personality {
-        case .tightAggressive:
-            return tightAggressiveStrategy(
-                handStrength: handStrength,
-                potOdds: potOdds,
-                position: position,
-                gameState: gameState,
-                player: player
-            )
-            
-        case .loosePassive:
-            return loosePassiveStrategy(
-                handStrength: handStrength,
-                potOdds: potOdds,
-                gameState: gameState,
-                player: player
-            )
-            
-        case .balanced:
-            return balancedStrategy(
-                handStrength: handStrength,
-                potOdds: potOdds,
-                position: position,
-                gameState: gameState,
-                player: player
-            )
-            
-        case .bluffer:
-            return blufferStrategy(
-                handStrength: handStrength,
-                gameState: gameState,
-                player: player
-            )
-        }
-    }
-    
-    // MARK: - Hand Strength Calculation
-    private static func calculateHandStrength(player: Player, communityCards: [Card]) -> Double {
-        if communityCards.isEmpty {
-            // Pre-flop hand strength
-            return calculatePreFlopStrength(holeCards: player.holeCards)
-        }
-        
-        // Post-flop hand strength
-        let allCards = player.holeCards + communityCards
-        let evaluation = HandEvaluator.evaluateBestHand(from: allCards)
-        
-        // Convert hand rank to strength (0.0 to 1.0)
-        let baseStrength = Double(evaluation.rank.rawValue) / 10.0
-        
-        // Add kicker strength
-        let kickerBonus = evaluation.kickers.first.map { Double($0.rawValue) / 140.0 } ?? 0
-        
-        return min(baseStrength + kickerBonus, 1.0)
-    }
-    
-    private static func calculatePreFlopStrength(holeCards: [Card]) -> Double {
-        guard holeCards.count == 2 else { return 0.0 }
-        
-        let card1 = holeCards[0]
-        let card2 = holeCards[1]
-        
-        // Pocket pairs
-        if card1.rank == card2.rank {
-            let pairValue = Double(card1.rank.rawValue)
-            return 0.5 + (pairValue / 14.0) * 0.4
-        }
-        
-        // Suited cards
-        let suited = card1.suit == card2.suit
-        let suitedBonus = suited ? 0.1 : 0.0
-        
-        // High cards
-        let highCard = max(card1.rank.rawValue, card2.rank.rawValue)
-        let lowCard = min(card1.rank.rawValue, card2.rank.rawValue)
-        
-        // Connected cards (straights potential)
-        let gap = highCard - lowCard
-        let connectedBonus: Double
-        switch gap {
-        case 1: connectedBonus = 0.08  // Connected
-        case 2: connectedBonus = 0.04  // One gap
-        case 3: connectedBonus = 0.02  // Two gaps
-        default: connectedBonus = 0.0
-        }
-        
-        // Ace combinations
-        let hasAce = card1.rank == .ace || card2.rank == .ace
-        let aceBonus = hasAce ? 0.1 : 0.0
-        
-        // Base strength from card values
-        let baseStrength = (Double(highCard + lowCard) / 28.0) * 0.4
-        
-        return min(baseStrength + suitedBonus + connectedBonus + aceBonus, 0.95)
-    }
-    
-    // MARK: - Pot Odds Calculation
-    private static func calculatePotOdds(pot: Int, callAmount: Int) -> Double {
-        guard callAmount > 0 else { return 1.0 }
-        return Double(callAmount) / Double(pot + callAmount)
-    }
-    
-    // MARK: - Position Calculation
-    private static func calculatePosition(player: Player, dealerIndex: Int, playerCount: Int) -> Position {
-        // Position relative to dealer
-        // Early: First 1/3 of players
-        // Middle: Second 1/3 of players
-        // Late: Last 1/3 of players (including dealer)
-        
-        let playerPosition = (player.id - dealerIndex + playerCount) % playerCount
-        let positionRatio = Double(playerPosition) / Double(playerCount)
-        
-        if positionRatio < 0.33 {
-            return .early
-        } else if positionRatio < 0.67 {
-            return .middle
-        } else {
-            return .late
-        }
-    }
-    
-    // MARK: - AI Strategies
-    
-    private static func tightAggressiveStrategy(
-        handStrength: Double,
-        potOdds: Double,
-        position: Position,
-        gameState: GameState,
-        player: Player
-    ) -> PlayerAction {
-        
-        let positionBonus = position.bonus
-        let effectiveStrength = handStrength + positionBonus
-        
-        // Fold weak hands
-        if effectiveStrength < 0.45 {
-            return gameState.currentBet > player.currentBet ? .fold : .check
-        }
-        
-        // Raise with strong hands
-        if effectiveStrength > 0.75 {
-            let raiseAmount = calculateRaiseAmount(
-                pot: gameState.pot,
+        let facingRaise = gameState.wasRaisedPreflop && callAmount > 0
+
+        let range = PreflopRanges.recommendedAction(
+            hand: (player.holeCards[0], player.holeCards[1]),
+            position: position,
+            facingRaise: facingRaise,
+            profile: profile
+        )
+
+        switch range.sample(using: &rng) {
+        case .raiseIntent:
+            let frac = 0.6 + profile.aggression * 0.5
+            let delta = max(gameState.minRaise, Int(Double(gameState.pot) * frac))
+            return legalize(
+                targetTotal: gameState.currentBet + delta,
+                currentBet: gameState.currentBet,
+                playerCurrentBet: player.currentBet,
+                playerChips: player.chips,
                 minRaise: gameState.minRaise,
-                maxRaise: player.chips,
-                aggression: 0.8
+                canRaise: canRaise
             )
-            if raiseAmount > 0 {
-                return .raise(raiseAmount)
-            }
+        case .callIntent:
+            return callAmount > 0 ? affordableCall(callAmount, player) : .check
+        case .foldIntent:
+            return callAmount > 0 ? .fold : .check
         }
-        
-        // Call with good odds
-        if effectiveStrength > 0.6 && potOdds < handStrength {
-            return .call
-        }
-        
-        return gameState.currentBet > player.currentBet ? .fold : .check
-    }
-    
-    private static func loosePassiveStrategy(
-        handStrength: Double,
-        potOdds: Double,
-        gameState: GameState,
-        player: Player
-    ) -> PlayerAction {
-        
-        // Only fold very weak hands
-        if handStrength < 0.2 && gameState.currentBet > player.currentBet {
-            let callAmount = gameState.currentBet - player.currentBet
-            if callAmount > player.chips / 3 {
-                return .fold
-            }
-        }
-        
-        // Occasionally raise with very strong hands
-        if handStrength > 0.8 && Double.random(in: 0...1) < 0.2 {
-            let raiseAmount = gameState.minRaise
-            if raiseAmount <= player.chips {
-                return .raise(raiseAmount)
-            }
-        }
-        
-        // Call most of the time
-        if gameState.currentBet > player.currentBet {
-            let callAmount = gameState.currentBet - player.currentBet
-            if callAmount <= player.chips / 2 {
-                return .call
-            }
-        }
-        
-        return gameState.currentBet > player.currentBet ? .call : .check
-    }
-    
-    private static func balancedStrategy(
-        handStrength: Double,
-        potOdds: Double,
-        position: Position,
-        gameState: GameState,
-        player: Player
-    ) -> PlayerAction {
-        
-        let random = Double.random(in: 0...1)
-        let positionFactor = position.bonus
-        let effectiveStrength = handStrength + positionFactor
-        
-        // Strong hands - raise most of the time
-        if effectiveStrength > 0.75 {
-            if random < 0.7 {
-                let raiseAmount = calculateRaiseAmount(
-                    pot: gameState.pot,
-                    minRaise: gameState.minRaise,
-                    maxRaise: player.chips,
-                    aggression: 0.6
-                )
-                if raiseAmount > 0 {
-                    return .raise(raiseAmount)
-                }
-            }
-            return .call
-        }
-        
-        // Medium hands - mix of calls and occasional raises
-        if effectiveStrength > 0.5 {
-            // Bluff occasionally in late position
-            if position == .late && random < 0.2 {
-                let bluffAmount = gameState.minRaise
-                if bluffAmount <= player.chips / 2 {
-                    return .raise(bluffAmount)
-                }
-            }
-            
-            if potOdds < handStrength {
-                return .call
-            }
-        }
-        
-        // Weak hands - fold to aggression
-        if effectiveStrength < 0.35 && gameState.currentBet > player.currentBet {
-            return .fold
-        }
-        
-        return gameState.currentBet > player.currentBet ? .call : .check
-    }
-    
-    private static func blufferStrategy(
-        handStrength: Double,
-        gameState: GameState,
-        player: Player
-    ) -> PlayerAction {
-        
-        let bluffChance = 0.3
-        let random = Double.random(in: 0...1)
-        
-        // Bluff with weak hands
-        if handStrength < 0.4 && random < bluffChance {
-            let bluffAmount = calculateRaiseAmount(
-                pot: gameState.pot,
-                minRaise: gameState.minRaise,
-                maxRaise: player.chips,
-                aggression: 0.9
-            )
-            if bluffAmount > 0 && bluffAmount <= player.chips / 2 {
-                return .raise(bluffAmount)
-            }
-        }
-        
-        // Play strong hands very aggressively
-        if handStrength > 0.65 {
-            let raiseAmount = calculateRaiseAmount(
-                pot: gameState.pot,
-                minRaise: gameState.minRaise,
-                maxRaise: player.chips,
-                aggression: 1.0
-            )
-            if raiseAmount > 0 {
-                return .raise(raiseAmount)
-            }
-            return .call
-        }
-        
-        // Semi-bluff with medium hands
-        if handStrength > 0.4 && random < 0.4 {
-            if gameState.currentBet == player.currentBet {
-                let betAmount = gameState.pot / 2
-                if betAmount > gameState.minRaise && betAmount <= player.chips / 3 {
-                    return .raise(betAmount)
-                }
-            }
-            return .call
-        }
-        
-        // Fold very weak hands to big bets
-        let callAmount = gameState.currentBet - player.currentBet
-        if handStrength < 0.3 && callAmount > player.chips / 4 {
-            return .fold
-        }
-        
-        return gameState.currentBet > player.currentBet ? .call : .check
     }
 
-    
-    // MARK: - Helper Methods
-    
-    private static func calculateRaiseAmount(
+    // MARK: - Postflop
+
+    private static func postflopDecision(
+        player: Player,
+        gameState: GameState,
+        profile: AIProfile,
+        callAmount: Int,
+        canRaise: Bool,
+        opponents: Int,
+        rng: inout some RandomNumberGenerator
+    ) -> PlayerAction {
+        let pot = gameState.pot
+
+        // Coarse opponent-range tightening in raised pots (§4.1 intermediate).
+        let topFraction = gameState.wasRaisedPreflop ? 0.5 : 0.85
+        let eq = EquityCalculator.equity(
+            hole: player.holeCards,
+            board: gameState.communityCards,
+            opponents: opponents,
+            iterations: profile.equitySamples,
+            opponentTopFraction: topFraction,
+            rng: &rng
+        )
+
+        let valueLine = valueThreshold(profile)
+
+        if callAmount > 0 {
+            // Facing a bet: value-raise / call / bluff-raise / fold.
+            let odds = Double(callAmount) / Double(pot + callAmount)
+
+            if eq >= valueLine && canRaise {
+                if Double.random(in: 0..<1, using: &rng) < profile.trickiness * 0.4 {
+                    return affordableCall(callAmount, player)   // slowplay
+                }
+                return raiseToFraction(pot: pot, gameState: gameState, player: player,
+                                       canRaise: canRaise, profile: profile)
+            }
+
+            // callStation raises the fold line toward calling; looseness too.
+            let foldLine = odds * (1.0 - profile.callStation) * (1.0 - profile.looseness * 0.2)
+            if eq >= foldLine {
+                return affordableCall(callAmount, player)
+            }
+
+            if canRaise && Double.random(in: 0..<1, using: &rng) < profile.bluffFrequency * 0.5 {
+                return raiseToFraction(pot: pot, gameState: gameState, player: player,
+                                       canRaise: canRaise, profile: profile)
+            }
+            return .fold
+        } else {
+            // Checked to us: value-bet / c-bet-bluff / trap-check.
+            if eq >= valueLine {
+                if Double.random(in: 0..<1, using: &rng) < profile.trickiness * 0.5 {
+                    return .check   // slowplay a strong hand
+                }
+                return raiseToFraction(pot: pot, gameState: gameState, player: player,
+                                       canRaise: canRaise, profile: profile)
+            }
+
+            let cbetChance = profile.bluffFrequency * (0.6 + profile.aggression * 0.4)
+            if canRaise && Double.random(in: 0..<1, using: &rng) < cbetChance {
+                return raiseToFraction(pot: pot, gameState: gameState, player: player,
+                                       canRaise: canRaise, profile: profile)
+            }
+            return .check
+        }
+    }
+
+    // MARK: - Sizing & thresholds
+
+    /// Minimum equity to bet/raise for value. Aggressive profiles bet thinner.
+    private static func valueThreshold(_ profile: AIProfile) -> Double {
+        return 0.66 - profile.aggression * 0.16   // ~0.50 ... 0.66
+    }
+
+    /// Build a pot-fraction-sized bet/raise and legalize it. Works for both a
+    /// fresh bet (currentBet == playerCurrentBet) and a raise over a bet.
+    private static func raiseToFraction(
         pot: Int,
+        gameState: GameState,
+        player: Player,
+        canRaise: Bool,
+        profile: AIProfile
+    ) -> PlayerAction {
+        let frac = 0.4 + profile.aggression * 0.6          // 0.4x ... 1.0x pot
+        let size = max(1, Int(Double(pot) * frac))
+        return legalize(
+            targetTotal: gameState.currentBet + size,
+            currentBet: gameState.currentBet,
+            playerCurrentBet: player.currentBet,
+            playerChips: player.chips,
+            minRaise: gameState.minRaise,
+            canRaise: canRaise
+        )
+    }
+
+    private static func affordableCall(_ callAmount: Int, _ player: Player) -> PlayerAction {
+        return player.chips <= callAmount ? .allIn : .call
+    }
+
+    // MARK: - Mistake overlay
+
+    private static func applyMistakeOverlay(
+        to action: PlayerAction,
+        player: Player,
+        gameState: GameState,
+        profile: AIProfile,
+        callAmount: Int,
+        canRaise: Bool,
+        rng: inout some RandomNumberGenerator
+    ) -> PlayerAction {
+        guard profile.mistakeRate > 0,
+              Double.random(in: 0..<1, using: &rng) < profile.mistakeRate else {
+            return action
+        }
+
+        var options: [PlayerAction] = []
+        if callAmount > 0 {
+            options.append(.fold)
+            options.append(affordableCall(callAmount, player))
+        } else {
+            options.append(.check)
+        }
+        if canRaise && player.chips > callAmount {
+            options.append(legalize(
+                targetTotal: gameState.currentBet + gameState.minRaise,
+                currentBet: gameState.currentBet,
+                playerCurrentBet: player.currentBet,
+                playerChips: player.chips,
+                minRaise: gameState.minRaise,
+                canRaise: canRaise
+            ))
+        }
+        return options.randomElement(using: &rng) ?? action
+    }
+
+    // MARK: - Raise legalization (pure; covered by RaiseLegalizationTests)
+
+    /// Convert a desired *total table bet* into a legal `PlayerAction`.
+    ///
+    /// `PlayerAction.raise(Int)` is a delta over the current bet, not a total
+    /// (see GameManagerActions.swift:33). This clamps the delta to
+    /// `[minRaise, chips]`, downgrades an unaffordable raise to `.allIn`, and
+    /// downgrades a non-raise (target at/below current bet, or no legal raise
+    /// available) to `.call`/`.check`/`.allIn`.
+    static func legalize(
+        targetTotal: Int,
+        currentBet: Int,
+        playerCurrentBet: Int,
+        playerChips: Int,
         minRaise: Int,
-        maxRaise: Int,
-        aggression: Double
-    ) -> Int {
-        
-        // Calculate raise based on pot size and aggression
-        let potPercentage = 0.5 + (aggression * 0.5) // 50% to 100% of pot
-        let targetRaise = Int(Double(pot) * potPercentage)
-        
-        // Ensure it's within valid range
-        let validRaise = max(minRaise, min(targetRaise, maxRaise))
-        
-        // Add some randomness
-        let variance = Double.random(in: 0.8...1.2)
-        let finalRaise = Int(Double(validRaise) * variance)
-        
-        return max(minRaise, min(finalRaise, maxRaise))
+        canRaise: Bool
+    ) -> PlayerAction {
+        let callAmount = max(0, currentBet - playerCurrentBet)
+
+        func nonRaise() -> PlayerAction {
+            if callAmount <= 0 { return .check }
+            return playerChips <= callAmount ? .allIn : .call
+        }
+
+        guard canRaise else { return nonRaise() }
+
+        let rawDelta = targetTotal - currentBet
+        if rawDelta <= 0 { return nonRaise() }            // (d) not actually a raise
+
+        let delta = max(rawDelta, minRaise)               // (a) bump up to min raise
+        let chipsToCommit = callAmount + delta            // == target - playerCurrentBet
+        if chipsToCommit >= playerChips { return .allIn }  // (b)/(c) can't afford full raise
+
+        return .raise(delta)
+    }
+
+    // MARK: - Position
+
+    static func calculatePosition(player: Player, dealerIndex: Int, playerCount: Int) -> Position {
+        guard playerCount > 0 else { return .middle }
+        let playerPosition = (player.id - dealerIndex + playerCount) % playerCount
+        let positionRatio = Double(playerPosition) / Double(playerCount)
+        if positionRatio < 0.33 { return .early }
+        else if positionRatio < 0.67 { return .middle }
+        else { return .late }
     }
 }
 
@@ -366,12 +310,12 @@ enum Position {
     case early
     case middle
     case late
-    
+
     var bonus: Double {
         switch self {
-        case .early: return 0.0
+        case .early:  return 0.0
         case .middle: return 0.05
-        case .late: return 0.1
+        case .late:   return 0.1
         }
     }
 }
@@ -383,4 +327,7 @@ struct GameState {
     let communityCards: [Card]
     let activePlayers: [Player]
     let dealerIndex: Int
+    /// True once any player has raised above the big blind preflop this hand.
+    /// Drives the coarse opponent-range tightening in EquityCalculator.
+    let wasRaisedPreflop: Bool
 }

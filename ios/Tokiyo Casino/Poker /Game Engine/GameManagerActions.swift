@@ -89,7 +89,12 @@ extension GameManager {
             delegate?.potDidUpdate(mainPot.amount)
 
         }
-        
+
+        // Track pre-flop aggression for the AI's opponent-range tightening.
+        if currentPhase == .preFlop && currentBet > bigBlind {
+            handWasRaisedPreflop = true
+        }
+
         player.hasActed = true
         return resolvedAction
     }

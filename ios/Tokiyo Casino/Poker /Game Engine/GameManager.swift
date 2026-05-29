@@ -28,7 +28,17 @@ class GameManager {
     var lastRaiseAmount: Int = 0
     var currentBetAllowsRaises: Bool = true
     var bigBlindPlayerSeatIndex: Int?
-    
+    /// True once any player has raised above the big blind during pre-flop this
+    /// hand. Consumed by the AI's equity calculation to tighten the assumed
+    /// opponent range in raised pots (see AIEngine / EquityCalculator).
+    var handWasRaisedPreflop: Bool = false
+
+    /// Phase 2 — difficulty/style configuration for the AI seats. Set by the
+    /// setup flow (solo) or host service (multiplayer); `applyAIConfigToAISeats`
+    /// turns it into a concrete per-seat `AIProfile`. Defaults to medium/auto-mix
+    /// so a manager created without explicit config still behaves reasonably.
+    var aiConfig: PokerAIConfig = .default
+
     // Game settings
     let startingChips: Int
     let playerCount: Int
@@ -95,6 +105,18 @@ class GameManager {
     func adjustExpectedChipTotal(by delta: Int) {
         expectedTotalChips += delta
     }
+
+    /// Phase 2 — resolve `aiConfig` into a concrete `AIProfile` for every AI
+    /// seat. Personalities still drive the visible name/avatar; behaviour now
+    /// comes from the installed profile. Call after the roster exists and any
+    /// time `aiConfig` changes. Safe to call repeatedly.
+    func applyAIConfigToAISeats() {
+        let aiSeats = players.filter { !$0.isHuman }
+        let profiles = aiConfig.resolvedProfiles(aiSeatCount: aiSeats.count)
+        for (seat, profile) in zip(aiSeats, profiles) {
+            seat.aiProfile = profile
+        }
+    }
     
     // MARK: - Game Control
     func startNewHand() {
@@ -140,7 +162,8 @@ class GameManager {
         minRaise = bigBlind
         currentBetAllowsRaises = true
         bigBlindPlayerSeatIndex = nil
-        
+        handWasRaisedPreflop = false
+
         for player in players {
             player.reset()
         }

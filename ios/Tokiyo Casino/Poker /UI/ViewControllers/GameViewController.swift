@@ -30,6 +30,8 @@ class GameViewController: UIViewController {
     // Game settings
     let playerCount: Int
     let startingChips: Int
+    /// Phase 2 — difficulty/style for AI seats, chosen on the setup screen.
+    let aiConfig: PokerAIConfig
     
     // 🟡 Cash-out state
     let initialBuyIn: Int        // remember what the human brought to the table
@@ -59,10 +61,12 @@ class GameViewController: UIViewController {
     }
     
     // MARK: - Initialization
-    init(playerCount: Int = 6, startingChips: Int = 1000) {
+    init(playerCount: Int = 6, startingChips: Int = 1000,
+         aiConfig: PokerAIConfig = PokerAIConfigStore.load()) {
         self.playerCount = playerCount
         self.startingChips = startingChips
         self.initialBuyIn = startingChips
+        self.aiConfig = aiConfig
         super.init(nibName: nil, bundle: nil)
     }
     

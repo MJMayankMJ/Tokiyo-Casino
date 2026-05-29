@@ -159,4 +159,17 @@ class Player {
         }
         return nil
     }
+
+    /// Phase 2 — explicit AI profile installed by the difficulty resolver
+    /// (`GameManager.applyAIConfigToAISeats`). When set it overrides the
+    /// personality-derived profile so a table can run a tuned difficulty mix
+    /// while keeping the personality only as the visible label/avatar.
+    var aiProfile: AIProfile?
+
+    /// The profile the decision engine should actually use for this seat:
+    /// the explicit override if present, otherwise the personality's preset,
+    /// otherwise the strongest default. Only meaningful for AI seats.
+    var resolvedProfile: AIProfile {
+        aiProfile ?? personality?.profile ?? .default
+    }
 }
