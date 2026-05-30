@@ -10,6 +10,13 @@
 import UIKit
 import CoreHaptics
 
+// Quarantined for App Store compliance — see REBRAND_PRD.md §3.1.
+// ENABLE_SLOT_MACHINE is intentionally never defined in any build config,
+// so the slot machine UI is compile-time excluded from shipping builds.
+// Re-enable later (e.g., after enrolling as an organization account)
+// by adding ENABLE_SLOT_MACHINE to OTHER_SWIFT_FLAGS or the active compilation conditions.
+#if ENABLE_SLOT_MACHINE
+
 class SlotViewController: UIViewController {
     // MARK: - IBOutlets
     @IBOutlet weak var pickerView: UIPickerView!
@@ -312,3 +319,5 @@ extension SlotViewController: UIPickerViewDelegate, UIPickerViewDataSource {
         return baseWidth - 3.0
     }
 }
+
+#endif // ENABLE_SLOT_MACHINE

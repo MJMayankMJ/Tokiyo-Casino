@@ -9,7 +9,7 @@
 		<string>Pocket Monk.otf</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Tokiyo Casino discovers nearby iPhones so you can play poker with friends without Wi-Fi or the internet.</string>
+	<string>Tokiyo Cards discovers nearby iPhones so you can play poker with friends without Wi-Fi or the internet.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_tokiyo-poker._tcp</string>

@@ -183,7 +183,7 @@ final class PokerRulesViewController: UIViewController {
         card.layer.borderColor = PokerTheme.border.cgColor
 
         let label = UILabel()
-        label.text = "For entertainment only. Coins are virtual and have no cash value. No real-money gambling, no purchases, no redemptions."
+        label.text = "For entertainment only. Virtual chips have no real-world value. No purchases, no redemptions."
         label.font = .systemFont(ofSize: 12, weight: .semibold)
         label.textColor = PokerTheme.muted
         label.numberOfLines = 0

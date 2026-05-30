@@ -301,8 +301,8 @@ class MenuViewController: UIViewController {
             let f = NumberFormatter(); f.numberStyle = .decimal
             let coinStr = f.string(from: NSNumber(value: availableCoins)) ?? "\(availableCoins)"
             let alert = UIAlertController(
-                title: "Not enough coins",
-                message: "You have \(coinStr) coins. Lower the starting chips or earn more coins.",
+                title: "Not enough chips",
+                message: "You have \(coinStr) chips. Lower the starting amount.",
                 preferredStyle: .alert
             )
             alert.addAction(UIAlertAction(title: "OK", style: .default))

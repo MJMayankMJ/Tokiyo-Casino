@@ -5,6 +5,9 @@
 
 import Foundation
 
+// Quarantined — see SlotViewController.swift header / REBRAND_PRD.md §3.1.
+#if ENABLE_SLOT_MACHINE
+
 class SlotViewModel {
 
     var onUpdate: (() -> Void)?
@@ -83,3 +86,5 @@ class SlotViewModel {
         }
     }
 }
+
+#endif // ENABLE_SLOT_MACHINE

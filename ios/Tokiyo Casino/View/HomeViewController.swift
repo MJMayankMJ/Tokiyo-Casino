@@ -20,16 +20,29 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
     private var viewModel = HomeViewModel()
     private var gameCards: [UIView] = []
-    private var hasShownDailySpinPrompt = false
+    // Daily-spin prompt path is quarantined — see REBRAND_PRD.md §3.1 / Phase A.
+    // private var hasShownDailySpinPrompt = false
+
+    // First-launch chip grant key. Idempotent — one-time 1000-chip bonus on fresh install.
+    private static let initialChipGrantKey = "didGrantInitialChips.v1"
+    private static let initialChipGrantAmount: Int64 = 1000
 
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        grantInitialChipsIfNeeded()
+
         setupGameCards()
         setupTapGestures()
         setupInitialAnimations()
         setupDisclaimerLabel()
+
+        // Outlet was originally the daily-spin treasure chest. Repurposed as the
+        // static chip indicator next to labelTotalCoins. The image was swapped
+        // in Main.storyboard from `coinBox` to the system "circle.hexagonpath.fill" SF Symbol.
+        treasureChestImage?.isHidden = false
+        treasureChestImage?.isUserInteractionEnabled = false
 
         NotificationCenter.default.addObserver(
             self,
@@ -37,6 +50,14 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             name: CoinsManager.coinsDidChangeNotification,
             object: nil
         )
+    }
+
+    private func grantInitialChipsIfNeeded() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: Self.initialChipGrantKey) else { return }
+        CoinsManager.shared.addCoins(amount: Self.initialChipGrantAmount) { _ in
+            defaults.set(true, forKey: Self.initialChipGrantKey)
+        }
     }
 
     private weak var disclaimerPill: UIView?
@@ -55,7 +76,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         view.addSubview(pill)
 
         let disclaimer = UILabel()
-        disclaimer.text = "For entertainment only. Coins are virtual and have no cash value. No real-money gambling."
+        disclaimer.text = "For entertainment only. Virtual chips have no real-world value."
         disclaimer.font = .systemFont(ofSize: 11, weight: .semibold)
         disclaimer.textColor = UIColor(red: 1, green: 0.95, blue: 0.85, alpha: 1)
         disclaimer.textAlignment = .center
@@ -153,10 +174,11 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
-        if !hasShownDailySpinPrompt && viewModel.canSpinForCoins {
-            showDailySpinPrompt()
-            hasShownDailySpinPrompt = true
-        }
+        // Daily-spin prompt path quarantined.
+        // if !hasShownDailySpinPrompt && viewModel.canSpinForCoins {
+        //     showDailySpinPrompt()
+        //     hasShownDailySpinPrompt = true
+        // }
 
         startIdleAnimations()
     }
@@ -331,12 +353,13 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     }
 
     private func setupTapGestures() {
-        treasureChestImage.isUserInteractionEnabled = true
-        treasureChestImage.accessibilityLabel = "Daily spins"
-        treasureChestImage.accessibilityTraits = .button
-
-        let chestTap = UITapGestureRecognizer(target: self, action: #selector(didTapTreasureChest))
-        treasureChestImage.addGestureRecognizer(chestTap)
+        // Treasure chest tap retired with the daily-spin module.
+        // treasureChestImage.isUserInteractionEnabled = true
+        // treasureChestImage.accessibilityLabel = "Daily spins"
+        // treasureChestImage.accessibilityTraits = .button
+        //
+        // let chestTap = UITapGestureRecognizer(target: self, action: #selector(didTapTreasureChest))
+        // treasureChestImage.addGestureRecognizer(chestTap)
     }
 
     private func setupInitialAnimations() {
@@ -344,9 +367,6 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             card.transform = CGAffineTransform(translationX: 0, y: 50).scaledBy(x: 0.8, y: 0.8)
             card.alpha = 0
         }
-
-        treasureChestImage.transform = CGAffineTransform(scaleX: 0.1, y: 0.1)
-        treasureChestImage.alpha = 0
 
         for (index, card) in gameCards.enumerated() {
             UIView.animate(
@@ -359,11 +379,6 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
                 card.alpha = 1
             }
         }
-
-        UIView.animate(withDuration: 0.6, delay: 0.8, usingSpringWithDamping: 0.8, initialSpringVelocity: 0.3) {
-            self.treasureChestImage.transform = .identity
-            self.treasureChestImage.alpha = 1
-        }
     }
 
     // MARK: - UI Update
@@ -372,16 +387,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         if labelTotalCoins.text != newCoinText {
             animateCoinUpdate(to: newCoinText)
         }
-
-        let canSpin = viewModel.canSpinForCoins
-        treasureChestImage.alpha = canSpin ? 1.0 : 0.6
-        treasureChestImage.isUserInteractionEnabled = true
-
-        if canSpin {
-            addGlowEffect(to: treasureChestImage)
-        } else {
-            removeGlowEffect(from: treasureChestImage)
-        }
+        // Treasure-chest visuals removed — chest is hidden in viewDidLoad.
     }
 
     @objc private func coinsDidChange() {
@@ -434,23 +440,24 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         }
     }
 
-    private func openDailySpinGame() {
-        performSegue(withIdentifier: K.toSlotVC, sender: nil)
-    }
+    // Daily-spin entry points retired.
+    // private func openDailySpinGame() {
+    //     performSegue(withIdentifier: K.toSlotVC, sender: nil)
+    // }
 
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         super.prepare(for: segue, sender: sender)
     }
 
-    @objc private func didTapTreasureChest() {
-        animateTreasureChestTap {
-            if self.viewModel.canSpinForCoins {
-                self.showDailySpinPrompt()
-            } else {
-                self.showNoSpinsAlert()
-            }
-        }
-    }
+    // @objc private func didTapTreasureChest() {
+    //     animateTreasureChestTap {
+    //         if self.viewModel.canSpinForCoins {
+    //             self.showDailySpinPrompt()
+    //         } else {
+    //             self.showNoSpinsAlert()
+    //         }
+    //     }
+    // }
 
     // MARK: - Animations
     private func animateGameCardTap(_ view: UIView, completion: @escaping () -> Void) {
@@ -469,23 +476,24 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         }
     }
 
-    private func animateTreasureChestTap(completion: @escaping () -> Void) {
-        let shakeAnimation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
-        shakeAnimation.values = [0, -0.1, 0.1, -0.05, 0.05, 0]
-        shakeAnimation.duration = 0.3
-        shakeAnimation.repeatCount = 1
-
-        UIView.animate(withDuration: 0.1, animations: {
-            self.treasureChestImage.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-        }) { _ in
-            self.treasureChestImage.layer.add(shakeAnimation, forKey: "shake")
-            UIView.animate(withDuration: 0.2) {
-                self.treasureChestImage.transform = .identity
-            } completion: { _ in
-                completion()
-            }
-        }
-    }
+    // Treasure-chest tap animation retired with the daily-spin module.
+    // private func animateTreasureChestTap(completion: @escaping () -> Void) {
+    //     let shakeAnimation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
+    //     shakeAnimation.values = [0, -0.1, 0.1, -0.05, 0.05, 0]
+    //     shakeAnimation.duration = 0.3
+    //     shakeAnimation.repeatCount = 1
+    //
+    //     UIView.animate(withDuration: 0.1, animations: {
+    //         self.treasureChestImage.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
+    //     }) { _ in
+    //         self.treasureChestImage.layer.add(shakeAnimation, forKey: "shake")
+    //         UIView.animate(withDuration: 0.2) {
+    //             self.treasureChestImage.transform = .identity
+    //         } completion: { _ in
+    //             completion()
+    //         }
+    //     }
+    // }
 
     private func animateCoinUpdate(to newText: String) {
         UIView.animate(withDuration: 0.15, animations: {
@@ -506,15 +514,10 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         for (index, card) in gameCards.enumerated() {
             animateFloating(card, delay: Double(index))
         }
-
-        if viewModel.canSpinForCoins {
-            animateTreasureChestGlow()
-        }
     }
 
     private func stopIdleAnimations() {
         gameCards.forEach { $0.layer.removeAllAnimations() }
-        treasureChestImage.layer.removeAllAnimations()
     }
 
     private func animateFloating(_ view: UIView, delay: TimeInterval) {
@@ -523,56 +526,50 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         }
     }
 
-    private func animateTreasureChestGlow() {
-        UIView.animate(withDuration: 1.5, delay: 0, options: [.repeat, .autoreverse, .allowUserInteraction]) {
-            self.treasureChestImage.alpha = 0.7
-        }
-    }
+    // MARK: - Visual Effects (Daily-spin glow retired)
+    // private func addGlowEffect(to view: UIView) {
+    //     view.layer.shadowColor = UIColor.systemYellow.cgColor
+    //     view.layer.shadowRadius = 10
+    //     view.layer.shadowOpacity = 0.6
+    //     view.layer.shadowOffset = .zero
+    // }
+    //
+    // private func removeGlowEffect(from view: UIView) {
+    //     view.layer.shadowOpacity = 0
+    // }
 
-    // MARK: - Visual Effects
-    private func addGlowEffect(to view: UIView) {
-        view.layer.shadowColor = UIColor.systemYellow.cgColor
-        view.layer.shadowRadius = 10
-        view.layer.shadowOpacity = 0.6
-        view.layer.shadowOffset = .zero
-    }
-
-    private func removeGlowEffect(from view: UIView) {
-        view.layer.shadowOpacity = 0
-    }
-
-    // MARK: - Daily Spins
-    private func showDailySpinPrompt() {
-        guard viewModel.canSpinForCoins else {
-            showNoSpinsAlert()
-            return
-        }
-
-        let remaining = viewModel.remainingDailySpins
-        let noun = remaining == 1 ? "spin" : "spins"
-        let alert = UIAlertController(
-            title: "Daily Spins",
-            message: "Spin to collect free virtual coins.\n\(remaining) \(noun) available today.\n\nCoins have no cash value.",
-            preferredStyle: .alert
-        )
-
-        let spinAction = UIAlertAction(title: "Go Spin", style: .default) { _ in
-            self.openDailySpinGame()
-        }
-        alert.addAction(spinAction)
-        alert.addAction(UIAlertAction(title: "Later", style: .cancel))
-        alert.preferredAction = spinAction
-
-        present(alert, animated: true)
-    }
-
-    private func showNoSpinsAlert() {
-        let alert = UIAlertController(
-            title: "Daily Spins",
-            message: "No spins left today. Come back tomorrow.",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
-    }
+    // MARK: - Daily Spins (retired)
+    // private func showDailySpinPrompt() {
+    //     guard viewModel.canSpinForCoins else {
+    //         showNoSpinsAlert()
+    //         return
+    //     }
+    //
+    //     let remaining = viewModel.remainingDailySpins
+    //     let noun = remaining == 1 ? "spin" : "spins"
+    //     let alert = UIAlertController(
+    //         title: "Daily Spins",
+    //         message: "Spin to collect free virtual coins.\n\(remaining) \(noun) available today.\n\nCoins have no cash value.",
+    //         preferredStyle: .alert
+    //     )
+    //
+    //     let spinAction = UIAlertAction(title: "Go Spin", style: .default) { _ in
+    //         self.openDailySpinGame()
+    //     }
+    //     alert.addAction(spinAction)
+    //     alert.addAction(UIAlertAction(title: "Later", style: .cancel))
+    //     alert.preferredAction = spinAction
+    //
+    //     present(alert, animated: true)
+    // }
+    //
+    // private func showNoSpinsAlert() {
+    //     let alert = UIAlertController(
+    //         title: "Daily Spins",
+    //         message: "No spins left today. Come back tomorrow.",
+    //         preferredStyle: .alert
+    //     )
+    //     alert.addAction(UIAlertAction(title: "OK", style: .default))
+    //     present(alert, animated: true)
+    // }
 }
