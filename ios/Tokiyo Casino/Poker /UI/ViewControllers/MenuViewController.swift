@@ -273,10 +273,6 @@ class MenuViewController: UIViewController {
         let amount = chipsSlider.value
         let fontSize: CGFloat = traitCollection.verticalSizeClass == .compact || view.bounds.height < 520 ? 40 : 48
         let attr = NSMutableAttributedString()
-        attr.append(NSAttributedString(string: "$", attributes: [
-            .font: MPFont.display(fontSize, weight: .medium),
-            .foregroundColor: MPTheme.muted,
-        ]))
         attr.append(NSAttributedString(string: f.string(from: NSNumber(value: amount)) ?? "\(amount)",
                                        attributes: [
             .font: MPFont.display(fontSize, weight: .medium),

@@ -38,11 +38,10 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         setupInitialAnimations()
         setupDisclaimerLabel()
 
-        // Outlet was originally the daily-spin treasure chest. Repurposed as the
-        // static chip indicator next to labelTotalCoins. The image was swapped
-        // in Main.storyboard from `coinBox` to the system "circle.hexagonpath.fill" SF Symbol.
-        treasureChestImage?.isHidden = false
-        treasureChestImage?.isUserInteractionEnabled = false
+        // Outlet was originally the daily-spin treasure chest. Replace the storyboard
+        // imageView (SF Symbol placeholder) with the same MPChipView used in the
+        // poker chips slider thumb so the chip indicator on Home matches that style.
+        installMPChipInHeader()
 
         NotificationCenter.default.addObserver(
             self,
@@ -58,6 +57,22 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         CoinsManager.shared.addCoins(amount: Self.initialChipGrantAmount) { _ in
             defaults.set(true, forKey: Self.initialChipGrantKey)
         }
+    }
+
+    private func installMPChipInHeader() {
+        guard let chip = treasureChestImage,
+              let stack = chip.superview as? UIStackView else { return }
+
+        let index = stack.arrangedSubviews.firstIndex(of: chip) ?? 0
+        stack.removeArrangedSubview(chip)
+        chip.removeFromSuperview()
+
+        let chipSize: CGFloat = 28
+        let chipView = MPChipView(size: chipSize, color: MPTheme.amber)
+        chipView.translatesAutoresizingMaskIntoConstraints = false
+        chipView.widthAnchor.constraint(equalToConstant: chipSize).isActive = true
+        chipView.heightAnchor.constraint(equalToConstant: chipSize).isActive = true
+        stack.insertArrangedSubview(chipView, at: index)
     }
 
     private weak var disclaimerPill: UIView?
