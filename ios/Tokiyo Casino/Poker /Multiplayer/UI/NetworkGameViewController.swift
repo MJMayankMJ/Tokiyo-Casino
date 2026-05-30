@@ -158,7 +158,7 @@ final class NetworkGameViewController: UIViewController {
             topInfoBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
             topInfoBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             topInfoBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topInfoBar.heightAnchor.constraint(equalToConstant: 48),
+            topInfoBar.heightAnchor.constraint(equalToConstant: TopInfoBar.preferredBarHeight),
 
             tableView.topAnchor.constraint(equalTo: topInfoBar.bottomAnchor, constant: 4),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),

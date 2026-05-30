@@ -100,67 +100,23 @@ class MenuViewController: UIViewController {
         view.addSubview(gearButton)
         gearButton.addTarget(self, action: #selector(settingsTapped), for: .touchUpInside)
 
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.showsVerticalScrollIndicator = false
-        scrollView.alwaysBounceVertical = false
-        scrollView.keyboardDismissMode = .interactive
-        view.addSubview(scrollView)
-
-        // Build a vertical stack inside a scroll view. Short landscape/small
-        // devices can scroll instead of clipping labels against the edges.
-        let centerStack = UIStackView()
-        centerStack.axis = .vertical
-        centerStack.alignment = .fill
-        centerStack.spacing = 12
-        centerStack.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.addSubview(centerStack)
-
         // Title + mini-deck cluster
         let titleCluster = UIStackView()
         titleCluster.axis = .vertical
         titleCluster.alignment = .center
-        titleCluster.spacing = 64
+        // The mini-deck pivots from its bottom-center, so a taller deck visually
+        // rides upward; scale the title→deck gap with the deck (×1.5) on iPad so
+        // the cards clear the "Texas Hold'em" title instead of overlapping it.
+        titleCluster.spacing = DeviceLayout.pick(64, pad: 96)
+        titleCluster.translatesAutoresizingMaskIntoConstraints = false
         titleCluster.addArrangedSubview(titleBlock)
         titleCluster.addArrangedSubview(miniDeck)
-        centerStack.addArrangedSubview(titleCluster)
-        centerStack.setCustomSpacing(2, after: titleCluster)
 
-        // Players section
-        let playersSection = UIStackView()
-        playersSection.axis = .vertical
-        playersSection.alignment = .fill
-        playersSection.spacing = 8
-        let playersHeader = UIView()
-        playersEyebrow.translatesAutoresizingMaskIntoConstraints = false
-        playersHeader.addSubview(playersEyebrow)
-        NSLayoutConstraint.activate([
-            playersEyebrow.leadingAnchor.constraint(equalTo: playersHeader.leadingAnchor, constant: 4),
-            playersEyebrow.topAnchor.constraint(equalTo: playersHeader.topAnchor),
-            playersEyebrow.bottomAnchor.constraint(equalTo: playersHeader.bottomAnchor),
-        ])
-        playersSection.addArrangedSubview(playersHeader)
-        playersSection.addArrangedSubview(playerPicker)
-        centerStack.addArrangedSubview(playersSection)
-
-        // Difficulty section
-        let difficultySection = UIStackView()
-        difficultySection.axis = .vertical
-        difficultySection.alignment = .fill
-        difficultySection.spacing = 8
-        let difficultyHeader = UIView()
-        difficultyEyebrow.translatesAutoresizingMaskIntoConstraints = false
-        difficultyHeader.addSubview(difficultyEyebrow)
-        NSLayoutConstraint.activate([
-            difficultyEyebrow.leadingAnchor.constraint(equalTo: difficultyHeader.leadingAnchor, constant: 4),
-            difficultyEyebrow.topAnchor.constraint(equalTo: difficultyHeader.topAnchor),
-            difficultyEyebrow.bottomAnchor.constraint(equalTo: difficultyHeader.bottomAnchor),
-        ])
+        let playersSection = makeSection(eyebrow: playersEyebrow, control: playerPicker)
+        let difficultySection = makeSection(eyebrow: difficultyEyebrow, control: difficultyPicker)
         difficultyPicker.addTarget(self, action: #selector(difficultyChanged), for: .valueChanged)
-        difficultySection.addArrangedSubview(difficultyHeader)
-        difficultySection.addArrangedSubview(difficultyPicker)
-        centerStack.addArrangedSubview(difficultySection)
 
-        // Chips section
+        // Chips section (custom — has a coins pill on the header row + big value)
         let chipsSection = UIStackView()
         chipsSection.axis = .vertical
         chipsSection.alignment = .fill
@@ -189,15 +145,12 @@ class MenuViewController: UIViewController {
         chipsSection.addArrangedSubview(chipsValueLabel)
         chipsSection.setCustomSpacing(0, after: chipsValueLabel)
         chipsSection.addArrangedSubview(chipsSlider)
-        centerStack.addArrangedSubview(chipsSection)
-        centerStack.setCustomSpacing(10, after: chipsSection)
 
         let ctaStack = UIStackView(arrangedSubviews: [startButton, friendsButton])
         ctaStack.axis = .vertical
         ctaStack.alignment = .fill
-        ctaStack.spacing = 8
+        ctaStack.spacing = DeviceLayout.pick(8, pad: 12)
         ctaStack.translatesAutoresizingMaskIntoConstraints = false
-        centerStack.addArrangedSubview(ctaStack)
 
         // Wire actions
         playerPicker.onChange = { [weak self] _ in self?.refreshCoinsAndClampSlider() }
@@ -205,12 +158,8 @@ class MenuViewController: UIViewController {
         startButton.addTarget(self, action: #selector(playTapped), for: .touchUpInside)
         friendsButton.addTarget(self, action: #selector(playWithFriendsTapped), for: .touchUpInside)
 
-        let preferredStackWidth = centerStack.widthAnchor.constraint(
-            equalTo: scrollView.frameLayoutGuide.widthAnchor,
-            constant: -40
-        )
-        preferredStackWidth.priority = .defaultHigh
-
+        // Shared chrome + metric constraints (identical on both idioms).
+        // The mini-deck self-sizes (see MPMiniDeck), so it isn't pinned here.
         NSLayoutConstraint.activate([
             backdrop.topAnchor.constraint(equalTo: view.topAnchor),
             backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -223,22 +172,122 @@ class MenuViewController: UIViewController {
             gearButton.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -8),
             gearButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 8),
 
+            titleBlock.widthAnchor.constraint(equalTo: titleCluster.widthAnchor),
+            chipsValueLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
+        ])
+
+        let sections = [playersSection, difficultySection, chipsSection]
+        if DeviceLayout.isPad {
+            installPadLayout(titleCluster: titleCluster, sections: sections, ctaStack: ctaStack)
+        } else {
+            installPhoneLayout(titleCluster: titleCluster, sections: sections, ctaStack: ctaStack)
+        }
+    }
+
+    /// Builds a labelled section: an eyebrow header row above its control.
+    private func makeSection(eyebrow: UILabel, control: UIView) -> UIStackView {
+        let section = UIStackView()
+        section.axis = .vertical
+        section.alignment = .fill
+        section.spacing = 8
+        let header = UIView()
+        eyebrow.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(eyebrow)
+        NSLayoutConstraint.activate([
+            eyebrow.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 4),
+            eyebrow.topAnchor.constraint(equalTo: header.topAnchor),
+            eyebrow.bottomAnchor.constraint(equalTo: header.bottomAnchor),
+        ])
+        section.addArrangedSubview(header)
+        section.addArrangedSubview(control)
+        return section
+    }
+
+    /// iPhone (and compact) layout — original scroll + vertically stacked
+    /// content, anchored to the top so short/landscape devices can scroll.
+    private func installPhoneLayout(titleCluster: UIStackView,
+                                    sections: [UIStackView],
+                                    ctaStack: UIStackView) {
+        scrollView.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.alwaysBounceVertical = false
+        scrollView.keyboardDismissMode = .interactive
+        view.addSubview(scrollView)
+
+        let centerStack = UIStackView()
+        centerStack.axis = .vertical
+        centerStack.alignment = .fill
+        centerStack.spacing = 12
+        centerStack.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(centerStack)
+
+        centerStack.addArrangedSubview(titleCluster)
+        centerStack.setCustomSpacing(2, after: titleCluster)
+        sections.forEach { centerStack.addArrangedSubview($0) }
+        centerStack.setCustomSpacing(10, after: sections[sections.count - 1])
+        centerStack.addArrangedSubview(ctaStack)
+
+        let preferredStackWidth = centerStack.widthAnchor.constraint(
+            equalTo: scrollView.frameLayoutGuide.widthAnchor,
+            constant: -40
+        )
+        preferredStackWidth.priority = .defaultHigh
+
+        NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 44),
             scrollView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             scrollView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
 
             scrollView.contentLayoutGuide.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-            centerStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 2),
             centerStack.centerXAnchor.constraint(equalTo: scrollView.frameLayoutGuide.centerXAnchor),
             preferredStackWidth,
             centerStack.widthAnchor.constraint(lessThanOrEqualToConstant: 640),
+            centerStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 2),
             centerStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -20),
+        ])
+    }
 
-            titleBlock.widthAnchor.constraint(equalTo: titleCluster.widthAnchor),
-            chipsValueLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 56),
-            miniDeck.widthAnchor.constraint(equalToConstant: 200),
-            miniDeck.heightAnchor.constraint(equalToConstant: 104),
+    /// iPad layout — title anchored near the top, the primary CTAs pinned
+    /// full-width to the bottom, and the form filling the space between, so
+    /// the screen reads as a full-page composition (mirrors the "Play with
+    /// friends" screen) instead of a small centered island.
+    private func installPadLayout(titleCluster: UIStackView,
+                                  sections: [UIStackView],
+                                  ctaStack: UIStackView) {
+        let formStack = UIStackView(arrangedSubviews: sections)
+        formStack.axis = .vertical
+        formStack.alignment = .fill
+        formStack.spacing = 32
+        formStack.translatesAutoresizingMaskIntoConstraints = false
+
+        view.addSubview(titleCluster)
+        view.addSubview(formStack)
+        view.addSubview(ctaStack)
+
+        let side: CGFloat = 48
+        let formCenterY = formStack.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 28)
+        formCenterY.priority = .defaultHigh
+
+        NSLayoutConstraint.activate([
+            // Title cluster — top, centered, capped width.
+            titleCluster.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 40),
+            titleCluster.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            titleCluster.leadingAnchor.constraint(greaterThanOrEqualTo: view.safeAreaLayoutGuide.leadingAnchor, constant: side),
+            titleCluster.trailingAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -side),
+            titleCluster.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
+
+            // Form — wide, between the title and the CTAs, gently centered.
+            formStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: side),
+            formStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -side),
+            formStack.topAnchor.constraint(greaterThanOrEqualTo: titleCluster.bottomAnchor, constant: 28),
+            formStack.bottomAnchor.constraint(lessThanOrEqualTo: ctaStack.topAnchor, constant: -28),
+            formCenterY,
+
+            // CTAs — pinned full-width to the bottom edge.
+            ctaStack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: side),
+            ctaStack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -side),
+            ctaStack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -32),
         ])
     }
 

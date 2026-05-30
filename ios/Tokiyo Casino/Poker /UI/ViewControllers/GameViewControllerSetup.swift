@@ -87,7 +87,7 @@ extension GameViewController {
             topBar.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 4),
             topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            topBar.heightAnchor.constraint(equalToConstant: 48),
+            topBar.heightAnchor.constraint(equalToConstant: TopInfoBar.preferredBarHeight),
 
             tableView.topAnchor.constraint(equalTo: topBar.bottomAnchor, constant: 4),
             tableView.leadingAnchor.constraint(equalTo: view.leadingAnchor),

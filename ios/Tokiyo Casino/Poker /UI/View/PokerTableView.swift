@@ -21,7 +21,7 @@ class PokerTableView: UIView {
     // Felt + adornments
     let feltView = UIView()
     let feltInnerBorder = UIView()
-    let potPill = PotPillView()
+    let potPill = PotPillView(scale: DeviceLayout.pick(1.0, pad: 1.7))
     let communityRow = UIStackView()
     var betPills: [Int: BetPillView] = [:] // playerId -> pill
     var designFrame: CGRect = .zero

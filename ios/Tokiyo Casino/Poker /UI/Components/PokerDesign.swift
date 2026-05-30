@@ -298,7 +298,10 @@ final class BetPillView: UIView {
     private let chip: ChipView
     private let amountLabel = UILabel()
 
-    init(amount: Int, chipColor: UIColor, chipSize: CGFloat = 18) {
+    init(amount: Int, chipColor: UIColor, chipSize: CGFloat = 18, scale: CGFloat = 1.0) {
+        // `scale` is 1.0 on iPhone (identical) and the table's design scale on
+        // iPad, so the pill — chip, padding and amount text — grows with the felt.
+        let chipSize = chipSize * scale
         self.chip = ChipView(size: chipSize, color: chipColor)
         super.init(frame: .zero)
 
@@ -307,7 +310,7 @@ final class BetPillView: UIView {
         PokerTheme.applyShadowSm(layer)
         clipsToBounds = false
 
-        amountLabel.font = .systemFont(ofSize: 11.5, weight: .bold)
+        amountLabel.font = .systemFont(ofSize: 11.5 * scale, weight: .bold)
         amountLabel.textColor = PokerTheme.suitBlack
         amountLabel.text = "$\(ChipFormatter.string(amount))"
         amountLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -319,14 +322,14 @@ final class BetPillView: UIView {
         NSLayoutConstraint.activate([
             chip.widthAnchor.constraint(equalToConstant: chipSize),
             chip.heightAnchor.constraint(equalToConstant: chipSize),
-            chip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3),
+            chip.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 3 * scale),
             chip.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            amountLabel.leadingAnchor.constraint(equalTo: chip.trailingAnchor, constant: 6),
-            amountLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -9),
+            amountLabel.leadingAnchor.constraint(equalTo: chip.trailingAnchor, constant: 6 * scale),
+            amountLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -9 * scale),
             amountLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            heightAnchor.constraint(equalToConstant: chipSize + 6),
+            heightAnchor.constraint(equalToConstant: chipSize + 6 * scale),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -411,10 +414,13 @@ final class PotPillView: UIView {
     private let chip1: ChipView
     private let chip2: ChipView
 
-    override init(frame: CGRect) {
-        chip1 = ChipView(size: 20, color: PokerTheme.Chip.gold)
-        chip2 = ChipView(size: 20, color: PokerTheme.Chip.red)
-        super.init(frame: frame)
+    init(scale: CGFloat = 1.0) {
+        // 1.0 on iPhone (identical); on iPad ~the felt's design scale so the
+        // central pot pill grows with the table instead of staying tiny.
+        let chipSize = 20 * scale
+        chip1 = ChipView(size: chipSize, color: PokerTheme.Chip.gold)
+        chip2 = ChipView(size: chipSize, color: PokerTheme.Chip.red)
+        super.init(frame: .zero)
 
         backgroundColor = PokerTheme.glass
         layer.cornerRadius = 16
@@ -422,12 +428,12 @@ final class PotPillView: UIView {
 
         titleLabel.text = "POT"
         titleLabel.textColor = PokerTheme.muted
-        titleLabel.font = .systemFont(ofSize: 9, weight: .semibold)
+        titleLabel.font = .systemFont(ofSize: 9 * scale, weight: .semibold)
         titleLabel.setContentHuggingPriority(.required, for: .horizontal)
 
         amountLabel.text = "$0"
         amountLabel.textColor = PokerTheme.ink
-        amountLabel.font = .systemFont(ofSize: 16, weight: .heavy)
+        amountLabel.font = .systemFont(ofSize: 16 * scale, weight: .heavy)
 
         chip1.translatesAutoresizingMaskIntoConstraints = false
         chip2.translatesAutoresizingMaskIntoConstraints = false
@@ -440,24 +446,24 @@ final class PotPillView: UIView {
         addSubview(amountLabel)
 
         NSLayoutConstraint.activate([
-            chip1.widthAnchor.constraint(equalToConstant: 20),
-            chip1.heightAnchor.constraint(equalToConstant: 20),
-            chip1.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+            chip1.widthAnchor.constraint(equalToConstant: chipSize),
+            chip1.heightAnchor.constraint(equalToConstant: chipSize),
+            chip1.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6 * scale),
             chip1.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            chip2.widthAnchor.constraint(equalToConstant: 20),
-            chip2.heightAnchor.constraint(equalToConstant: 20),
-            chip2.leadingAnchor.constraint(equalTo: chip1.trailingAnchor, constant: -9),
+            chip2.widthAnchor.constraint(equalToConstant: chipSize),
+            chip2.heightAnchor.constraint(equalToConstant: chipSize),
+            chip2.leadingAnchor.constraint(equalTo: chip1.trailingAnchor, constant: -9 * scale),
             chip2.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            titleLabel.leadingAnchor.constraint(equalTo: chip2.trailingAnchor, constant: 8),
+            titleLabel.leadingAnchor.constraint(equalTo: chip2.trailingAnchor, constant: 8 * scale),
             titleLabel.firstBaselineAnchor.constraint(equalTo: amountLabel.firstBaselineAnchor),
 
-            amountLabel.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 6),
-            amountLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            amountLabel.leadingAnchor.constraint(equalTo: titleLabel.trailingAnchor, constant: 6 * scale),
+            amountLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12 * scale),
             amountLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            heightAnchor.constraint(equalToConstant: 30),
+            heightAnchor.constraint(equalToConstant: 30 * scale),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -481,6 +487,13 @@ final class TopInfoBar: UIView {
     private let infoLabel = UILabel()
     private let infoPill = UIView()
 
+    /// iPad enlarges the bar's icon buttons + center pill. iPhone stays 1.0
+    /// (everything below multiplies out to its original value).
+    static let barScale: CGFloat = DeviceLayout.pick(1.0, pad: 1.35)
+    /// Height the hosting controllers should give the bar so the bigger icons fit.
+    static var preferredBarHeight: CGFloat { 48 * barScale }
+    private var s: CGFloat { Self.barScale }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
 
@@ -490,12 +503,12 @@ final class TopInfoBar: UIView {
 
         // Center pill
         infoPill.backgroundColor = PokerTheme.glass
-        infoPill.layer.cornerRadius = 16
+        infoPill.layer.cornerRadius = 16 * Self.barScale
         PokerTheme.applyShadowSm(infoPill.layer)
         infoPill.translatesAutoresizingMaskIntoConstraints = false
         addSubview(infoPill)
 
-        infoLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        infoLabel.font = .systemFont(ofSize: 11 * s, weight: .semibold)
         infoLabel.textColor = PokerTheme.ink
         infoLabel.textAlignment = .center
         infoLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -518,29 +531,29 @@ final class TopInfoBar: UIView {
         NSLayoutConstraint.activate([
             backButton.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             backButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            backButton.widthAnchor.constraint(equalToConstant: 36),
-            backButton.heightAnchor.constraint(equalToConstant: 36),
+            backButton.widthAnchor.constraint(equalToConstant: 36 * s),
+            backButton.heightAnchor.constraint(equalToConstant: 36 * s),
 
             menuButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             menuButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            menuButton.widthAnchor.constraint(equalToConstant: 36),
-            menuButton.heightAnchor.constraint(equalToConstant: 36),
+            menuButton.widthAnchor.constraint(equalToConstant: 36 * s),
+            menuButton.heightAnchor.constraint(equalToConstant: 36 * s),
 
-            rulesButton.trailingAnchor.constraint(equalTo: menuButton.leadingAnchor, constant: -8),
+            rulesButton.trailingAnchor.constraint(equalTo: menuButton.leadingAnchor, constant: -8 * s),
             rulesButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            rulesButton.widthAnchor.constraint(equalToConstant: 36),
-            rulesButton.heightAnchor.constraint(equalToConstant: 36),
+            rulesButton.widthAnchor.constraint(equalToConstant: 36 * s),
+            rulesButton.heightAnchor.constraint(equalToConstant: 36 * s),
 
             infoPill.centerXAnchor.constraint(equalTo: centerXAnchor),
             infoPill.centerYAnchor.constraint(equalTo: centerYAnchor),
-            infoPill.heightAnchor.constraint(equalToConstant: 30),
+            infoPill.heightAnchor.constraint(equalToConstant: 30 * s),
             infoPill.leadingAnchor.constraint(greaterThanOrEqualTo: backButton.trailingAnchor, constant: 10),
             infoPill.trailingAnchor.constraint(lessThanOrEqualTo: rulesButton.leadingAnchor, constant: -10),
 
             infoLabel.topAnchor.constraint(equalTo: infoPill.topAnchor),
             infoLabel.bottomAnchor.constraint(equalTo: infoPill.bottomAnchor),
-            infoLabel.leadingAnchor.constraint(equalTo: infoPill.leadingAnchor, constant: 14),
-            infoLabel.trailingAnchor.constraint(equalTo: infoPill.trailingAnchor, constant: -14),
+            infoLabel.leadingAnchor.constraint(equalTo: infoPill.leadingAnchor, constant: 14 * s),
+            infoLabel.trailingAnchor.constraint(equalTo: infoPill.trailingAnchor, constant: -14 * s),
         ])
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -549,11 +562,11 @@ final class TopInfoBar: UIView {
         // Build an attributed string so the labels are muted while values are inked.
         let muted: [NSAttributedString.Key: Any] = [
             .foregroundColor: PokerTheme.muted,
-            .font: UIFont.systemFont(ofSize: 11, weight: .medium),
+            .font: UIFont.systemFont(ofSize: 11 * s, weight: .medium),
         ]
         let inked: [NSAttributedString.Key: Any] = [
             .foregroundColor: PokerTheme.ink,
-            .font: UIFont.systemFont(ofSize: 11, weight: .semibold),
+            .font: UIFont.systemFont(ofSize: 11 * s, weight: .semibold),
         ]
         let separator = NSAttributedString(string: "  |  ", attributes: muted)
         let out = NSMutableAttributedString()
@@ -573,9 +586,9 @@ final class TopInfoBar: UIView {
 
     private func styleIconButton(_ button: UIButton, systemImage: String) {
         button.backgroundColor = PokerTheme.glass
-        button.layer.cornerRadius = 12
+        button.layer.cornerRadius = 12 * s
         PokerTheme.applyShadowSm(button.layer)
-        let cfg = UIImage.SymbolConfiguration(pointSize: 14, weight: .semibold)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 14 * s, weight: .semibold)
         button.setImage(UIImage(systemName: systemImage, withConfiguration: cfg), for: .normal)
         button.tintColor = PokerTheme.ink
     }

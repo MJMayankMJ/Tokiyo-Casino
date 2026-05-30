@@ -61,7 +61,12 @@ extension PokerTableView {
         let maxW = max(0, bounds.width  - edgePad * 2)
         let maxH = max(0, bounds.height - edgePad * 2)
 
-        var tableW = min(360, maxW)
+        // The felt was tuned at 360pt for iPhone. On iPad let it grow so the
+        // whole table (felt, seats, cards, pills all scale off designScale)
+        // fills the larger canvas instead of sitting tiny in the middle. The
+        // height clamp below still shrinks it to fit short/landscape layouts.
+        let maxTableW: CGFloat = DeviceLayout.pick(360, pad: 620)
+        var tableW = min(maxTableW, maxW)
         var tableH = tableW * designRatio
         if tableH > maxH {
             tableH = maxH
@@ -126,6 +131,9 @@ extension PokerTableView {
         // Create new player views with proper sizing
         for (index, player) in players.enumerated() {
             let playerView = PlayerView()
+            // iPad scales the seat's inner content (avatar, name/stack pill,
+            // text, cards) with the felt; iPhone stays 1.0 (untouched).
+            playerView.contentScale = DeviceLayout.pick(1.0, pad: designScale)
             let baseSize = player.isHuman ? humanPlayerBaseSize : aiPlayerBaseSize
             let size = CGSize(width: baseSize.width * designScale, height: baseSize.height * designScale)
             playerView.frame = CGRect(origin: .zero, size: size)
@@ -151,6 +159,9 @@ extension PokerTableView {
 
             let pos = playerPositions[seatIndex]
             let isHuman = index == 0
+            // Keep content scale in sync with the (now final) design scale —
+            // the first layout pass may have run before the felt was measured.
+            playerView.contentScale = DeviceLayout.pick(1.0, pad: designScale)
             let baseSize = isHuman ? humanPlayerBaseSize : aiPlayerBaseSize
             let size = CGSize(width: baseSize.width * designScale, height: baseSize.height * designScale)
             playerView.bounds = CGRect(origin: .zero, size: size)
@@ -206,7 +217,8 @@ extension PokerTableView {
             if let existing = betPills[player.id] {
                 existing.setAmount(player.currentBet)
             } else {
-                let pill = BetPillView(amount: player.currentBet, chipColor: color)
+                let pill = BetPillView(amount: player.currentBet, chipColor: color,
+                                       scale: DeviceLayout.pick(1.0, pad: designScale))
                 betPills[player.id] = pill
                 addSubview(pill)
                 setNeedsLayout()

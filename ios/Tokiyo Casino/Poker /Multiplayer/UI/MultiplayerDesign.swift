@@ -102,7 +102,16 @@ enum MPTheme {
 /// Cormorant Garamond than Georgia). UI: SF system. We never bundle
 /// Cormorant/Manrope so this is the right native fallback.
 enum MPFont {
+    // Every text style on the Texas Hold'em setup + multiplayer screens funnels
+    // through these three helpers, so multiplying by `DeviceLayout.fontScale`
+    // here is the single lever that enlarges all of that type on iPad while
+    // leaving iPhone (fontScale == 1) byte-for-byte unchanged.
     static func display(_ size: CGFloat, weight: UIFont.Weight = .medium) -> UIFont {
+        displayRaw(size * DeviceLayout.fontScale, weight: weight)
+    }
+    /// Serif display font at an exact point size, bypassing `fontScale` — for
+    /// callers (e.g. the mini-deck) that already apply their own scale factor.
+    static func displayRaw(_ size: CGFloat, weight: UIFont.Weight = .medium) -> UIFont {
         // UIFontDescriptor.SystemDesign.serif → New York on iOS 13+.
         let base = UIFont.systemFont(ofSize: size, weight: weight)
         if let desc = base.fontDescriptor.withDesign(.serif) {
@@ -111,9 +120,10 @@ enum MPFont {
         return base
     }
     static func ui(_ size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
-        .systemFont(ofSize: size, weight: weight)
+        .systemFont(ofSize: size * DeviceLayout.fontScale, weight: weight)
     }
     static func uiTabular(_ size: CGFloat, weight: UIFont.Weight = .regular) -> UIFont {
+        let size = size * DeviceLayout.fontScale
         let base = UIFont.systemFont(ofSize: size, weight: weight)
         let desc = base.fontDescriptor.addingAttributes([
             .featureSettings: [
@@ -1729,7 +1739,14 @@ final class MPMiniDeck: UIView {
 
     private var cardViews: [UIView] = []
 
-    init() {
+    /// Geometry multiplier. iPhone stays 1.0 (so the fanned deck is identical);
+    /// iPad enlarges the whole hero deck — cards, glyphs and the view's own
+    /// intrinsic size all grow together, so it reads as artwork rather than a
+    /// thumbnail next to the big title.
+    private let scale: CGFloat
+
+    init(scale: CGFloat = DeviceLayout.pick(1.0, pad: 1.5)) {
+        self.scale = scale
         super.init(frame: .zero)
         let cards: [Card] = [
             Card(rank: "A", suit: .spade,   dx: -46, dy: 12, rot: -14 * .pi / 180, z: 1),
@@ -1742,10 +1759,10 @@ final class MPMiniDeck: UIView {
             v.translatesAutoresizingMaskIntoConstraints = false
             addSubview(v)
             NSLayoutConstraint.activate([
-                v.widthAnchor.constraint(equalToConstant: 70),
-                v.heightAnchor.constraint(equalToConstant: 100),
-                v.centerXAnchor.constraint(equalTo: centerXAnchor, constant: c.dx),
-                v.topAnchor.constraint(equalTo: topAnchor, constant: c.dy),
+                v.widthAnchor.constraint(equalToConstant: 70 * scale),
+                v.heightAnchor.constraint(equalToConstant: 100 * scale),
+                v.centerXAnchor.constraint(equalTo: centerXAnchor, constant: c.dx * scale),
+                v.topAnchor.constraint(equalTo: topAnchor, constant: c.dy * scale),
             ])
             // Rotate around bottom-center, matching the JSX transform origin
             v.layer.anchorPoint = CGPoint(x: 0.5, y: 1.0)
@@ -1753,7 +1770,10 @@ final class MPMiniDeck: UIView {
             cardViews.append(v)
         }
         translatesAutoresizingMaskIntoConstraints = false
-        heightAnchor.constraint(equalToConstant: 104).isActive = true
+        // Self-size off `scale` so the host doesn't have to pin a width/height
+        // (which previously collided with this one on iPad).
+        widthAnchor.constraint(equalToConstant: 200 * scale).isActive = true
+        heightAnchor.constraint(equalToConstant: 104 * scale).isActive = true
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -1772,7 +1792,7 @@ final class MPMiniDeck: UIView {
     private func buildCard(rank: String, suit: Suit, isRed: Bool) -> UIView {
         let card = UIView()
         card.backgroundColor = .white
-        card.layer.cornerRadius = 9
+        card.layer.cornerRadius = 9 * scale
         card.layer.shadowColor = UIColor.black.cgColor
         card.layer.shadowOpacity = 0.45
         card.layer.shadowOffset = CGSize(width: 0, height: 10)
@@ -1784,7 +1804,9 @@ final class MPMiniDeck: UIView {
 
         let rankLabel = UILabel()
         rankLabel.text = rank
-        rankLabel.font = MPFont.display(32, weight: .semibold)
+        // Raw point size (×scale) — not MPFont, so the deck scales off its own
+        // geometry factor rather than the global iPad type bump.
+        rankLabel.font = MPFont.displayRaw(32 * scale, weight: .semibold)
         rankLabel.textColor = inkColor
         rankLabel.translatesAutoresizingMaskIntoConstraints = false
 
@@ -1795,12 +1817,12 @@ final class MPMiniDeck: UIView {
         card.addSubview(suitGlyph)
         NSLayoutConstraint.activate([
             rankLabel.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            rankLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 18),
+            rankLabel.topAnchor.constraint(equalTo: card.topAnchor, constant: 18 * scale),
 
             suitGlyph.centerXAnchor.constraint(equalTo: card.centerXAnchor),
-            suitGlyph.topAnchor.constraint(equalTo: rankLabel.bottomAnchor, constant: 4),
-            suitGlyph.widthAnchor.constraint(equalToConstant: 20),
-            suitGlyph.heightAnchor.constraint(equalToConstant: 20),
+            suitGlyph.topAnchor.constraint(equalTo: rankLabel.bottomAnchor, constant: 4 * scale),
+            suitGlyph.widthAnchor.constraint(equalToConstant: 20 * scale),
+            suitGlyph.heightAnchor.constraint(equalToConstant: 20 * scale),
         ])
         return card
     }

@@ -218,6 +218,16 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
         removeExistingStoryboardCards(from: stackView)
 
+        if DeviceLayout.isPad {
+            // The storyboard pins this stack to a fixed 295pt width tuned for
+            // iPhone. Relax it so the larger iPad cards can size themselves,
+            // and give them more breathing room vertically.
+            stackView.constraints
+                .filter { $0.firstItem === stackView && $0.firstAttribute == .width && $0.secondItem == nil }
+                .forEach { $0.isActive = false }
+            stackView.spacing = 26
+        }
+
         let pokerCard = makeGameCard(
             game: .poker,
             title: "POKER",
@@ -259,6 +269,10 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
                               title: String,
                               imageName: String,
                               badgeText: String?) -> UIView {
+        // iPhone keeps its original tuning (s == 1); iPad scales every metric
+        // up so the cards fill the larger canvas instead of floating small.
+        let s = DeviceLayout.scale
+
         let container = UIView()
         container.tag = game.rawValue
         container.translatesAutoresizingMaskIntoConstraints = false
@@ -272,27 +286,30 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
         let backgroundShape = CustomShapeView()
         backgroundShape.translatesAutoresizingMaskIntoConstraints = false
-        backgroundShape.slant = 30
-        backgroundShape.cornerRadius = 20
+        backgroundShape.slant = 30 * s
+        backgroundShape.cornerRadius = 20 * s
         backgroundShape.fillColor = UIColor(red: 0.31, green: 0.26, blue: 0.19, alpha: 1.0)
         container.addSubview(backgroundShape)
 
         let contentStack = UIStackView()
         contentStack.axis = .horizontal
         contentStack.alignment = .center
-        contentStack.spacing = 8
+        contentStack.spacing = 8 * s
         contentStack.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(contentStack)
 
+        // The character artwork gets an extra bump on iPad so it reads as the
+        // hero of the card rather than a small thumbnail next to a wide panel.
+        let iconSize = 100 * s * DeviceLayout.pick(1.0, pad: 1.32)
         let artworkView = UIImageView(image: UIImage(named: imageName))
         artworkView.contentMode = .scaleAspectFit
         artworkView.translatesAutoresizingMaskIntoConstraints = false
-        artworkView.widthAnchor.constraint(equalToConstant: 100).isActive = true
-        artworkView.heightAnchor.constraint(equalToConstant: 100).isActive = true
+        artworkView.widthAnchor.constraint(equalToConstant: iconSize).isActive = true
+        artworkView.heightAnchor.constraint(equalToConstant: iconSize).isActive = true
 
         let titleLabel = UILabel()
         titleLabel.text = title
-        titleLabel.font = .boldSystemFont(ofSize: 17)
+        titleLabel.font = .boldSystemFont(ofSize: 17 * s)
         titleLabel.textColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 1)
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.75
@@ -300,41 +317,41 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         let textStack = UIStackView()
         textStack.axis = .vertical
         textStack.alignment = .leading
-        textStack.spacing = 4
+        textStack.spacing = 4 * s
         textStack.addArrangedSubview(titleLabel)
 
         if let badgeText {
             let badgeLabel = UILabel()
             badgeLabel.text = badgeText
-            badgeLabel.font = .boldSystemFont(ofSize: 10)
+            badgeLabel.font = .boldSystemFont(ofSize: 10 * s)
             badgeLabel.textColor = UIColor(red: 0.16, green: 0.11, blue: 0.06, alpha: 1)
             badgeLabel.backgroundColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 1)
-            badgeLabel.layer.cornerRadius = 7
+            badgeLabel.layer.cornerRadius = 7 * s
             badgeLabel.layer.masksToBounds = true
             badgeLabel.textAlignment = .center
             badgeLabel.translatesAutoresizingMaskIntoConstraints = false
-            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 88).isActive = true
-            badgeLabel.heightAnchor.constraint(equalToConstant: 18).isActive = true
+            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 88 * s).isActive = true
+            badgeLabel.heightAnchor.constraint(equalToConstant: 18 * s).isActive = true
             textStack.addArrangedSubview(badgeLabel)
         }
 
         let buttonView = UIImageView(image: UIImage(named: "blueButton"))
         buttonView.contentMode = .scaleAspectFit
         buttonView.translatesAutoresizingMaskIntoConstraints = false
-        buttonView.widthAnchor.constraint(equalToConstant: 52).isActive = true
-        buttonView.heightAnchor.constraint(equalToConstant: 50).isActive = true
+        buttonView.widthAnchor.constraint(equalToConstant: 52 * s).isActive = true
+        buttonView.heightAnchor.constraint(equalToConstant: 50 * s).isActive = true
 
         contentStack.addArrangedSubview(artworkView)
         contentStack.addArrangedSubview(textStack)
         contentStack.addArrangedSubview(buttonView)
 
         NSLayoutConstraint.activate([
-            container.widthAnchor.constraint(equalToConstant: 295),
-            container.heightAnchor.constraint(equalToConstant: 116),
+            container.widthAnchor.constraint(equalToConstant: 295 * s),
+            container.heightAnchor.constraint(equalToConstant: 116 * s),
 
             backgroundShape.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            backgroundShape.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -15),
-            backgroundShape.topAnchor.constraint(equalTo: container.topAnchor, constant: 30),
+            backgroundShape.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -15 * s),
+            backgroundShape.topAnchor.constraint(equalTo: container.topAnchor, constant: 30 * s),
             backgroundShape.bottomAnchor.constraint(equalTo: container.bottomAnchor),
 
             contentStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),

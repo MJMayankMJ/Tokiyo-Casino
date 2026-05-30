@@ -45,6 +45,17 @@ class PlayerView: UIView {
     // Layout vars
     private var avatarSize: CGFloat = 44
 
+    /// iPad scales a seat's inner content (avatar, name/stack pill, text,
+    /// tucked cards) along with the felt. iPhone keeps 1.0, so every metric
+    /// below multiplies out to its original value and the phone is untouched.
+    var contentScale: CGFloat = 1.0 {
+        didSet {
+            guard contentScale != oldValue else { return }
+            if player != nil { rebuild() }   // recreate avatar/fonts at new size
+            setNeedsLayout()
+        }
+    }
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         setupView()
@@ -156,11 +167,18 @@ class PlayerView: UIView {
         // Recreate the avatar with the player's hue (avoids stale gradients)
         avatar?.removeFromSuperview()
         let av: AvatarView
-        avatarSize = isHumanPlayer ? 36 : 44
+        avatarSize = (isHumanPlayer ? 36 : 44) * contentScale
         av = AvatarView(name: player.name, hue: hueFor(player: player), size: avatarSize)
         avatar = av
         addSubview(av)
 
+        // Name/stack + ancillary type scales with the seat (×1 on iPhone → unchanged).
+        nameLabel.font = .systemFont(ofSize: 10 * contentScale, weight: .semibold)
+        stackLabel.font = .systemFont(ofSize: 11.5 * contentScale, weight: .bold)
+        statusBadge.font = .systemFont(ofSize: 9 * contentScale, weight: .heavy)
+        dealerChip.font = .systemFont(ofSize: 10 * contentScale, weight: .heavy)
+        actionLabel.font = .systemFont(ofSize: 11 * contentScale, weight: .heavy)
+        turnPillLabel.font = .systemFont(ofSize: 9.5 * contentScale, weight: .heavy)
         nameLabel.text = player.name
         stackLabel.text = "$\(ChipFormatter.string(player.chips))"
 
@@ -240,7 +258,8 @@ class PlayerView: UIView {
         if let betPill {
             betPill.setAmount(player.currentBet)
         } else {
-            let pill = BetPillView(amount: player.currentBet, chipColor: PokerTheme.Chip.green)
+            let pill = BetPillView(amount: player.currentBet, chipColor: PokerTheme.Chip.green,
+                                   scale: DeviceLayout.pick(1.0, pad: contentScale))
             betPill = pill
             addSubview(pill)
         }
@@ -268,14 +287,18 @@ class PlayerView: UIView {
     private func layoutAIPlayer() {
         let w = bounds.width
         let h = bounds.height
+        // `s` scales the seat's fixed metrics with the felt (1.0 on iPhone).
+        // `avatarSize` already includes `s`, so only the additive constants
+        // below need multiplying.
+        let s = contentScale
 
         let av = avatar
         let avX = (w - avatarSize) / 2
-        let avY: CGFloat = 6
+        let avY: CGFloat = 6 * s
         av?.frame = CGRect(x: avX, y: avY, width: avatarSize, height: avatarSize)
 
         // Active ring path (behind avatar)
-        let ringInset: CGFloat = 4
+        let ringInset: CGFloat = 4 * s
         let ringRect = CGRect(
             x: avX - ringInset,
             y: avY - ringInset,
@@ -285,37 +308,43 @@ class PlayerView: UIView {
         let ringPath = UIBezierPath(ovalIn: ringRect).cgPath
         activeRingBg.path = ringPath
         timerRing.path = ringPath
+        activeRingBg.lineWidth = 2 * s
+        timerRing.lineWidth = 2.5 * s
         activeRingBg.frame = bounds
         timerRing.frame = bounds
 
         // Dealer chip — bottom-right of avatar
-        dealerChip.frame = CGRect(x: avX + avatarSize - 4, y: avY + avatarSize - 14, width: 18, height: 18)
+        let dealer: CGFloat = 18 * s
+        dealerChip.layer.cornerRadius = dealer / 2
+        dealerChip.frame = CGRect(x: avX + avatarSize - 4 * s, y: avY + avatarSize - 14 * s, width: dealer, height: dealer)
 
         // Name/stack pill below avatar
-        let pillW: CGFloat = 80
-        let pillH: CGFloat = 30
-        let pillY = avY + avatarSize + 6
+        let pillW: CGFloat = 80 * s
+        let pillH: CGFloat = 30 * s
+        let pillY = avY + avatarSize + 6 * s
+        nameStackPill.layer.cornerRadius = 10 * s
         nameStackPill.frame = CGRect(x: (w - pillW) / 2, y: pillY, width: pillW, height: pillH)
-        nameLabel.frame = CGRect(x: 4, y: 3, width: pillW - 8, height: 12)
-        stackLabel.frame = CGRect(x: 4, y: 14, width: pillW - 8, height: 14)
+        nameLabel.frame = CGRect(x: 4 * s, y: 3 * s, width: pillW - 8 * s, height: 12 * s)
+        stackLabel.frame = CGRect(x: 4 * s, y: 14 * s, width: pillW - 8 * s, height: 14 * s)
 
         // Status badge under pill
         if !statusBadge.isHidden {
+            statusBadge.layer.cornerRadius = 8 * s
             statusBadge.sizeToFit()
             var sz = statusBadge.frame.size
-            sz.height = 16
-            statusBadge.frame = CGRect(x: (w - sz.width) / 2, y: pillY + pillH + 4, width: sz.width, height: sz.height)
+            sz.height = 16 * s
+            statusBadge.frame = CGRect(x: (w - sz.width) / 2, y: pillY + pillH + 4 * s, width: sz.width, height: sz.height)
         }
 
         if showsRevealedOpponentCards {
             // Showdown: cards come forward and grow enough to read, instead of
             // staying hidden behind the avatar.
-            let cardW: CGFloat = 38
-            let cardH: CGFloat = 54
-            let overlap: CGFloat = 10
+            let cardW: CGFloat = 38 * s
+            let cardH: CGFloat = 54 * s
+            let overlap: CGFloat = 10 * s
             let groupW = cardW * 2 - overlap
             let cardsX = (w - groupW) / 2
-            let cardsY = max(-6, avY - 4)
+            let cardsY = max(-6 * s, avY - 4 * s)
             setCardFrame(card1, frame: CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH), degrees: -7)
             setCardFrame(card2, frame: CGRect(x: cardsX + cardW - overlap, y: cardsY, width: cardW, height: cardH), degrees: 7)
             bringSubviewToFront(card1)
@@ -323,25 +352,25 @@ class PlayerView: UIView {
             bringSubviewToFront(dealerChip)
         } else {
             // Tucked cards — fixed anchor per side, matching poker.jsx's cardSide.
-            let cardW: CGFloat = 24
-            let cardH: CGFloat = 32
-            let groupW = cardW * 2 - 11
+            let cardW: CGFloat = 24 * s
+            let cardH: CGFloat = 32 * s
+            let groupW = cardW * 2 - 11 * s
             let cardsX: CGFloat
             let firstTilt: CGFloat
             let secondTilt: CGFloat
             switch cardSide {
             case .right:
-                cardsX = w / 2 + avatarSize / 2 - 16
+                cardsX = w / 2 + avatarSize / 2 - 16 * s
                 firstTilt = -12
                 secondTilt = 4
             case .left:
-                cardsX = w / 2 - avatarSize / 2 - groupW + 16
+                cardsX = w / 2 - avatarSize / 2 - groupW + 16 * s
                 firstTilt = -4
                 secondTilt = 12
             }
-            let cardsY = avY + 6
+            let cardsY = avY + 6 * s
             setCardFrame(card1, frame: CGRect(x: cardsX, y: cardsY, width: cardW, height: cardH), degrees: firstTilt)
-            setCardFrame(card2, frame: CGRect(x: cardsX + cardW - 11, y: cardsY, width: cardW, height: cardH), degrees: secondTilt)
+            setCardFrame(card2, frame: CGRect(x: cardsX + cardW - 11 * s, y: cardsY, width: cardW, height: cardH), degrees: secondTilt)
             if let av {
                 bringSubviewToFront(av)
             }
@@ -350,9 +379,10 @@ class PlayerView: UIView {
 
         // Action overlay above pill
         if actionLabel.alpha > 0.0 {
-            let sz = actionLabel.sizeThatFits(CGSize(width: w, height: 22))
-            let aw = max(60, min(w, sz.width + 16))
-            actionLabel.frame = CGRect(x: (w - aw) / 2, y: avY - 10, width: aw, height: 22)
+            let sz = actionLabel.sizeThatFits(CGSize(width: w, height: 22 * s))
+            let aw = max(60 * s, min(w, sz.width + 16 * s))
+            actionLabel.layer.cornerRadius = 10 * s
+            actionLabel.frame = CGRect(x: (w - aw) / 2, y: avY - 10 * s, width: aw, height: 22 * s)
         }
 
         turnPill.isHidden = true
@@ -363,8 +393,11 @@ class PlayerView: UIView {
         let w = bounds.width
         let h = bounds.height
 
-        // Fanned hero cards (centered, slightly above the name bar)
-        let scale = max(0.82, min(1.0, w / 360.0))
+        // Fanned hero cards (centered, slightly above the name bar). On iPhone
+        // the scale is capped at 1.0 (unchanged); iPad lifts the cap so the hero
+        // seat — cards, strip and text — grows to fill the larger felt.
+        let cap: CGFloat = DeviceLayout.isPad ? 1.7 : 1.0
+        let scale = max(0.82, min(cap, w / 360.0))
         let cardW: CGFloat = 64 * scale
         let cardH: CGFloat = 92 * scale
         let cardsY: CGFloat = 4 * scale
@@ -400,7 +433,9 @@ class PlayerView: UIView {
 
         // Dealer chip near avatar (small overlay)
         if !dealerChip.isHidden {
-            dealerChip.frame = CGRect(x: (av?.frame.maxX ?? strip.minX) - 2, y: (av?.frame.maxY ?? strip.minY) - 14, width: 18, height: 18)
+            let dealer: CGFloat = 18 * scale
+            dealerChip.layer.cornerRadius = dealer / 2
+            dealerChip.frame = CGRect(x: (av?.frame.maxX ?? strip.minX) - 2 * scale, y: (av?.frame.maxY ?? strip.minY) - 14 * scale, width: dealer, height: dealer)
         }
 
         // YOUR TURN pill in the center of the name strip.

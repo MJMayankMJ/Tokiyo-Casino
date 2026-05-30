@@ -10,6 +10,11 @@
 import Foundation
 import UIKit
 
+/// One scale factor for the whole action panel. iPhone keeps 1.0 (the panel is
+/// byte-for-byte unchanged); iPad enlarges text, buttons, paddings and the
+/// panel's own height together so it matches the scaled-up table above it.
+private let kBetScale: CGFloat = DeviceLayout.pick(1.0, pad: 1.4)
+
 final class BettingControlsView: UIView {
 
     // MARK: - Buttons (3-button row from design)
@@ -56,7 +61,7 @@ final class BettingControlsView: UIView {
 
     var preferredHeight: CGFloat {
         if isHidden { return 0 }
-        return raisePanelExpanded && !raisePanel.isHidden ? 224 : 76
+        return (raisePanelExpanded && !raisePanel.isHidden ? 224 : 76) * kBetScale
     }
 
     // MARK: - Init
@@ -87,21 +92,21 @@ final class BettingControlsView: UIView {
         addSubview(raisePanel)
 
         raiseHeader.text = "RAISE TO"
-        raiseHeader.font = .systemFont(ofSize: 9, weight: .semibold)
+        raiseHeader.font = .systemFont(ofSize: 9 * kBetScale, weight: .semibold)
         raiseHeader.textColor = PokerTheme.muted
         raiseHeader.textAlignment = .center
         raiseHeader.translatesAutoresizingMaskIntoConstraints = false
         raisePanel.addSubview(raiseHeader)
 
         raiseAmountLabel.text = "$0"
-        raiseAmountLabel.font = .systemFont(ofSize: 24, weight: .heavy)
+        raiseAmountLabel.font = .systemFont(ofSize: 24 * kBetScale, weight: .heavy)
         raiseAmountLabel.textColor = PokerTheme.ink
         raiseAmountLabel.textAlignment = .center
         raiseAmountLabel.translatesAutoresizingMaskIntoConstraints = false
         raisePanel.addSubview(raiseAmountLabel)
 
         raiseSubLabel.text = ""
-        raiseSubLabel.font = .systemFont(ofSize: 10, weight: .medium)
+        raiseSubLabel.font = .systemFont(ofSize: 10 * kBetScale, weight: .medium)
         raiseSubLabel.textColor = PokerTheme.muted
         raiseSubLabel.textAlignment = .center
         raiseSubLabel.numberOfLines = 1
@@ -135,7 +140,7 @@ final class BettingControlsView: UIView {
         thumb.backgroundColor = .white
         thumb.layer.borderWidth = 2
         thumb.layer.borderColor = PokerTheme.primaryAction.cgColor
-        thumb.layer.cornerRadius = 10
+        thumb.layer.cornerRadius = 10 * kBetScale
         thumb.layer.shadowColor = UIColor.black.cgColor
         thumb.layer.shadowOpacity = 0.2
         thumb.layer.shadowOffset = CGSize(width: 0, height: 2)
@@ -154,7 +159,7 @@ final class BettingControlsView: UIView {
         // Quick bets row
         quickStack.axis = .horizontal
         quickStack.distribution = .fillEqually
-        quickStack.spacing = 6
+        quickStack.spacing = 6 * kBetScale
         quickStack.translatesAutoresizingMaskIntoConstraints = false
         raisePanel.addSubview(quickStack)
 
@@ -163,17 +168,17 @@ final class BettingControlsView: UIView {
         // the action-row height. The table view above gets the freed space.
         let actionRow = UIStackView(arrangedSubviews: [foldButton, checkCallButton, raiseButton])
         actionRow.axis = .horizontal
-        actionRow.spacing = 8
+        actionRow.spacing = 8 * kBetScale
         actionRow.distribution = .fillEqually
         actionRow.translatesAutoresizingMaskIntoConstraints = false
-        actionRow.heightAnchor.constraint(equalToConstant: 60).isActive = true
+        actionRow.heightAnchor.constraint(equalToConstant: 60 * kBetScale).isActive = true
 
         // Remove raisePanel from `self` and re-add via the stack
         raisePanel.removeFromSuperview()
 
         let outerStack = UIStackView(arrangedSubviews: [raisePanel, actionRow])
         outerStack.axis = .vertical
-        outerStack.spacing = 10
+        outerStack.spacing = 10 * kBetScale
         outerStack.alignment = .fill
         outerStack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(outerStack)
@@ -184,49 +189,49 @@ final class BettingControlsView: UIView {
 
         NSLayoutConstraint.activate([
             outerStack.topAnchor.constraint(equalTo: topAnchor),
-            outerStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6),
-            outerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            outerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            outerStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -6 * kBetScale),
+            outerStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12 * kBetScale),
+            outerStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12 * kBetScale),
         ])
 
         // Inside-panel layout — defaultHigh priority so a collapsed panel
         // doesn't fight the actionRow.bottom anchor.
         let inside: [NSLayoutConstraint] = [
-            raiseHeader.topAnchor.constraint(equalTo: raisePanel.topAnchor, constant: 10),
+            raiseHeader.topAnchor.constraint(equalTo: raisePanel.topAnchor, constant: 10 * kBetScale),
             raiseHeader.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
 
-            raiseAmountLabel.topAnchor.constraint(equalTo: raiseHeader.bottomAnchor, constant: 2),
+            raiseAmountLabel.topAnchor.constraint(equalTo: raiseHeader.bottomAnchor, constant: 2 * kBetScale),
             raiseAmountLabel.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
 
             raiseSubLabel.topAnchor.constraint(equalTo: raiseAmountLabel.bottomAnchor, constant: 0),
             raiseSubLabel.centerXAnchor.constraint(equalTo: raisePanel.centerXAnchor),
-            raiseSubLabel.heightAnchor.constraint(equalToConstant: 16),
+            raiseSubLabel.heightAnchor.constraint(equalToConstant: 16 * kBetScale),
 
-            minusButton.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
+            minusButton.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14 * kBetScale),
             minusButton.centerYAnchor.constraint(equalTo: raiseAmountLabel.centerYAnchor),
-            minusButton.widthAnchor.constraint(equalToConstant: 36),
-            minusButton.heightAnchor.constraint(equalToConstant: 36),
+            minusButton.widthAnchor.constraint(equalToConstant: 36 * kBetScale),
+            minusButton.heightAnchor.constraint(equalToConstant: 36 * kBetScale),
 
-            plusButton.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
+            plusButton.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14 * kBetScale),
             plusButton.centerYAnchor.constraint(equalTo: raiseAmountLabel.centerYAnchor),
-            plusButton.widthAnchor.constraint(equalToConstant: 36),
-            plusButton.heightAnchor.constraint(equalToConstant: 36),
+            plusButton.widthAnchor.constraint(equalToConstant: 36 * kBetScale),
+            plusButton.heightAnchor.constraint(equalToConstant: 36 * kBetScale),
 
-            sliderTouchArea.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
-            sliderTouchArea.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
+            sliderTouchArea.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14 * kBetScale),
+            sliderTouchArea.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14 * kBetScale),
             sliderTouchArea.topAnchor.constraint(equalTo: raiseSubLabel.bottomAnchor, constant: 0),
-            sliderTouchArea.heightAnchor.constraint(equalToConstant: 26),
+            sliderTouchArea.heightAnchor.constraint(equalToConstant: 26 * kBetScale),
 
             track.leadingAnchor.constraint(equalTo: sliderTouchArea.leadingAnchor),
             track.trailingAnchor.constraint(equalTo: sliderTouchArea.trailingAnchor),
             track.centerYAnchor.constraint(equalTo: sliderTouchArea.centerYAnchor),
-            track.heightAnchor.constraint(equalToConstant: 6),
+            track.heightAnchor.constraint(equalToConstant: 6 * kBetScale),
 
-            quickStack.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14),
-            quickStack.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14),
-            quickStack.topAnchor.constraint(equalTo: sliderTouchArea.bottomAnchor, constant: 6),
-            quickStack.heightAnchor.constraint(equalToConstant: 32),
-            quickStack.bottomAnchor.constraint(equalTo: raisePanel.bottomAnchor, constant: -12),
+            quickStack.leadingAnchor.constraint(equalTo: raisePanel.leadingAnchor, constant: 14 * kBetScale),
+            quickStack.trailingAnchor.constraint(equalTo: raisePanel.trailingAnchor, constant: -14 * kBetScale),
+            quickStack.topAnchor.constraint(equalTo: sliderTouchArea.bottomAnchor, constant: 6 * kBetScale),
+            quickStack.heightAnchor.constraint(equalToConstant: 32 * kBetScale),
+            quickStack.bottomAnchor.constraint(equalTo: raisePanel.bottomAnchor, constant: -12 * kBetScale),
         ]
         inside.forEach { $0.priority = .defaultHigh }
         NSLayoutConstraint.activate(inside)
@@ -253,12 +258,12 @@ final class BettingControlsView: UIView {
         button.backgroundColor = PokerTheme.surfaceAlt
         button.setTitle(nil, for: .normal)
         let symbolName = glyph == "+" ? "plus" : "minus"
-        let cfg = UIImage.SymbolConfiguration(pointSize: 16, weight: .bold)
+        let cfg = UIImage.SymbolConfiguration(pointSize: 16 * kBetScale, weight: .bold)
         button.setImage(UIImage(systemName: symbolName, withConfiguration: cfg), for: .normal)
         button.tintColor = PokerTheme.ink
         button.contentHorizontalAlignment = .center
         button.contentVerticalAlignment = .center
-        button.layer.cornerRadius = 11
+        button.layer.cornerRadius = 11 * kBetScale
     }
 
     private var displayRaiseTotal: Int {
@@ -459,14 +464,16 @@ final class BettingControlsView: UIView {
         }
         thumb.isHidden = false
         let trackFrame = track.convert(track.bounds, to: sliderTouchArea)
+        let thumbSize = 20 * kBetScale
+        let thumbHalf = thumbSize / 2
         guard maxRaise > minRaise else {
-            thumb.frame = CGRect(x: trackFrame.minX - 10, y: trackFrame.midY - 10, width: 20, height: 20)
+            thumb.frame = CGRect(x: trackFrame.minX - thumbHalf, y: trackFrame.midY - thumbHalf, width: thumbSize, height: thumbSize)
             fill.frame = .zero
             return
         }
         let pct = CGFloat(raiseValue - minRaise) / CGFloat(maxRaise - minRaise)
         let x = trackFrame.minX + trackFrame.width * pct
-        thumb.frame = CGRect(x: x - 10, y: trackFrame.midY - 10, width: 20, height: 20)
+        thumb.frame = CGRect(x: x - thumbHalf, y: trackFrame.midY - thumbHalf, width: thumbSize, height: thumbSize)
         fill.frame = CGRect(x: 0, y: 0, width: track.bounds.width * pct, height: track.bounds.height)
     }
 
@@ -600,13 +607,13 @@ private final class ActionButton: UIView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
-        layer.cornerRadius = 16
+        layer.cornerRadius = 16 * kBetScale
 
-        titleLabel.font = .systemFont(ofSize: 16, weight: .heavy)
+        titleLabel.font = .systemFont(ofSize: 16 * kBetScale, weight: .heavy)
         titleLabel.textAlignment = .center
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        sublabelLabel.font = .systemFont(ofSize: 11, weight: .semibold)
+        sublabelLabel.font = .systemFont(ofSize: 11 * kBetScale, weight: .semibold)
         sublabelLabel.textAlignment = .center
         sublabelLabel.translatesAutoresizingMaskIntoConstraints = false
         sublabelLabel.isHidden = true
@@ -722,12 +729,12 @@ private final class QuickBetButton: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.cornerRadius = 10
+        layer.cornerRadius = 10 * kBetScale
         layer.borderWidth = 1
         layer.borderColor = PokerTheme.border.cgColor
         backgroundColor = PokerTheme.surfaceAlt
 
-        label.font = .systemFont(ofSize: 11, weight: .bold)
+        label.font = .systemFont(ofSize: 11 * kBetScale, weight: .bold)
         label.textColor = PokerTheme.ink
         label.textAlignment = .center
         label.translatesAutoresizingMaskIntoConstraints = false
