@@ -2217,11 +2217,11 @@ final class MPChipsSlider: UIControl {
         }
         thumb.setColor(MPTheme.amber)
         let f = NumberFormatter(); f.numberStyle = .decimal
-        minLabel.attributedText = NSAttributedString(string: "$\(f.string(from: NSNumber(value: minValue)) ?? "\(minValue)")", attributes: [
+        minLabel.attributedText = NSAttributedString(string: f.string(from: NSNumber(value: minValue)) ?? "\(minValue)", attributes: [
             .font: MPFont.uiTabular(11, weight: .semibold),
             .foregroundColor: MPTheme.muted,
         ])
-        maxLabel.attributedText = NSAttributedString(string: "$\(f.string(from: NSNumber(value: maxValue)) ?? "\(maxValue)")", attributes: [
+        maxLabel.attributedText = NSAttributedString(string: f.string(from: NSNumber(value: maxValue)) ?? "\(maxValue)", attributes: [
             .font: MPFont.uiTabular(11, weight: .semibold),
             .foregroundColor: MPTheme.muted,
         ])
