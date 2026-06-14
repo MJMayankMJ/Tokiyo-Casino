@@ -69,6 +69,30 @@ public struct JKCard: Codable, Hashable, Equatable {
     }
 }
 
+// MARK: - Accessibility
+
+extension JKCard {
+    /// Spoken card name for VoiceOver, e.g. "Ace of spades".
+    var accessibleName: String {
+        let rankWord: String
+        switch rank {
+        case .ace: rankWord = "Ace"
+        case .king: rankWord = "King"
+        case .queen: rankWord = "Queen"
+        case .jack: rankWord = "Jack"
+        default: rankWord = String(rank.rawValue)
+        }
+        let suitWord: String
+        switch suit {
+        case .hearts: suitWord = "hearts"
+        case .diamonds: suitWord = "diamonds"
+        case .clubs: suitWord = "clubs"
+        case .spades: suitWord = "spades"
+        }
+        return "\(rankWord) of \(suitWord)"
+    }
+}
+
 // MARK: - Bridge to Poker module types
 
 // These map the Jackaroo-local Codable types to the existing Poker types

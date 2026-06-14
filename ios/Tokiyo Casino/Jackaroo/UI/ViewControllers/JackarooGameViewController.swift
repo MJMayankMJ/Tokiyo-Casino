@@ -20,7 +20,19 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     // MARK: - Engine
 
     let engine: JackarooEngine
-    private let humanSeat: SeatID = 0
+
+    /// Seats controlled by a human. One = solo (Phase 2 behaviour);
+    /// two or more = hot-seat, which adds the pass-the-device curtain.
+    private let humanSeats: Set<SeatID>
+    private var isHotSeat: Bool { humanSeats.count >= 2 }
+
+    /// Whether the seated human has lifted the privacy curtain. Always
+    /// true for solo and AI seats (they never get a curtain).
+    private var handRevealed = true
+    private let curtain = JKHandoffOverlay()
+    private var autoHideTimer: Timer?
+    /// Auto-hide the revealed hand after this many seconds of inactivity.
+    private let autoHideSeconds: TimeInterval = 8
 
     /// Test seam. When true the VC does not auto-schedule AI turns on a
     /// timer and does not present the end-of-game alert, so a unit test
@@ -50,9 +62,17 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     /// changes their selection.
     private var candidateMoves: [JKMove] = []
 
-    /// Convenience — the active player's hand if it's the human's turn.
-    private var humanHand: [JKCard] {
-        engine.state.players[humanSeat].hand
+    /// The seat currently on turn.
+    private var currentHand: [JKCard] {
+        engine.state.players[engine.state.currentSeat].hand
+    }
+
+    /// True when the seat on turn is a human who is allowed to act right
+    /// now (curtain lifted).
+    private var humanCanAct: Bool {
+        humanSeats.contains(engine.state.currentSeat)
+            && engine.state.winner == nil
+            && handRevealed
     }
 
     // MARK: - Init
@@ -75,6 +95,10 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     init(players: [JKPlayer], seed: UInt64) {
         self.engine = JackarooEngine(players: players, seed: seed)
         self.boardView = JKBoardView(graph: engine.graph)
+        self.humanSeats = Set(players.compactMap { p in
+            if case .human = p.kind { return p.seat }
+            return nil
+        })
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -185,6 +209,20 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
                 playerCorners[3].bottomAnchor.constraint(equalTo: handStrip.topAnchor, constant: -18)),
         ]
         for (_, c1, c2) in layouts { NSLayoutConstraint.activate([c1, c2]) }
+
+        // Privacy curtain — full-screen, on top, hidden until a hot-seat
+        // handoff raises it.
+        curtain.translatesAutoresizingMaskIntoConstraints = false
+        curtain.isHidden = true
+        curtain.alpha = 0
+        curtain.onReveal = { [weak self] in self?.revealHand() }
+        view.addSubview(curtain)
+        NSLayoutConstraint.activate([
+            curtain.topAnchor.constraint(equalTo: view.topAnchor),
+            curtain.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            curtain.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            curtain.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
     }
 
     // MARK: - Engine delegate
@@ -195,7 +233,20 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     func didChangeTurn(_ seat: SeatID) {
         clearSelection()
+        invalidateAutoHide()
+
+        let needsCurtain = !isAutomatedTestMode && isHotSeat
+            && humanSeats.contains(seat) && engine.state.winner == nil
+        if needsCurtain {
+            handRevealed = false
+            presentCurtain(for: seat)
+        } else {
+            handRevealed = true
+            hideCurtain(animated: false)
+        }
+
         refreshAllUI()
+        announceTurn(seat)
         scheduleAIStepIfNeeded()
     }
 
@@ -232,19 +283,14 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     func didEnd(winner: JKTeam) {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        invalidateAutoHide()
+        hideCurtain(animated: false)
         guard !isAutomatedTestMode else { return }
-        let alert = UIAlertController(
-            title: "Team \(winner == .a ? "A" : "B") wins!",
-            message: nil,
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "Play again", style: .default) { [weak self] _ in
-            self?.restartGame()
-        })
-        alert.addAction(UIAlertAction(title: "Done", style: .cancel) { [weak self] _ in
-            self?.backTapped()
-        })
-        present(alert, animated: true)
+        let summary = JackarooGameSummaryViewController(
+            state: engine.state, winner: winner, humanSeats: humanSeats)
+        summary.onPlayAgain = { [weak self] in self?.restartGame() }
+        summary.onClose = { [weak self] in self?.backTapped() }
+        present(summary, animated: true)
     }
 
     // MARK: - AI driving
@@ -275,18 +321,88 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         return true
     }
 
+    // MARK: - Privacy curtain (hot-seat)
+
+    private func presentCurtain(for seat: SeatID) {
+        curtain.configure(name: engine.state.players[seat].name, seat: seat)
+        view.bringSubviewToFront(curtain)
+        curtain.isHidden = false
+        UIView.animate(withDuration: 0.22) { self.curtain.alpha = 1 }
+        UIAccessibility.post(notification: .screenChanged, argument: curtain)
+    }
+
+    private func hideCurtain(animated: Bool) {
+        guard !curtain.isHidden else { return }
+        let finish = { self.curtain.isHidden = true }
+        if animated {
+            UIView.animate(withDuration: 0.2, animations: { self.curtain.alpha = 0 }) { _ in finish() }
+        } else {
+            curtain.alpha = 0
+            finish()
+        }
+    }
+
+    /// "Show my hand" tapped — reveal and start the inactivity timer.
+    private func revealHand() {
+        handRevealed = true
+        hideCurtain(animated: true)
+        refreshHandStrip()
+        startAutoHide()
+        UIAccessibility.post(notification: .screenChanged, argument: handStrip)
+    }
+
+    private func startAutoHide() {
+        invalidateAutoHide()
+        guard isHotSeat else { return }
+        autoHideTimer = Timer.scheduledTimer(withTimeInterval: autoHideSeconds,
+                                             repeats: false) { [weak self] _ in
+            self?.reHideForPrivacy()
+        }
+    }
+
+    private func invalidateAutoHide() {
+        autoHideTimer?.invalidate()
+        autoHideTimer = nil
+    }
+
+    /// Inactivity fired with no move played — drop the curtain again.
+    private func reHideForPrivacy() {
+        guard isHotSeat, engine.state.winner == nil,
+              humanSeats.contains(engine.state.currentSeat) else { return }
+        handRevealed = false
+        clearSelection()
+        presentCurtain(for: engine.state.currentSeat)
+        refreshHandStrip()
+    }
+
+    private func announceTurn(_ seat: SeatID) {
+        guard !isAutomatedTestMode else { return }
+        // Hot-seat humans are announced by the curtain's screen-changed
+        // event, so only narrate solo/AI turns here.
+        guard !(isHotSeat && humanSeats.contains(seat)) else { return }
+        let name = engine.state.players[seat].name
+        let phrase = humanSeats.contains(seat) ? "Your turn, \(name)" : "\(name) is thinking"
+        UIAccessibility.post(notification: .announcement, argument: phrase)
+    }
+
     // MARK: - UI refresh
 
     private func refreshAllUI() {
         let s = engine.state
+        let isHumanTurn = humanSeats.contains(s.currentSeat)
         infoPill.set(blinds: "Hand \(s.handsDealt)",
                      hand: "Jackaroo Basic",
                      phase: s.winner == nil
-                         ? (s.currentSeat == humanSeat ? "Your turn" : "\(s.players[s.currentSeat].name)'s turn")
+                         ? (isHumanTurn ? "\(s.players[s.currentSeat].name)'s turn"
+                                        : "\(s.players[s.currentSeat].name) is thinking")
                          : "Game over")
         turnPill.set(name: s.players[s.currentSeat].name,
-                     status: s.currentSeat == humanSeat ? "→ play a card"
-                                                       : "thinking…")
+                     status: isHumanTurn ? "→ play a card" : "thinking…")
+        turnPill.isAccessibilityElement = true
+        turnPill.accessibilityLabel = s.winner != nil
+            ? "Game over"
+            : (isHumanTurn ? "\(s.players[s.currentSeat].name)'s turn to play a card"
+                           : "\(s.players[s.currentSeat].name) is thinking")
         boardView.setFirePileTop(s.firePile.last)
         boardView.snapMarbles(from: s)
         refreshHandStrip()
@@ -294,8 +410,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     }
 
     private func refreshHandStrip() {
-        if engine.state.currentSeat == humanSeat && engine.state.winner == nil {
-            handStrip.setHand(humanHand)
+        if humanCanAct {
+            handStrip.setHand(currentHand)
             // If every legal move is a burn, surface the burn affordance.
             let moves = engine.legalMovesForCurrentSeat()
             handStrip.showBurnAffordance = !moves.isEmpty && moves.allSatisfy { $0.isBurn }
@@ -330,19 +446,21 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     }
 
     private func handleBoardTrackTap(cellID: CellID) {
-        guard engine.state.currentSeat == humanSeat else { return }
+        guard humanCanAct else { return }
         guard let move = candidateMoves.first(where: { matchesTrackTarget($0, cellID: cellID) }) else {
             return
         }
+        invalidateAutoHide()
         clearSelection()
         engine.play(move)
     }
 
     private func handleBoardSafeTap(seat: SeatID, lane: Int) {
-        guard engine.state.currentSeat == humanSeat else { return }
+        guard humanCanAct else { return }
         guard let move = candidateMoves.first(where: { matchesSafeTarget($0, seat: seat, lane: lane) }) else {
             return
         }
+        invalidateAutoHide()
         clearSelection()
         engine.play(move)
     }
@@ -495,14 +613,28 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     }
 
     @objc private func gearTapped() {
-        let alert = UIAlertController(title: "Settings", message: "Coming in Phase 5", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
+        sheet.addAction(UIAlertAction(title: "How to play", style: .default) { [weak self] _ in
+            self?.present(JackarooRulesViewController(), animated: true)
+        })
+        sheet.addAction(UIAlertAction(title: "Settings (coming in Phase 5)", style: .default, handler: nil))
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let pop = sheet.popoverPresentationController {
+            pop.sourceView = gearButton
+            pop.sourceRect = gearButton.bounds
+        }
+        present(sheet, animated: true)
     }
 
     private func restartGame() {
-        // Phase 2: easiest restart = pop + push a fresh instance.
-        let fresh = JackarooGameViewController()
+        // Rebuild the same table (same humans + AIs, fresh hands) with a
+        // new seed, replacing this VC in the nav stack.
+        let players = engine.state.players.map {
+            JKPlayer(seat: $0.seat, name: $0.name, kind: $0.kind)
+        }
+        let fresh = JackarooGameViewController(players: players,
+                                              seed: UInt64.random(in: 1...UInt64.max))
         fresh.modalPresentationStyle = .fullScreen
         if let nav = navigationController {
             var stack = nav.viewControllers
@@ -513,9 +645,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
                 nav.pushViewController(fresh, animated: false)
             }
         } else {
-            dismiss(animated: true) {
-                // Caller will need to re-present.
-            }
+            dismiss(animated: true)
         }
     }
 }
@@ -524,7 +654,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
 extension JackarooGameViewController: JKHandStripDelegate {
     func handStrip(_ strip: JKHandStripView, didSelect card: JKCard, at index: Int) {
-        guard engine.state.currentSeat == humanSeat else { return }
+        guard humanCanAct else { return }
+        startAutoHide()   // any interaction resets the inactivity curtain
         pickedCardIndex = index
         let allMoves = engine.legalMovesForCurrentSeat()
         candidateMoves = allMoves.filter { moveUsesCard($0, card) }
@@ -533,6 +664,8 @@ extension JackarooGameViewController: JKHandStripDelegate {
             // Visual shake — nothing to do with this card.
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             strip.clearSelection()
+            UIAccessibility.post(notification: .announcement,
+                                 argument: "\(card.accessibleName) has no legal move")
             return
         }
 
@@ -540,6 +673,11 @@ extension JackarooGameViewController: JKHandStripDelegate {
         let highlights = computeHighlights()
         boardView.highlightLegalTargets(trackCells: highlights.tracks,
                                         safeCells: highlights.safe)
+        let targetCount = highlights.tracks.count + highlights.safe.values.reduce(0) { $0 + $1.count }
+        if targetCount > 0 {
+            UIAccessibility.post(notification: .announcement,
+                                 argument: "\(card.accessibleName) selected, \(targetCount) target\(targetCount == 1 ? "" : "s")")
+        }
 
         // For moves without a track destination, show an action sheet.
         let nonCellMoves = candidateMoves.filter { destination(of: $0) == nil }
@@ -549,8 +687,10 @@ extension JackarooGameViewController: JKHandStripDelegate {
     }
 
     func handStripDidTapBurn(_ strip: JKHandStripView) {
+        guard humanCanAct else { return }
         let burns = engine.legalMovesForCurrentSeat().filter { $0.isBurn }
         if let first = burns.first {
+            invalidateAutoHide()
             clearSelection()
             engine.play(first)
         }

@@ -235,11 +235,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             badgeText: nil
         )
 
-        #if DEBUG
         let jackarooBadge: String? = nil
-        #else
-        let jackarooBadge: String? = "COMING SOON"
-        #endif
 
         let jackarooCard = makeGameCard(
             game: .jackaroo,
@@ -455,20 +451,12 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     }
 
     private func openJackarooGame() {
-        #if DEBUG
-        let jackarooVC = JackarooGameViewController()
-        #else
-        let jackarooVC = ComingSoonViewController(
-            title: "Jackaroo",
-            subtitle: "This table is being polished for release."
-        )
-        #endif
-
-        jackarooVC.modalPresentationStyle = .fullScreen
+        let menu = JackarooMenuViewController()
         if let navigationController = navigationController {
-            navigationController.pushViewController(jackarooVC, animated: true)
+            navigationController.pushViewController(menu, animated: true)
         } else {
-            present(jackarooVC, animated: true)
+            menu.modalPresentationStyle = .fullScreen
+            present(menu, animated: true)
         }
     }
 

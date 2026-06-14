@@ -84,6 +84,9 @@ final class JKHandStripView: UIView {
             let v = CardView()
             v.setCard(card.asPokerCard, faceUp: true)
             v.isUserInteractionEnabled = true
+            v.isAccessibilityElement = true
+            v.accessibilityLabel = card.accessibleName
+            v.accessibilityTraits = .button
             let tap = UITapGestureRecognizer(target: self, action: #selector(cardTapped(_:)))
             v.addGestureRecognizer(tap)
             bg.addSubview(v)
