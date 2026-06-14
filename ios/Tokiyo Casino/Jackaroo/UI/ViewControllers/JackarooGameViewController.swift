@@ -19,8 +19,14 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     // MARK: - Engine
 
-    private let engine: JackarooEngine
+    let engine: JackarooEngine
     private let humanSeat: SeatID = 0
+
+    /// Test seam. When true the VC does not auto-schedule AI turns on a
+    /// timer and does not present the end-of-game alert, so a unit test
+    /// can drive a full game synchronously and inspect the result.
+    /// Production always leaves this `false`.
+    var isAutomatedTestMode = false
 
     // MARK: - UI
 
@@ -51,7 +57,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     // MARK: - Init
 
-    init(seed: UInt64 = UInt64.random(in: 1...UInt64.max)) {
+    /// Production entry: solo human at seat 0 against three stub AIs.
+    convenience init(seed: UInt64 = UInt64.random(in: 1...UInt64.max)) {
         let players: [JKPlayer] = (0..<4).map { seat in
             if seat == 0 {
                 return JKPlayer(seat: seat, name: "You", kind: .human)
@@ -60,6 +67,12 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
                 return JKPlayer(seat: seat, name: p.displayName, kind: .ai(personality: p))
             }
         }
+        self.init(players: players, seed: seed)
+    }
+
+    /// Designated init. Exposed so tests can stand up an all-AI table
+    /// and drive a complete game through the real delegate pipeline.
+    init(players: [JKPlayer], seed: UInt64) {
         self.engine = JackarooEngine(players: players, seed: seed)
         self.boardView = JKBoardView(graph: engine.graph)
         super.init(nibName: nil, bundle: nil)
@@ -88,10 +101,10 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         }
         didStartEngine = true
         engine.delegate = self
+        // start() fires didDeal + didChangeTurn, which refresh the UI,
+        // snap the marbles, and schedule the first AI turn. Doing any of
+        // that again here would double-drive the AI loop.
         engine.start()
-        boardView.snapMarbles(from: engine.state)
-        refreshAllUI()
-        scheduleAIStepIfNeeded()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -219,6 +232,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     func didEnd(winner: JKTeam) {
         UINotificationFeedbackGenerator().notificationOccurred(.success)
+        guard !isAutomatedTestMode else { return }
         let alert = UIAlertController(
             title: "Team \(winner == .a ? "A" : "B") wins!",
             message: nil,
@@ -236,6 +250,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     // MARK: - AI driving
 
     private func scheduleAIStepIfNeeded() {
+        guard !isAutomatedTestMode else { return }
         guard engine.state.winner == nil else { return }
         guard case .ai = engine.state.players[engine.state.currentSeat].kind else { return }
         let delay = Double.random(in: 0.6...1.2)
@@ -245,6 +260,19 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
             guard self.view.window != nil else { return }
             self.engine.stepAIIfNeeded()
         }
+    }
+
+    /// Test seam: play the first legal move for whoever is on turn,
+    /// through the same `clearSelection` + `engine.play` path a human tap
+    /// uses. Returns false when there is no move to make (game over).
+    /// Lets a test drive a complete game through the real UI pipeline.
+    @discardableResult
+    func playFirstLegalMoveForCurrentSeat() -> Bool {
+        guard engine.state.winner == nil else { return false }
+        guard let move = engine.legalMovesForCurrentSeat().first else { return false }
+        clearSelection()
+        engine.play(move)
+        return true
     }
 
     // MARK: - UI refresh
