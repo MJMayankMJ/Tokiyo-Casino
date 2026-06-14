@@ -356,7 +356,7 @@ struct JKBoardGraph: Codable {
 }
 ```
 
-- The default 72-cell loop is built procedurally at engine init time. It's pure data; no UI knowledge. (Cell count is a chosen project default per `JACKAROO_DESIGN.md` §3, not a canonical verified topology — keep the constructor parameterized.)
+- The default 100-cell loop is built procedurally at engine init time. It's pure data; no UI knowledge. (Cell count is a Kerdany-style project default per `JACKAROO_DESIGN.md` §3, not a canonical verified topology — keep the constructor parameterized.)
 - Reverse moves use the same `step()` with `direction = .ccw`.
 - Safe entry: the gate cell knows its owner; the walker checks `mover.owner == cell.owner.safeGate` and the remaining-steps-fit rule per `safeEntryMode`.
 - "On Base" is the predicate `state.marbles.contains { $0.position == .track(graph.baseCell[seat]!) }` — Base is **not** a separate `JKPosition` case. This lets the engine represent an opponent sitting on your Base cell as a normal `track(CellID)` occupation.
@@ -464,7 +464,7 @@ Target: 100% coverage on `JKLegalMoveGenerator`, `JKMoveResolver`, `JKBoardGraph
 
 ## 9. Performance notes
 
-- 4 players × ~6 ownable marbles × ~5 cards in hand = ~120 candidate moves per turn worst case. Each path-walk is ≤72 steps. Cost is trivially fast on iPhone.
+- 4 players × ~6 ownable marbles × ~5 cards in hand = ~120 candidate moves per turn worst case. Each path-walk is ≤100 steps. Cost is trivially fast on iPhone.
 - Animations are the bottleneck. Step-by-step marble movement at 120 ms/cell can take ~1.5 s for a 13-King. Allow user to set "Animation speed" 1× / 1.5× / 2× in settings (Phase 6).
 
 ---

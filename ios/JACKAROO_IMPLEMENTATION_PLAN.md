@@ -16,7 +16,7 @@ The work lives on a `feat/jackaroo-offline` branch off `main`. Commit at the end
 - Add `Game Engine/`, `Models/` subfolders per `JACKAROO_TECH_SPEC.md` §1.
 - Define `JKCard` as its own `Codable` struct (Poker's `Card` is not `Codable`), with a bridge to the Poker `Card`/`Suit`/`Rank` for the reused `CardView` / `SuitView` atoms.
 - Implement:
-  - `JKBoardGraph` (72-cell default, configurable).
+  - `JKBoardGraph` (100-cell default, configurable).
   - `JKMarble`, `JKPosition`, `JKPlayer`, `JKGameState`, `JKRulesPreset`, `JKMove`, `JKGameLog`, `JKSeededRNG`.
   - `JKLegalMoveGenerator` for the **default preset only** (Jawaker Basic). Variant-only behaviors (King-13, 5-any, etc.) are stubbed and gated off.
   - `JKMoveResolver` covering all default-preset card effects + capture + swap + safe entry + blockade + safe-internal movement.
@@ -229,7 +229,7 @@ The work lives on a `feat/jackaroo-offline` branch off `main`. Commit at the end
 This repo has no CI configured (no `.github/workflows`, no Fastlane, no `.yml`). Plan assumes local Xcode test runs only. If CI lands before Phase 6, swap "local test target passes" for "CI green."
 
 ### Things I still need confirmed before Phase 1 starts
-1. Board cell count (defaulted to 72; not a verified canonical fact — confirm).
+1. Board cell count (defaulted to 100 for the Kerdany-style rebuild; not a verified canonical fact).
 2. `safeEntryMode` default (defaulted to `cardValueAtMostRemaining`; confirm).
 3. `burnOnNoMove` default (defaulted to **on**) and `burnScope` default (defaulted to **whole hand**); confirm both.
 4. `JKPersonality` is Jackaroo-local. Confirm — alternative is to share Poker's `AIPersonality`.

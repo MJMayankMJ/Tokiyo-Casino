@@ -6,19 +6,17 @@
 //  single config value (`cellsPerQuadrant`) so the rendering layer can
 //  agree on a layout without touching engine code.
 //
-//  Default 72-cell board: 4 quadrants × 18 cells each. Each player's
+//  Default 100-cell board: 4 quadrants × 25 cells each. Each player's
 //  Base cell sits at the **start** of their quadrant (the first cell
 //  the player encounters when walking clockwise from their corner).
-//  The Safe gate is the cell **before** the Base — i.e., the last
-//  cell of the previous quadrant — and the lane fans inward from
-//  there. This matches the audit's recommended topology so the "4
-//  backward to Safe shortcut" emerges naturally.
+//  The Safe gate is two cells **before** the Base, matching the
+//  Kerdany-style entry layout while keeping the engine configurable.
 //
-//  Cell ID layout for the default 72-cell board:
-//    Seat 0 quadrant: cells   0..17   (Base = 0,  Safe gate = 71)
-//    Seat 1 quadrant: cells  18..35   (Base = 18, Safe gate = 17)
-//    Seat 2 quadrant: cells  36..53   (Base = 36, Safe gate = 35)
-//    Seat 3 quadrant: cells  54..71   (Base = 54, Safe gate = 53)
+//  Cell ID layout for the default 100-cell board:
+//    Seat 0 quadrant: cells   0..24   (Base = 0,  Safe gate = 98)
+//    Seat 1 quadrant: cells  25..49   (Base = 25, Safe gate = 23)
+//    Seat 2 quadrant: cells  50..74   (Base = 50, Safe gate = 48)
+//    Seat 3 quadrant: cells  75..99   (Base = 75, Safe gate = 73)
 //
 
 import Foundation
@@ -33,6 +31,7 @@ public enum JKCellKind: Codable, Hashable {
 
 public struct JKBoardGraph: Codable {
     public let cellsPerQuadrant: Int
+    public let safeGateOffsetFromBase: Int
     public let trackCells: [JKCellKind]                // length = 4 * cellsPerQuadrant
     public let baseCell: [SeatID: CellID]
     public let safeGateCell: [SeatID: CellID]
@@ -40,21 +39,26 @@ public struct JKBoardGraph: Codable {
     public let safeCells: [JKCellKind]                 // 16 virtual cells (4 per seat)
     public let homePockets: [SeatID: [JKCellKind]]     // 4 per seat (virtual)
 
-    public init(cellsPerQuadrant: Int = 18) {
+    public init(cellsPerQuadrant: Int = 25,
+                safeGateOffsetFromBase: Int = 2) {
         precondition(cellsPerQuadrant >= 6, "Quadrant must be wide enough for Base + safe gate spacing")
+        precondition(safeGateOffsetFromBase >= 1 && safeGateOffsetFromBase < cellsPerQuadrant,
+                     "Safe gate offset must stay inside the previous quadrant")
         self.cellsPerQuadrant = cellsPerQuadrant
+        self.safeGateOffsetFromBase = safeGateOffsetFromBase
 
         let loopSize = cellsPerQuadrant * 4
 
         // Build the track ring. Base cells live at the **first** cell of
         // each quadrant (so seat 0 Base = 0, seat 1 Base = quadrant, etc.).
-        // The safe-gate cell is the **last** cell of the previous quadrant.
+        // The safe-gate cell sits just before that base, in the previous
+        // quadrant. The default offset is two cells.
         var track = [JKCellKind](repeating: .track, count: loopSize)
         var base: [SeatID: CellID] = [:]
         var gate: [SeatID: CellID] = [:]
         for seat in 0..<4 {
             let baseID  = seat * cellsPerQuadrant
-            let gateID  = (baseID + loopSize - 1) % loopSize
+            let gateID  = (baseID + loopSize - safeGateOffsetFromBase) % loopSize
             base[seat] = baseID
             gate[seat] = gateID
             track[baseID] = .base(owner: seat)

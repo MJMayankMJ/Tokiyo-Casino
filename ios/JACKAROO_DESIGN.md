@@ -70,8 +70,8 @@ Navigation: Jackaroo lives under the Home tile, exactly like Poker — push `Jac
 
 ### Geometry
 - Square, then circumscribe a circle inside.
-- 4 corners + 4 sides. Each side carries part of the **shared track**, each corner carries one player's **Home**, **Base**, and **Safe** lane.
-- Total track cells: 18 cells per quadrant × 4 = **72 cells** — **chosen project default**, not a verified canonical fact. The research report does not establish one universal Jackaroo board topology. `JKBoardGraph` is built to be configurable so we can change this without touching layout code; lock the number with the visual mock.
+- 4 colored side zones on a dark circular board. Each side has one player's **Home**, **Base**, and inward **Safe** lane.
+- Total track cells: 25 cells per quadrant × 4 = **100 cells**. This is the current Kerdany-style project default; `JKBoardGraph` remains configurable so topology can change without rewriting rules or layout.
 - Each player has:
   - 4 Home pockets (off-track, side of their corner).
   - 1 Base cell (their starting cell on the track).
@@ -79,7 +79,7 @@ Navigation: Jackaroo lives under the Home tile, exactly like Poker — push `Jac
 
 ### Drawing
 - Board surface = `felt` disk with `feltEdge` ring. Center medallion = the **Card Pile + Fire Pile**, side-by-side.
-- Track cells = small `glass`-filled rounded squares, ~22×22 pt, ring color `feltEdge`. Cell hovered/legal-target = ring color = team accent.
+- Track cells = small circular holes on the track ring, with legal-target pulse rings in brass / owner color.
 - **Base cell** for each player is colored by their team accent at 18% opacity, with a thicker brass border.
 - **Safe cells** = brass-ringed (`amber`) with team-tinted interior. Inner ring grows from 0 → 4 filled as marbles enter.
 - **Home pockets** = darker felt depressions (`feltDepth`) with the team color marbles resting inside.
@@ -207,7 +207,7 @@ Everything else (buttons, theme, page background, card atoms) is reused.
 
 ## 9. Open design decisions
 
-1. **Board size**: 72 cells assumed. Confirm — Jackaroo World boards vary 60–80. Engine is configurable; the visual mock should be locked to one number.
+1. **Board size**: 100 cells locked for the Kerdany-style rebuild. Engine remains configurable for variants.
 2. **Marble peg style**: matte plastic peg vs. shiny glass orb. I default to glossy (matches the casino feel). Confirm.
 3. **Light vs. dark default**: follow system (no override). Confirm.
 4. **Curtain copy tone**: "Pass to Mayank" (casual) vs. "Mayank's turn" (formal). I default to casual.

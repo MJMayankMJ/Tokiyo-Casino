@@ -50,7 +50,7 @@ public final class JackarooEngine {
     public init(players: [JKPlayer],
                 rules: JKRulesPreset = .jawakerBasic,
                 seed: UInt64,
-                cellsPerQuadrant: Int = 18,
+                cellsPerQuadrant: Int = 25,
                 ai: JKAIEngine = JKAIEngine()) {
         precondition(players.count == 4, "Jackaroo needs exactly 4 players")
         self.graph = JKBoardGraph(cellsPerQuadrant: cellsPerQuadrant)

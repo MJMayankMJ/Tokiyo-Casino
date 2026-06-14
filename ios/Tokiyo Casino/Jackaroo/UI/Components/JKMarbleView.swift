@@ -11,26 +11,27 @@ import UIKit
 final class JKMarbleView: UIView {
 
     enum SeatPalette {
-        // Per-seat marble colours. Seat 0/2 = Team A (coral family);
-        // seat 1/3 = Team B (forest family). 2 and 3 use slightly
-        // brighter variants so each player's marbles stay
-        // distinguishable from their partner's.
+        // Per-seat marble colours. Jackaroo is team-based, but the
+        // Kerdany-style board reads better when all four seats have a
+        // distinct side color.
         case seat(SeatID)
 
         var body: UIColor {
             switch self {
-            case .seat(0): return UIColor.dyn(light: 0xD5604E, dark: 0xE8786A) // coral
-            case .seat(1): return UIColor.dyn(light: 0x5E9466, dark: 0x7BB07A) // forest
-            case .seat(2): return UIColor.dyn(light: 0xE9907D, dark: 0xF1A091) // coral-light
-            case .seat(3): return UIColor.dyn(light: 0x8FB594, dark: 0xA8CCA8) // forest-light
+            case .seat(0): return UIColor.dyn(light: 0x27AE60, dark: 0x27AE60) // green
+            case .seat(1): return UIColor.dyn(light: 0xE74C3C, dark: 0xE74C3C) // red
+            case .seat(2): return UIColor.dyn(light: 0xF1C40F, dark: 0xF1C40F) // yellow
+            case .seat(3): return UIColor.dyn(light: 0x3498DB, dark: 0x3498DB) // blue
             default:       return .gray
             }
         }
         var outline: UIColor {
             switch self {
-            case .seat(0), .seat(2): return UIColor.dyn(light: 0xB84A3A, dark: 0xC95A4E) // coralDeep
-            case .seat(1), .seat(3): return UIColor.dyn(light: 0x4B7B53, dark: 0x5E8A60) // forestDeep
-            default:                  return .darkGray
+            case .seat(0): return UIColor.dyn(light: 0x0D4A23, dark: 0x0D4A23)
+            case .seat(1): return UIColor.dyn(light: 0x5A0A0A, dark: 0x5A0A0A)
+            case .seat(2): return UIColor.dyn(light: 0x5A4200, dark: 0x5A4200)
+            case .seat(3): return UIColor.dyn(light: 0x0A2D5A, dark: 0x0A2D5A)
+            default:       return .darkGray
             }
         }
     }

@@ -78,9 +78,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        // Defer engine startup until the board has real bounds —
-        // snapMarbles() depends on JKBoardLayout being able to
-        // compute cell centres, which needs non-zero width.
+        // Defer engine startup until the board has real bounds so the
+        // board layout can compute cell centres from non-zero geometry.
         guard !didStartEngine, boardView.bounds.width > 0 else {
             // Even before startup, keep marbles snapped to whatever
             // state we already have (handles rotation).

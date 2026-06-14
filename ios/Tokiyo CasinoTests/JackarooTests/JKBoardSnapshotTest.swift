@@ -14,8 +14,18 @@ import XCTest
 final class JKBoardSnapshotTest: XCTestCase {
 
     func testRenderBoardSnapshot() {
+        renderBoardSnapshot(style: .light,
+                            filename: "snapshot_board_light.png")
+        renderBoardSnapshot(style: .dark,
+                            filename: "snapshot_board_dark.png")
+    }
+
+    private func renderBoardSnapshot(style: UIUserInterfaceStyle,
+                                     filename: String) {
         let vc = JackarooGameViewController(seed: 0xC0FFEE_BEEF)
+        vc.overrideUserInterfaceStyle = style
         let host = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+        host.overrideUserInterfaceStyle = style
         host.rootViewController = vc
         host.makeKeyAndVisible()
 
@@ -31,16 +41,20 @@ final class JKBoardSnapshotTest: XCTestCase {
         }
 
         // Persist to a known location so the agent can read it.
-        let url = URL(fileURLWithPath: "/tmp/jackaroo_shots/snapshot_board.png")
+        let url = URL(fileURLWithPath: "/tmp/jackaroo_shots/\(filename)")
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                  withIntermediateDirectories: true)
         if let data = img.pngData() {
             try? data.write(to: url)
         }
+        if style == .light {
+            let compatibilityURL = URL(fileURLWithPath: "/tmp/jackaroo_shots/snapshot_board.png")
+            try? img.pngData()?.write(to: compatibilityURL)
+        }
 
         let attachment = XCTAttachment(image: img)
         attachment.lifetime = .keepAlways
-        attachment.name = "board_snapshot.png"
+        attachment.name = filename
         add(attachment)
     }
 }
