@@ -149,6 +149,32 @@ final class JKEdgeCaseTests: XCTestCase {
         }
     }
 
+    // MARK: - ec 7 — Jack swap excludes Home / own-Base / Safe marbles
+
+    func testJackSwap_excludesOwnBaseHomeAndSafeMarbles() {
+        var state = JKFixture.makeState()
+        // Seat 0: one marble protected on its own Base, one free on the track,
+        // one in Safe. Seat 1: an opponent protected on ITS own Base, plus a
+        // free opponent on the track.
+        JKFixture.place(0, at: .track(graph.baseCell[0]!), in: &state)   // own, on own Base
+        JKFixture.place(1, at: .track(10), in: &state)                    // own, free
+        JKFixture.place(2, at: .safe(lane: 0), in: &state)               // own, in Safe
+        JKFixture.place(4, at: .track(graph.baseCell[1]!), in: &state)   // opp, on its own Base
+        JKFixture.place(5, at: .track(30), in: &state)                    // opp, free
+        JKFixture.setHand([JKFixture.jackSpades], for: 0, in: &state)
+
+        let swaps = gen().moves(in: state, for: 0).compactMap { (m: JKMove) -> (MarbleID, MarbleID)? in
+            if case let .swap(_, own, other) = m { return (own, other) }
+            return nil
+        }
+        XCTAssertFalse(swaps.isEmpty, "The two on-track marbles should be swappable")
+        // The only legal swap is free-own (1) with free-opponent (5).
+        for (own, other) in swaps {
+            XCTAssertEqual(own, 1, "Own swap source must be the free track marble, not Home/Base/Safe")
+            XCTAssertEqual(other, 5, "Opponent target must be the free track marble, not its own Base")
+        }
+    }
+
     // MARK: - ec 13 — game ends immediately mid-hand
 
     func testGameEndsImmediately_whenEighthTeamMarbleEntersSafe() {

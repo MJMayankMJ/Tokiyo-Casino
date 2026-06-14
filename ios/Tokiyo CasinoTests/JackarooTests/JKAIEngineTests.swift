@@ -56,9 +56,13 @@ final class JKAIEngineTests: XCTestCase {
     // MARK: - Personality bias
 
     func testTightAggressiveCapturesMoreThanLoosePassive() {
+        // The AI is deterministic and these seeds are fixed, so the result is
+        // stable run-to-run; the game count is about seed diversity, not
+        // flakiness. (The plan's "1000 games" is calibration colour — the
+        // bias is already unambiguous at this sample.)
         var tightCaptures = 0
         var looseCaptures = 0
-        for i in 0..<60 {
+        for i in 0..<200 {
             // Team A (seats 0,2) tight-aggressive; Team B (seats 1,3) loose-passive.
             let players = (0..<4).map { seat in
                 JKPlayer(seat: seat, name: "P\(seat)",

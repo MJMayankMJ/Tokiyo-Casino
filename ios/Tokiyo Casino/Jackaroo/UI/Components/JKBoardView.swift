@@ -665,11 +665,14 @@ final class JKBoardView: UIView {
 
     // MARK: - Marble layout
 
-    func snapMarbles(from state: JKGameState) {
+    /// Snap every marble to its state position. Pass `excluding` to leave
+    /// one marble untouched (used while it is mid-animation).
+    func snapMarbles(from state: JKGameState, excluding excludedID: MarbleID? = nil) {
         lastState = state
         guard let layout = lastLayout ?? buildLayoutForNow() else { return }
         let marbleSize = layout.marbleSize
         for marble in state.marbles {
+            if marble.id == excludedID { continue }
             guard let view = marbleViews[marble.id],
                   let center = layout.point(for: marble.position, owner: marble.owner) else { continue }
             view.bounds = CGRect(x: 0, y: 0, width: marbleSize, height: marbleSize)
@@ -678,6 +681,12 @@ final class JKBoardView: UIView {
             view.isSelected = marble.id == selectedMarbleID
             bringSubviewToFront(view)
         }
+    }
+
+    /// Stop any in-flight marble movement (e.g. when backgrounding). Engine
+    /// state is unaffected; the caller should `snapMarbles` to reconcile.
+    func cancelMarbleAnimations() {
+        for (_, view) in marbleViews { view.layer.removeAllAnimations() }
     }
 
     /// Walk a marble through a path of track cells, then to a final

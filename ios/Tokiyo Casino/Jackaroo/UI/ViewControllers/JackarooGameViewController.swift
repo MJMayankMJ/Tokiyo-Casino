@@ -34,6 +34,18 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     /// Auto-hide the revealed hand after this many seconds of inactivity.
     private let autoHideSeconds: TimeInterval = 8
 
+    // MARK: - Marble animation
+
+    /// A marble is mid-flight: the board owns positions until it lands.
+    private var isAnimating = false
+    /// Bumped on every animation start and on cancel, so a stale
+    /// completion (e.g. after backgrounding) is ignored.
+    private var animationToken = 0
+    /// The single-marble move to animate this turn, captured in willResolve
+    /// (before the resolver mutates state) and consumed in didResolve.
+    private var pendingPrimary: MarbleID?
+    private var pendingPath: [CellID] = []
+
     /// Test seam. When true the VC does not auto-schedule AI turns on a
     /// timer and does not present the end-of-game alert, so a unit test
     /// can drive a full game synchronously and inspect the result.
@@ -111,6 +123,19 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         super.viewDidLoad()
         view.backgroundColor = MPTheme.pageBg
         setupUI()
+        // Backgrounding can freeze a CAAnimation mid-flight; reconcile the
+        // board to engine truth so a marble never strands off-position.
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(appWillResignActive),
+            name: UIApplication.willResignActiveNotification, object: nil)
+    }
+
+    @objc private func appWillResignActive() {
+        guard isAnimating else { return }
+        animationToken += 1          // invalidate the in-flight completion
+        isAnimating = false
+        boardView.cancelMarbleAnimations()
+        boardView.snapMarbles(from: engine.state)
     }
 
     override func viewDidLayoutSubviews() {
@@ -252,24 +277,56 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     func willResolve(_ move: JKMove, by seat: SeatID, path: [CellID]) {
         handStrip.isInteractive = false
+        // Capture what to animate *before* the resolver mutates state. The
+        // moving marble's view is still at its pre-move position here.
+        pendingPrimary = primaryAnimatableMarble(move)
+        pendingPath = path
     }
 
     func didResolve(_ move: JKMove, by seat: SeatID) {
-        // Update fire pile display.
         boardView.setFirePileTop(engine.state.firePile.last)
-        // Snap marbles into place — Phase 2 uses snap rather than full
-        // per-step animation, because move resolution happens before
-        // the delegate fires and the engine doesn't expose the path
-        // here. Real step-by-step animation comes from `animateMove`
-        // hooks in `willResolve`, which we'll wire fully in Phase 6.
-        boardView.snapMarbles(from: engine.state)
         refreshPlayerCorners()
-        handStrip.isInteractive = true
+
+        if !isAutomatedTestMode,
+           let primary = pendingPrimary, !pendingPath.isEmpty,
+           let marble = engine.state.marbles.first(where: { $0.id == primary }) {
+            // Snap everyone (captures home, etc.) except the mover, then
+            // slide the mover step-by-step along the path to its landing.
+            boardView.snapMarbles(from: engine.state, excluding: primary)
+            isAnimating = true
+            animationToken += 1
+            let token = animationToken
+            boardView.animateMove(marble: primary, from: marble.position,
+                                  to: marble.position, via: pendingPath,
+                                  owner: marble.owner) { [weak self] in
+                guard let self, token == self.animationToken else { return }
+                self.finishAnimation()
+            }
+        } else {
+            boardView.snapMarbles(from: engine.state)
+        }
+        pendingPrimary = nil
+        pendingPath = []
 
         if engine.state.winner != nil {
             handStrip.isInteractive = false
-            return
         }
+    }
+
+    /// The lone marble a move slides (others — swap/split7 — just snap).
+    private func primaryAnimatableMarble(_ move: JKMove) -> MarbleID? {
+        switch move {
+        case let .fieldFromHome(_, m), let .forward(_, m, _),
+             let .backward(_, m, _), let .anyMarble5(_, m, _):
+            return m
+        default:
+            return nil
+        }
+    }
+
+    private func finishAnimation() {
+        isAnimating = false
+        boardView.snapMarbles(from: engine.state)
     }
 
     func didCapture(_ marble: MarbleID, by seat: SeatID) {
@@ -301,11 +358,23 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         guard case .ai = engine.state.players[engine.state.currentSeat].kind else { return }
         let delay = Double.random(in: 0.6...1.2)
         DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-            guard let self = self else { return }
-            // Re-check in case the user navigated away.
-            guard self.view.window != nil else { return }
-            self.engine.stepAIIfNeeded()
+            self?.fireAIStep()
         }
+    }
+
+    /// Run the AI's move, but never while a marble is still sliding — wait
+    /// for the in-flight animation so turns don't overlap.
+    private func fireAIStep() {
+        guard view.window != nil else { return }            // user navigated away
+        guard engine.state.winner == nil else { return }
+        guard case .ai = engine.state.players[engine.state.currentSeat].kind else { return }
+        if isAnimating {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+                self?.fireAIStep()
+            }
+            return
+        }
+        engine.stepAIIfNeeded()
     }
 
     /// Test seam: play the first legal move for whoever is on turn,
@@ -404,7 +473,9 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
             : (isHumanTurn ? "\(s.players[s.currentSeat].name)'s turn to play a card"
                            : "\(s.players[s.currentSeat].name) is thinking")
         boardView.setFirePileTop(s.firePile.last)
-        boardView.snapMarbles(from: s)
+        // While a marble is sliding, the board owns positions — snapping
+        // here would teleport it. finishAnimation() reconciles when done.
+        if !isAnimating { boardView.snapMarbles(from: s) }
         refreshHandStrip()
         refreshPlayerCorners()
     }

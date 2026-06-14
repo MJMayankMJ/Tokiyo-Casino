@@ -141,6 +141,9 @@ public final class JackarooEngine {
         guard let pick = ai.chooseMove(for: state.currentSeat,
                                        moves: moves,
                                        state: state) else { return }
+        // Phase 4 exit criterion: the engine never plays an illegal AI move.
+        assert(moves.contains(pick),
+               "AI for seat \(state.currentSeat) chose a move outside the legal set: \(pick)")
         play(pick)
     }
 
