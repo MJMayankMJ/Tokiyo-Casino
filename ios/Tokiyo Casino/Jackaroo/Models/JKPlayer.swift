@@ -23,6 +23,17 @@ public enum JKPersonality: String, Codable, CaseIterable, Hashable {
         case .bluffer:         return "Maniac"
         }
     }
+
+    /// Emoji used alongside the name for AI seats in the lobby. Jackaroo's
+    /// own strings — not shared with Poker's `AIPersonality`.
+    var icon: String {
+        switch self {
+        case .tightAggressive: return "🦈"
+        case .loosePassive:    return "🐟"
+        case .balanced:        return "🎩"
+        case .bluffer:         return "🃏"
+        }
+    }
 }
 
 public enum JKPlayerKind: Codable, Hashable {

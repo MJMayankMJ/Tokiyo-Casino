@@ -41,20 +41,22 @@ public final class JackarooEngine {
 
     private let generator: JKLegalMoveGenerator
     private var resolver: JKMoveResolver
-    private let ai: JKAIEngine
+    private let ai: JKAIPolicy
 
     // MARK: - Init
 
     /// Set up a fresh game. The 4 players come from the caller; marbles
-    /// are auto-generated (4 per seat, all in Home).
+    /// are auto-generated (4 per seat, all in Home). `ai` defaults to the
+    /// Phase 4 heuristic; pass `JKFirstLegalAI()` for fast deterministic
+    /// baseline play (property / perf tests).
     public init(players: [JKPlayer],
                 rules: JKRulesPreset = .jawakerBasic,
                 seed: UInt64,
                 cellsPerQuadrant: Int = 25,
-                ai: JKAIEngine = JKAIEngine()) {
+                ai: JKAIPolicy? = nil) {
         precondition(players.count == 4, "Jackaroo needs exactly 4 players")
         self.graph = JKBoardGraph(cellsPerQuadrant: cellsPerQuadrant)
-        self.ai = ai
+        self.ai = ai ?? JKAIEngine(graph: graph)
 
         var marbles: [JKMarble] = []
         marbles.reserveCapacity(16)

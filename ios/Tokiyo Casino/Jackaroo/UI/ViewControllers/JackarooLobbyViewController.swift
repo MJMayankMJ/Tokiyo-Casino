@@ -157,7 +157,7 @@ final class JackarooLobbyViewController: UIViewController {
         } else {
             let p = aiPersonality(forSeat: seat)
             let label = UILabel()
-            label.text = "\(p.displayName)  ·  AI"
+            label.text = "\(p.icon) \(p.displayName)  ·  AI"
             label.font = MPFont.ui(15, weight: .heavy)
             label.textColor = MPTheme.muted
             label.textAlignment = .right
