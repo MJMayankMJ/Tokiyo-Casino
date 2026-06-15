@@ -7,8 +7,6 @@
 //  end-to-end functional and we can validate the rules layer from
 //  inside the running app.
 //
-//  Replaces the old Coino flip game.
-//
 
 import UIKit
 

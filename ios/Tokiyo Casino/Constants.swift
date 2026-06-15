@@ -33,7 +33,6 @@ enum DeviceLayout {
 
 enum K {
     // MARK: - Fonts
-    static let emojiFont     = "Apple Color Emoji"
     static let customFont    = "Pocket Monk"
     static let defaultFont   = "System"
 
@@ -45,12 +44,6 @@ enum K {
     // MARK: - Button Texts
     static let playJackaroo = "PLAY JACKAROO"
     static let playPoker    = "PLAY POKER"
-
-    // MARK: - Assets
-    static let imageArray = ["🍋", "❤️", "🍒", "⓻"]
-
-    // MARK: - Segues
-    static let toSlotVC   = "toSlotVC"
 
     // MARK: - Font Helper Methods
     static func customFont(size: CGFloat) -> UIFont {

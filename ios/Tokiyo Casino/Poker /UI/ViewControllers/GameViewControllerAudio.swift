@@ -11,7 +11,7 @@ extension GameViewController {
     
     // MARK: - BGM Setup
     func setupBGM() {
-        bgmManager.setupPlayer(soundName: "casino_bgm", soundType: .mp3)
+        bgmManager.setupPlayer(soundName: "poker_ambience_loop", soundType: .m4a)
         bgmManager.volume(0.3)
     }
     

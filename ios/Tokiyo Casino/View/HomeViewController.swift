@@ -20,6 +20,12 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
     private var viewModel = HomeViewModel()
     private var gameCards: [UIView] = []
+
+    // Shared radial-gradient backdrop used on the Poker & Jackaroo screens.
+    // Replaces the template city art (ww / Buildings / Cloud) so Home matches
+    // the in-game look and scales cleanly on iPhone + iPad (and follows
+    // light/dark automatically).
+    private let pageBackdrop = MPPageBackgroundView()
     // Daily-spin prompt path is quarantined — see REBRAND_PRD.md §3.1 / Phase A.
     // private var hasShownDailySpinPrompt = false
 
@@ -31,7 +37,13 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        installPageBackground()
         grantInitialChipsIfNeeded()
+
+        // The coin count was a fixed dark brown tuned for the old yellow
+        // background; switch it to the theme ink so it stays legible on the
+        // new (light/dark) backdrop.
+        labelTotalCoins.textColor = MPTheme.ink
 
         setupGameCards()
         setupTapGestures()
@@ -57,6 +69,21 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         CoinsManager.shared.addCoins(amount: Self.initialChipGrantAmount) { _ in
             defaults.set(true, forKey: Self.initialChipGrantKey)
         }
+    }
+
+    /// Inserts the shared gradient backdrop behind the (unchanged) game cards.
+    /// The storyboard's view background is set to clear and its template image
+    /// views (ww / Buildings / Cloud) are emptied so this shows through.
+    private func installPageBackground() {
+        view.backgroundColor = MPTheme.pageBg
+        pageBackdrop.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(pageBackdrop, at: 0)
+        NSLayoutConstraint.activate([
+            pageBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            pageBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            pageBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            pageBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
     }
 
     private func installMPChipInHeader() {

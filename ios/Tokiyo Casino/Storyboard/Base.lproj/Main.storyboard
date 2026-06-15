@@ -22,7 +22,7 @@
                                     <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="K9A-Ng-AvE" userLabel="Upper View">
                                         <rect key="frame" x="0.0" y="0.0" width="393" height="213"/>
                                         <subviews>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ww" translatesAutoresizingMaskIntoConstraints="NO" id="tlr-vk-Vxe">
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="tlr-vk-Vxe">
                                                 <rect key="frame" x="0.0" y="0.0" width="393" height="213"/>
                                             </imageView>
                                             <stackView opaque="NO" contentMode="scaleToFill" alignment="center" spacing="6" translatesAutoresizingMaskIntoConstraints="NO" id="iTu-jL-sgx" userLabel="chip Stack">
@@ -255,10 +255,10 @@
                                     <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="yvM-1o-NZ3" userLabel="Bottom View">
                                         <rect key="frame" x="0.0" y="639" width="393" height="213"/>
                                         <subviews>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Buildings" translatesAutoresizingMaskIntoConstraints="NO" id="436-El-QcW">
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="436-El-QcW">
                                                 <rect key="frame" x="0.0" y="0.0" width="393" height="213"/>
                                             </imageView>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Cloud" translatesAutoresizingMaskIntoConstraints="NO" id="DVl-Yz-Fd1">
+                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="DVl-Yz-Fd1">
                                                 <rect key="frame" x="0.0" y="0.0" width="393" height="213"/>
                                             </imageView>
                                         </subviews>
@@ -281,7 +281,7 @@
                             </stackView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
-                        <color key="backgroundColor" systemColor="systemYellowColor"/>
+                        <color key="backgroundColor" red="0.0" green="0.0" blue="0.0" alpha="0.0" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="Pwt-Em-n1Z" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" id="6ZB-Zg-3Ed"/>
                             <constraint firstAttribute="bottom" secondItem="Pwt-Em-n1Z" secondAttribute="bottom" id="Ds7-eT-urq"/>
@@ -298,141 +298,6 @@
                 <placeholder placeholderIdentifier="IBFirstResponder" id="dkx-z0-nzr" sceneMemberID="firstResponder"/>
             </objects>
             <point key="canvasLocation" x="816" y="406"/>
-        </scene>
-        <!--Slot View Controller-->
-        <scene sceneID="M3u-Np-Ggd">
-            <objects>
-                <viewController id="uNG-1k-zbZ" customClass="SlotViewController" customModule="Tokiyo_Casino" customModuleProvider="target" sceneMemberID="viewController">
-                    <view key="view" contentMode="scaleToFill" id="E7E-FN-qQ9">
-                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
-                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
-                        <subviews>
-                            <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="center" spacing="40" translatesAutoresizingMaskIntoConstraints="NO" id="eLI-HQ-Hlc">
-                                <rect key="frame" x="48" y="196" width="297" height="460"/>
-                                <subviews>
-                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="mtu-31-UW9" userLabel="slot view">
-                                        <rect key="frame" x="0.0" y="0.0" width="297" height="175"/>
-                                        <subviews>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="slot machine" translatesAutoresizingMaskIntoConstraints="NO" id="XPr-Hl-g9G">
-                                                <rect key="frame" x="0.0" y="0.0" width="297" height="175"/>
-                                                <constraints>
-                                                    <constraint firstAttribute="height" constant="175" id="Ddl-xj-0L5"/>
-                                                    <constraint firstAttribute="width" secondItem="XPr-Hl-g9G" secondAttribute="height" multiplier="295:174" id="Xk8-a9-q5P"/>
-                                                </constraints>
-                                            </imageView>
-                                            <pickerView contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="23C-ip-pNk">
-                                                <rect key="frame" x="30" y="45" width="221" height="85"/>
-                                            </pickerView>
-                                        </subviews>
-                                        <constraints>
-                                            <constraint firstItem="23C-ip-pNk" firstAttribute="height" secondItem="XPr-Hl-g9G" secondAttribute="height" multiplier="0.485714" id="1Yk-q4-3re"/>
-                                            <constraint firstItem="23C-ip-pNk" firstAttribute="centerX" secondItem="XPr-Hl-g9G" secondAttribute="centerX" constant="-8" id="9Di-as-N3e"/>
-                                            <constraint firstItem="23C-ip-pNk" firstAttribute="centerY" secondItem="XPr-Hl-g9G" secondAttribute="centerY" id="EPW-xV-Bic"/>
-                                            <constraint firstAttribute="trailing" secondItem="XPr-Hl-g9G" secondAttribute="trailing" id="IwE-6h-mRK"/>
-                                            <constraint firstItem="XPr-Hl-g9G" firstAttribute="leading" secondItem="mtu-31-UW9" secondAttribute="leading" id="cYX-Ql-zV3"/>
-                                            <constraint firstItem="XPr-Hl-g9G" firstAttribute="top" secondItem="mtu-31-UW9" secondAttribute="top" id="fFP-qJ-Ip2"/>
-                                            <constraint firstItem="23C-ip-pNk" firstAttribute="width" secondItem="XPr-Hl-g9G" secondAttribute="width" multiplier="0.744108" id="h8R-TW-qzZ"/>
-                                            <constraint firstAttribute="bottom" secondItem="XPr-Hl-g9G" secondAttribute="bottom" id="mPm-4U-3qd"/>
-                                        </constraints>
-                                    </view>
-                                    <stackView opaque="NO" contentMode="scaleToFill" spacing="10" translatesAutoresizingMaskIntoConstraints="NO" id="Faz-UA-vXg" userLabel="bet stack">
-                                        <rect key="frame" x="0.0" y="215" width="297" height="55"/>
-                                        <subviews>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="Zwe-ie-PSk">
-                                                <rect key="frame" x="0.0" y="0.0" width="55" height="55"/>
-                                                <constraints>
-                                                    <constraint firstAttribute="width" secondItem="Zwe-ie-PSk" secondAttribute="height" multiplier="1:1" id="64j-Gl-tZN"/>
-                                                </constraints>
-                                            </imageView>
-                                            <textField opaque="NO" contentMode="scaleToFill" horizontalHuggingPriority="248" contentHorizontalAlignment="left" contentVerticalAlignment="center" borderStyle="bezel" textAlignment="natural" minimumFontSize="17" translatesAutoresizingMaskIntoConstraints="NO" id="IpD-Z3-QzZ">
-                                                <rect key="frame" x="65" y="0.0" width="167" height="55"/>
-                                                <fontDescription key="fontDescription" type="system" pointSize="14"/>
-                                                <textInputTraits key="textInputTraits"/>
-                                            </textField>
-                                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" translatesAutoresizingMaskIntoConstraints="NO" id="leO-E6-5mL">
-                                                <rect key="frame" x="242" y="0.0" width="55" height="55"/>
-                                                <constraints>
-                                                    <constraint firstAttribute="width" secondItem="leO-E6-5mL" secondAttribute="height" multiplier="1:1" id="SCB-A7-YtX"/>
-                                                </constraints>
-                                            </imageView>
-                                        </subviews>
-                                        <constraints>
-                                            <constraint firstAttribute="height" constant="55" id="GBb-MF-HRI"/>
-                                        </constraints>
-                                    </stackView>
-                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="spin button" translatesAutoresizingMaskIntoConstraints="NO" id="uwc-vr-V8f">
-                                        <rect key="frame" x="27" y="310" width="243" height="150"/>
-                                        <constraints>
-                                            <constraint firstAttribute="width" secondItem="uwc-vr-V8f" secondAttribute="height" multiplier="60:37" id="Q5a-UN-xaa"/>
-                                            <constraint firstAttribute="height" constant="150" id="tDb-Ec-XBG"/>
-                                        </constraints>
-                                    </imageView>
-                                </subviews>
-                                <constraints>
-                                    <constraint firstItem="Faz-UA-vXg" firstAttribute="leading" secondItem="eLI-HQ-Hlc" secondAttribute="leading" id="Nw3-u0-XC8"/>
-                                    <constraint firstAttribute="trailing" secondItem="Faz-UA-vXg" secondAttribute="trailing" id="tQ2-l7-efj"/>
-                                </constraints>
-                            </stackView>
-                            <stackView opaque="NO" contentMode="scaleToFill" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="gmh-ce-lnO" userLabel="BANNER">
-                                <rect key="frame" x="46" y="79" width="301" height="53"/>
-                                <subviews>
-                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="arrow.backward.circle.fill" catalog="system" translatesAutoresizingMaskIntoConstraints="NO" id="s9M-H1-8YL">
-                                        <rect key="frame" x="0.0" y="0.66666666666666785" width="53" height="51.666666666666657"/>
-                                        <color key="tintColor" red="0.94901967050000002" green="0.64313727620000005" blue="0.24313727020000001" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
-                                        <constraints>
-                                            <constraint firstAttribute="width" secondItem="s9M-H1-8YL" secondAttribute="height" multiplier="1:1" id="Zpo-4w-UXp"/>
-                                        </constraints>
-                                    </imageView>
-                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="slotBanner" translatesAutoresizingMaskIntoConstraints="NO" id="DSr-Ey-MlR">
-                                        <rect key="frame" x="61" y="0.0" width="240" height="53"/>
-                                        <constraints>
-                                            <constraint firstAttribute="width" secondItem="DSr-Ey-MlR" secondAttribute="height" multiplier="240:53" id="hjK-34-DSt"/>
-                                            <constraint firstAttribute="width" constant="240" id="rAV-HI-Pyk"/>
-                                        </constraints>
-                                    </imageView>
-                                </subviews>
-                            </stackView>
-                            <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="bwk-75-3UH" userLabel="cloud">
-                                <rect key="frame" x="0.0" y="652" width="393" height="200"/>
-                                <subviews>
-                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFill" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Cloud" translatesAutoresizingMaskIntoConstraints="NO" id="Uj5-fO-GRf">
-                                        <rect key="frame" x="0.0" y="0.0" width="393" height="200"/>
-                                    </imageView>
-                                </subviews>
-                                <constraints>
-                                    <constraint firstItem="Uj5-fO-GRf" firstAttribute="leading" secondItem="bwk-75-3UH" secondAttribute="leading" id="9UX-gV-t4i"/>
-                                    <constraint firstAttribute="bottom" secondItem="Uj5-fO-GRf" secondAttribute="bottom" id="BW5-54-neO"/>
-                                    <constraint firstAttribute="height" constant="200" id="O0H-Mv-2TP"/>
-                                    <constraint firstAttribute="trailing" secondItem="Uj5-fO-GRf" secondAttribute="trailing" id="WlO-e1-3TH"/>
-                                    <constraint firstItem="Uj5-fO-GRf" firstAttribute="top" secondItem="bwk-75-3UH" secondAttribute="top" id="stp-81-3f5"/>
-                                </constraints>
-                            </view>
-                        </subviews>
-                        <viewLayoutGuide key="safeArea" id="YDX-ZZ-v9S"/>
-                        <color key="backgroundColor" red="0.8300097551002712" green="1" blue="0.75910789392884137" alpha="1" colorSpace="custom" customColorSpace="displayP3"/>
-                        <constraints>
-                            <constraint firstItem="bwk-75-3UH" firstAttribute="trailing" secondItem="YDX-ZZ-v9S" secondAttribute="trailing" id="0Vt-Wv-2vc"/>
-                            <constraint firstItem="gmh-ce-lnO" firstAttribute="centerX" secondItem="E7E-FN-qQ9" secondAttribute="centerX" id="GUz-TU-ysM"/>
-                            <constraint firstItem="eLI-HQ-Hlc" firstAttribute="centerY" secondItem="E7E-FN-qQ9" secondAttribute="centerY" id="Iw4-y4-QOq"/>
-                            <constraint firstItem="gmh-ce-lnO" firstAttribute="top" secondItem="YDX-ZZ-v9S" secondAttribute="top" constant="20" id="RSm-jN-tOe"/>
-                            <constraint firstItem="bwk-75-3UH" firstAttribute="leading" secondItem="YDX-ZZ-v9S" secondAttribute="leading" id="TEt-Ga-SZJ"/>
-                            <constraint firstAttribute="bottom" secondItem="bwk-75-3UH" secondAttribute="bottom" id="bKV-5d-zNF"/>
-                            <constraint firstItem="eLI-HQ-Hlc" firstAttribute="centerX" secondItem="E7E-FN-qQ9" secondAttribute="centerX" id="dIA-Xy-6sZ"/>
-                        </constraints>
-                    </view>
-                    <navigationItem key="navigationItem" id="9oe-Tr-oGd"/>
-                    <connections>
-                        <outlet property="backButton" destination="s9M-H1-8YL" id="VNH-uo-OQC"/>
-                        <outlet property="betAmountTextField" destination="IpD-Z3-QzZ" id="H4k-MC-b3s"/>
-                        <outlet property="minusButtonImageView" destination="Zwe-ie-PSk" id="ISm-Ee-Yje"/>
-                        <outlet property="pickerView" destination="23C-ip-pNk" id="Pjc-jQ-Clp"/>
-                        <outlet property="plusButtonImageView" destination="leO-E6-5mL" id="Ki9-Zb-meB"/>
-                        <outlet property="spinButtonImageView" destination="uwc-vr-V8f" id="BPz-cZ-mzd"/>
-                    </connections>
-                </viewController>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="XEK-4h-Lp6" userLabel="First Responder" customClass="UIResponder" sceneMemberID="firstResponder"/>
-            </objects>
-            <point key="canvasLocation" x="2001" y="-285"/>
         </scene>
         <!--Navigation Controller-->
         <scene sceneID="cU5-fl-xCL">
@@ -454,27 +319,10 @@
         </scene>
     </scenes>
     <resources>
-        <image name="+button" width="139" height="129"/>
-        <image name="-button" width="123" height="129"/>
-        <image name="Buildings" width="1126" height="714"/>
-        <image name="Cloud" width="1126" height="738"/>
-        <image name="Tails" width="1540" height="1504"/>
         <image name="TokiyoCards" width="534" height="327"/>
-        <image name="arrow.backward.circle.fill" catalog="system" width="128" height="123"/>
-        <image name="backgroundCoin" width="576" height="948"/>
         <image name="blueButton" width="124" height="106"/>
         <image name="circle.hexagonpath.fill" catalog="system" width="128" height="114"/>
         <image name="game1icon" width="273" height="215"/>
         <image name="game2icon" width="280" height="280"/>
-        <image name="slot machine" width="1012" height="603"/>
-        <image name="slotBanner" width="697" height="164"/>
-        <image name="spin button" width="755" height="484"/>
-        <image name="ww" width="1126" height="581"/>
-        <systemColor name="systemGray3Color">
-            <color red="0.7803921568627451" green="0.7803921568627451" blue="0.80000000000000004" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-        </systemColor>
-        <systemColor name="systemYellowColor">
-            <color red="1" green="0.80000000000000004" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-        </systemColor>
     </resources>
 </document>

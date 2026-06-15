@@ -902,7 +902,7 @@ extension JackarooGameViewController: JKHandStripDelegate {
             return
         }
 
-        // Card select feedback (DESIGN §6: light haptic + button_tap).
+        // Card select feedback (DESIGN §6: light haptic + select sfx).
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         JKAudio.shared.play(.select)
 

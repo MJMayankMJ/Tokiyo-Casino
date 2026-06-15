@@ -208,10 +208,10 @@ extension GameViewController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
             if humanWon {
-                self.winSoundManager.setupPlayer(soundName: "grand_win", soundType: .mp3)
+                self.winSoundManager.setupPlayer(soundName: "sfx_win", soundType: .m4a)
                 self.winSoundManager.play()
             } else {
-                self.loseSoundManager.setupPlayer(soundName: "loose_sound", soundType: .mp3)
+                self.loseSoundManager.setupPlayer(soundName: "sfx_lose", soundType: .m4a)
                 self.loseSoundManager.play()
             }
         }

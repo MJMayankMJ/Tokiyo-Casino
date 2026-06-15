@@ -2,9 +2,9 @@
 //  JKAudio.swift
 //  Tokiyo Casino — Jackaroo (Phase 6)
 //
-//  One-shot sound effects mapped to the existing shared assets per
-//  JACKAROO_DESIGN.md §6 (no new audio in V1). Every play routes
-//  through SoundManager, so the app-wide mute toggle is honoured.
+//  One-shot sound effects (original CC0 audio — see AUDIO_CREDITS.md).
+//  Every play routes through SoundManager, so the app-wide mute toggle
+//  is honoured.
 //
 
 import Foundation
@@ -26,10 +26,10 @@ final class JKAudio {
     func preload() {
         guard !loaded else { return }
         loaded = true
-        selectSfx.setupPlayer(soundName: "button_tap",      soundType: .mp3)
-        moveSfx.setupPlayer(soundName:   "coin_flip_sound", soundType: .mp3)
-        captureSfx.setupPlayer(soundName: "success_press",  soundType: .mp3)
-        winSfx.setupPlayer(soundName:    "grand_win",       soundType: .mp3)
+        selectSfx.setupPlayer(soundName: "sfx_ui_tap",      soundType: .m4a)
+        moveSfx.setupPlayer(soundName:   "sfx_marble_move", soundType: .m4a)
+        captureSfx.setupPlayer(soundName: "sfx_capture",    soundType: .m4a)
+        winSfx.setupPlayer(soundName:    "sfx_win",         soundType: .m4a)
     }
 
     func play(_ effect: Effect) {

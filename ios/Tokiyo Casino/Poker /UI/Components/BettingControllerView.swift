@@ -75,9 +75,9 @@ final class BettingControlsView: UIView {
     required init?(coder: NSCoder) { fatalError() }
 
     private func setupSounds() {
-        raiseSoundManager.setupPlayer(soundName: "raise_sound", soundType: .mp3)
-        allInSoundManager.setupPlayer(soundName: "AllIn_sound", soundType: .mp3)
-        checkSoundManager.setupPlayer(soundName: "spin_button_tap", soundType: .mp3)
+        raiseSoundManager.setupPlayer(soundName: "sfx_chip_bet", soundType: .m4a)
+        allInSoundManager.setupPlayer(soundName: "sfx_chip_stack", soundType: .m4a)
+        checkSoundManager.setupPlayer(soundName: "sfx_table_knock", soundType: .m4a)
     }
 
     private func setupView() {
