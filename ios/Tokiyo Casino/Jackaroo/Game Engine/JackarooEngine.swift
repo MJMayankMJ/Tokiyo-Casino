@@ -203,23 +203,27 @@ public final class JackarooEngine {
 
     // MARK: - Dealing
 
-    /// Reshuffles the Fire Pile back into the deck if empty, then
-    /// deals N cards per seat according to `dealCycle`.
+    /// Deals N cards per seat (per `dealCycle`), drawing one card at a
+    /// time so the Fire Pile is only folded back at the instant the draw
+    /// stack actually empties — not pre-emptively when it can't cover a
+    /// whole deal (SPEC §3 "reshuffled … when the draw stack empties" +
+    /// §7 ec11).
     public func dealNewHand() {
         state.handsDealt += 1
         let cardsPerSeat = cardsToDealThisHand()
 
-        // Refill deck if needed (re-fold Fire Pile, reshuffle).
-        ensureDeckHas(cards: cardsPerSeat * 4)
-
-        // Clear leftover cards in hand (shouldn't be any in default).
+        // In normal play every hand is already empty here (advanceTurn only
+        // redeals once all hands are empty). If a caller forces an early
+        // redeal, fold any leftover cards into the Fire Pile rather than
+        // dropping them, so the 52-card budget is always conserved.
         for i in 0..<state.players.count {
+            state.firePile.append(contentsOf: state.players[i].hand)
             state.players[i].hand.removeAll(keepingCapacity: true)
         }
 
         for _ in 0..<cardsPerSeat {
             for seat in 0..<4 {
-                if let c = state.deck.popLast() {
+                if let c = drawCard() {
                     state.players[seat].hand.append(c)
                 }
             }
@@ -244,16 +248,25 @@ public final class JackarooEngine {
         }
     }
 
-    private func ensureDeckHas(cards needed: Int) {
-        if state.deck.count >= needed { return }
-        // Fold the fire pile back and reshuffle.
+    /// Pop the top of the draw stack, refilling it first only if it is
+    /// genuinely empty.
+    private func drawCard() -> JKCard? {
+        if state.deck.isEmpty { refillDeck() }
+        return state.deck.popLast()
+    }
+
+    /// Replenish an empty draw stack. Mid-game this folds the Fire Pile
+    /// back in and logs a reshuffle (SPEC §7 ec11); at game start (both
+    /// empty) it seeds a fresh 52-card deck. Either way it shuffles with
+    /// the seeded RNG so the order stays replayable.
+    private func refillDeck() {
+        guard state.deck.isEmpty else { return }
         if !state.firePile.isEmpty {
             state.deck.append(contentsOf: state.firePile)
             state.firePile.removeAll(keepingCapacity: true)
             state.log.append(.reshuffled)
-        }
-        if state.deck.isEmpty {
-            state.deck = JKCard.freshDeck()
+        } else {
+            state.deck = JKCard.freshDeck()   // first deal — no Fire Pile yet
         }
         // Swift exclusivity: pull the RNG into a local so the in-out
         // parameter and the receiver (state.deck) don't both come from

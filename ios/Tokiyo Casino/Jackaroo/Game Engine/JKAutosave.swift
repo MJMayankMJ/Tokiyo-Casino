@@ -27,12 +27,23 @@ enum JKAutosave {
         }
     }
 
-    /// Returns a resumable (not-yet-finished) saved game, if one exists.
+    /// A saved game older than this is treated as stale (TECH_SPEC §7).
+    private static let maxAge: TimeInterval = 24 * 60 * 60
+
+    /// Returns a resumable (not-yet-finished, < 24 h old) saved game.
     static func load() -> JKGameState? {
-        guard let data = try? Data(contentsOf: fileURL),
+        guard isFresh,
+              let data = try? Data(contentsOf: fileURL),
               let state = try? JSONDecoder().decode(JKGameState.self, from: data),
               state.winner == nil else { return nil }
         return state
+    }
+
+    /// True only if the save file exists and was written within `maxAge`.
+    private static var isFresh: Bool {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+              let modified = attrs[.modificationDate] as? Date else { return false }
+        return Date().timeIntervalSince(modified) < maxAge
     }
 
     static var hasResumableGame: Bool { load() != nil }

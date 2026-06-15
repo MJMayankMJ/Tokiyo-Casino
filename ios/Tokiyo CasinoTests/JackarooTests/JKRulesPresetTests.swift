@@ -125,6 +125,45 @@ final class JKRulesPresetTests: XCTestCase {
                        "Basic 7 splits across exactly two marbles")
     }
 
+    /// A multi-own 7-split that is legal *only* if the sub-steps are
+    /// applied in a particular order: marble 0 sits directly behind
+    /// marble 1, so marble 1 must move first to clear the path. The
+    /// generator must try permuted application orders to find it.
+    func testSevenMultiOwn_findsOrderDependentSplit() {
+        // Keep direction cw (default seatOrder) while enabling multiOwn.
+        var state = JKFixture.makeState(rules: JKRulesPreset(sevenMode: .multiOwn))
+        JKFixture.place(0, at: .track(10), in: &state)   // rear
+        JKFixture.place(1, at: .track(11), in: &state)   // directly ahead → blocks marble 0
+        JKFixture.setHand([sevenClubs], for: 0, in: &state)
+
+        let twoMarbleSplits = gen().moves(in: state, for: 0).compactMap { move -> [JKSplitAllocation]? in
+            if case let .split7(_, allocs) = move, Set(allocs.map { $0.marble }) == [0, 1] {
+                return allocs
+            }
+            return nil
+        }
+        XCTAssertFalse(twoMarbleSplits.isEmpty,
+                       "Order-dependent split (move the blocker first) must be found")
+        // Every emitted two-marble split must be in a legal order: the
+        // blocker (marble 1) is applied before marble 0.
+        for allocs in twoMarbleSplits {
+            XCTAssertEqual(allocs.first?.marble, 1,
+                           "Allocations must be emitted in a legal application order")
+        }
+    }
+
+    /// Forcing a redeal while hands still hold cards must not leak the
+    /// 52-card budget (the leftover cards fold into the Fire Pile).
+    func testForcedRedeal_conservesCardBudget() {
+        let players = (0..<4).map { JKPlayer(seat: $0, name: "P\($0)", kind: .ai(personality: .balanced)) }
+        let engine = JackarooEngine(players: players, rules: .community, seed: 0xD1CE)
+        engine.start()
+        engine.dealNewHand()   // hands were full — a forced mid-hand redeal
+        let s = engine.state
+        let total = s.deck.count + s.firePile.count + s.players.reduce(0) { $0 + $1.hand.count }
+        XCTAssertEqual(total, 52, "A forced redeal must not lose cards")
+    }
+
     // MARK: - jackMode — red 11 / black swap
 
     func testRedJack_movesElevenInCommunity_swapsInBasic() {

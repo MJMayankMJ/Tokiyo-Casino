@@ -80,6 +80,30 @@ final class JKLegalMoveGeneratorTests: XCTestCase {
         }
     }
 
+    /// Regression: a partner marble *on the track* (swappable) must still
+    /// never be a Jack target before handoff — only true opponents are.
+    func testJack_neverSwapsPartnerMarbleOnTrack() {
+        var state = JKFixture.makeState()
+        let graph = JKBoardGraph()
+        let ownCell     = graph.walk(from: graph.baseCell[0]!, steps: 5, direction: .cw).last!
+        let partnerCell = graph.walk(from: graph.baseCell[2]!, steps: 5, direction: .cw).last!
+        let oppCell     = graph.walk(from: graph.baseCell[1]!, steps: 6, direction: .cw).last!
+        JKFixture.place(0, at: .track(ownCell), in: &state)      // seat 0 (own)
+        JKFixture.place(8, at: .track(partnerCell), in: &state)  // seat 2 (partner)
+        JKFixture.place(4, at: .track(oppCell), in: &state)      // seat 1 (opponent)
+        JKFixture.setHand([JKFixture.jackSpades], for: 0, in: &state)
+        let targets = JKLegalMoveGenerator(graph: graph).moves(in: state, for: 0)
+            .compactMap { (m: JKMove) -> MarbleID? in
+                if case let .swap(_, _, other) = m { return other }
+                return nil
+            }
+        XCTAssertFalse(targets.isEmpty, "Expected an opponent swap")
+        XCTAssertFalse(targets.contains(8), "A partner marble on the track must never be a swap target")
+        for other in targets {
+            XCTAssertEqual(JKMarble.ownerOf(other) % 2, 1, "Targets must be Team B opponents")
+        }
+    }
+
     // Edge case 3 — seven-split with two-own restriction.
     func testSevenSplit_twoOwn_rejectsSingleMarbleAllocation() {
         var state = JKFixture.makeState()

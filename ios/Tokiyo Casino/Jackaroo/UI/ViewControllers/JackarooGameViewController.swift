@@ -85,6 +85,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         humanSeats.contains(engine.state.currentSeat)
             && engine.state.winner == nil
             && handRevealed
+            && !isAnimating          // a move is still sliding — DESIGN §5
     }
 
     // MARK: - Init
@@ -364,7 +365,9 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     private func finishAnimation() {
         isAnimating = false
-        boardView.snapMarbles(from: engine.state)
+        // Re-enable the hand strip / reconcile the board now that the
+        // mover has landed (humanCanAct was false while animating).
+        refreshAllUI()
     }
 
     func didCapture(_ marble: MarbleID, by seat: SeatID) {
@@ -861,19 +864,26 @@ extension JackarooGameViewController: JKHandStripDelegate {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         JKAudio.shared.play(.select)
 
-        // Highlight cell-based targets.
         let highlights = computeHighlights()
-        boardView.highlightLegalTargets(trackCells: highlights.tracks,
-                                        safeCells: highlights.safe)
-        let targetCount = highlights.tracks.count + highlights.safe.values.reduce(0) { $0 + $1.count }
-        if targetCount > 0 {
-            UIAccessibility.post(notification: .announcement,
-                                 argument: "\(card.accessibleName) selected, \(targetCount) target\(targetCount == 1 ? "" : "s")")
+        let nonCellMoves = candidateMoves.filter { destination(of: $0) == nil }
+        let hasCellTargets = !highlights.tracks.isEmpty || !highlights.safe.isEmpty
+
+        // Mixed moves — some land on a cell, some don't (e.g. a Community
+        // red Queen = forward-12 *and* force-a-discard). One chooser lists
+        // everything so the non-cell option stays reachable.
+        if hasCellTargets && !nonCellMoves.isEmpty {
+            handleSpecialCaseMove(candidateMoves)
+            return
         }
 
-        // For moves without a track destination, show an action sheet.
-        let nonCellMoves = candidateMoves.filter { destination(of: $0) == nil }
-        if highlights.tracks.isEmpty && highlights.safe.isEmpty && !nonCellMoves.isEmpty {
+        if hasCellTargets {
+            boardView.highlightLegalTargets(trackCells: highlights.tracks,
+                                            safeCells: highlights.safe)
+            let targetCount = highlights.tracks.count + highlights.safe.values.reduce(0) { $0 + $1.count }
+            UIAccessibility.post(notification: .announcement,
+                                 argument: "\(card.accessibleName) selected, \(targetCount) target\(targetCount == 1 ? "" : "s")")
+        } else if !nonCellMoves.isEmpty {
+            // No cell targets — pure swap / split-7 / discard / burn.
             handleSpecialCaseMove(nonCellMoves)
         }
     }

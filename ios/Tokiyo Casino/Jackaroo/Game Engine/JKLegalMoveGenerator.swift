@@ -166,14 +166,14 @@ public struct JKLegalMoveGenerator {
         var out: [JKMove] = []
         let own = state.ownableMarbles(of: seat).filter { isSwappable($0, state: state) }
         for o in own {
-            // Opponent marbles = every other marble that is also swappable
-            // and isn't owned by the acting seat. Partner marbles ARE
-            // swappable from the partner's perspective when handoff is
-            // engaged; we keep it simple here and treat partner marbles
-            // as own.
+            // Swap targets are always opponents (the other team) — never the
+            // acting seat's own or its partner's marbles, regardless of
+            // handoff (SPEC §3: "swap … with an opponent's marble";
+            // TECH_SPEC §4). Post-handoff the partner's marbles can be the
+            // *source* (via ownableMarbles) but never the target.
             let opponents = state.marbles.filter { m in
                 m.owner != seat
-                && (!state.handoffEngaged[seat] || m.owner != JKTeam.partner(of: seat))
+                && m.owner != JKTeam.partner(of: seat)
                 && isSwappable(m, state: state)
             }
             for opp in opponents {
@@ -239,27 +239,33 @@ public struct JKLegalMoveGenerator {
     private func sevenMultiOwn(card: JKCard, seat: SeatID,
                                state: JKGameState, movable: [JKMarble]) -> [JKMove] {
         var out: [JKMove] = []
+        var seen = Set<[JKSplitAllocation]>()   // canonical (id-sorted) keys
         let ids = movable.map { $0.id }
         // No movable marbles (e.g. a 7 with everyone still Home) → no
         // split is possible; bail before forming the 1...0 range below.
         guard !ids.isEmpty else { return out }
-        // Generate every composition of 7 over 1...4 distinct marbles.
-        // Branching is bounded (4! × 7-choose-k ≈ small) so brute force is fine.
+        // Every composition of 7 over 1...4 distinct marbles. We enumerate
+        // ordered *permutations* (not combinations) because `splitIsLegal`
+        // applies sub-steps against a running copy, so application ORDER
+        // can decide legality (e.g. a rear marble must move before the one
+        // it sits behind clears the path). Each logical split is emitted
+        // once, in a legal order, deduped by its id-sorted key.
         for k in 1...min(4, ids.count) {
             generateCompositions(target: 7, parts: k) { steps in
-                // Map steps to distinct marble subsets.
-                forEachCombination(ids, k: k) { subset in
+                forEachPermutation(ids, k: k) { perm in
                     var alloc: [JKSplitAllocation] = []
                     for (idx, s) in steps.enumerated() {
-                        alloc.append(JKSplitAllocation(marble: subset[idx], steps: s))
+                        alloc.append(JKSplitAllocation(marble: perm[idx], steps: s))
                     }
-                    if splitIsLegal(alloc, seat: seat, state: state) {
+                    guard splitIsLegal(alloc, seat: seat, state: state) else { return }
+                    let key = alloc.sorted { $0.marble < $1.marble }
+                    if seen.insert(key).inserted {
                         out.append(.split7(card: card, allocations: alloc))
                     }
                 }
             }
         }
-        return stableUnique(out)
+        return out
     }
 
     /// Walk the allocations against a *running copy* of state so each
@@ -632,17 +638,21 @@ public struct JKLegalMoveGenerator {
         let reverse: JKDirection = state.direction == .cw ? .ccw : .cw
         var current = startCell
         var path: [CellID] = []
-        for _ in 0..<steps {
+        var stepsLeft = steps
+        while stepsLeft > 0 {
             guard let nxt = graph.next(from: current, direction: reverse) else { return nil }
-            if let blocker = trackBlocker(at: nxt, mover: marble, state: state),
-               case .ownMarble = blocker {
-                // Mid-path own marble is only a blocker when `cannotPassOwn`
-                // is on. If it's the final step we'd land on own marble
-                // regardless — illegal.
-                return nil
+            // Mid-path blockers stop a backward move exactly as they do a
+            // forward one (SPEC §3: own Base + blockade fronts cannot be
+            // bypassed; ec4: "still apply … in reverse direction").
+            if stepsLeft > 1, let blocker = trackBlocker(at: nxt, mover: marble, state: state) {
+                switch blocker {
+                case .blockade, .protectedBase, .ownMarble, .opponent:
+                    return nil
+                }
             }
             current = nxt
             path.append(current)
+            stepsLeft -= 1
         }
         if let blocker = trackBlocker(at: current, mover: marble, state: state) {
             switch blocker {
@@ -774,21 +784,23 @@ public struct JKLegalMoveGenerator {
         if target >= parts { recurse(remaining: target, partsLeft: parts) }
     }
 
-    private func forEachCombination<T>(_ items: [T], k: Int,
+    /// Every ordered k-permutation of `items` (order matters because a
+    /// 7-split's sub-steps are applied sequentially against a running copy).
+    private func forEachPermutation<T>(_ items: [T], k: Int,
                                        body: ([T]) -> Void) {
-        guard k <= items.count else { return }
-        var idxs = Array(0..<k)
-        func emit() {
-            body(idxs.map { items[$0] })
+        guard k > 0, k <= items.count else { return }
+        var used = Array(repeating: false, count: items.count)
+        var current: [T] = []
+        func recurse() {
+            if current.count == k { body(current); return }
+            for i in items.indices where !used[i] {
+                used[i] = true
+                current.append(items[i])
+                recurse()
+                current.removeLast()
+                used[i] = false
+            }
         }
-        emit()
-        while true {
-            var i = k - 1
-            while i >= 0 && idxs[i] == items.count - k + i { i -= 1 }
-            if i < 0 { return }
-            idxs[i] += 1
-            for j in (i + 1)..<k { idxs[j] = idxs[j - 1] + 1 }
-            emit()
-        }
+        recurse()
     }
 }
