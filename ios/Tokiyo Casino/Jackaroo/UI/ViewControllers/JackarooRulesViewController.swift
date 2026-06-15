@@ -4,7 +4,8 @@
 //
 //  Card-by-card rule listing for the active ruleset, presented as a
 //  bottom sheet. Mirrors PokerRulesViewController's chrome + row style.
-//  Built from JACKAROO_SPEC.md §3 (the default Jawaker Basic preset).
+//  Card-effect copy adapts to the chosen preset (Basic / Complex /
+//  Community) per JACKAROO_SPEC.md §3–4.
 //
 
 import UIKit
@@ -45,27 +46,47 @@ final class JackarooRulesViewController: UIViewController {
     required init?(coder: NSCoder) { fatalError() }
 
     private var rows: [RuleRow] {
-        [
+        let kingDetail = preset.kingMode == .fieldOrThirteenCapture
+            ? "Bring a marble out of Home onto your Base, or move a marble forward 13 — capturing every marble it passes."
+            : "Bring a marble out of Home onto your Base."
+
+        let queenDetail = preset.queenMode == .blackTwelveRedDiscard
+            ? "A black Queen moves one marble forward 12. A red Queen forces an opponent to discard a card."
+            : "Move one marble forward 12."
+
+        let jackDetail = preset.jackMode == .redElevenBlackSwap
+            ? "A black Jack swaps one of your marbles with an opponent's. A red Jack moves a marble forward 11."
+            : "Swap one of your marbles with an opponent's. Neither may be Home, on Base, or in Safe."
+
+        let sevenDetail = preset.sevenMode == .multiOwn
+            ? "Split 7 steps across up to four of your own marbles."
+            : "Split 7 steps across two of your own marbles."
+
+        let numbersDetail = preset.fiveMode == .anyMarbleOnTrack
+            ? "2, 3, 6, 8, 9, 10 move one marble forward by their value. A 5 may move any marble on the track forward 5 — including an opponent's."
+            : "2, 3, 5, 6, 8, 9, 10 move one marble forward by their face value."
+
+        return [
             RuleRow(title: "Ace",
                     detail: "Bring a marble out of Home onto your Base, or move a marble forward 1 or 11.",
                     card: JKCard(suit: .spades, rank: .ace)),
             RuleRow(title: "King",
-                    detail: "Bring a marble out of Home onto your Base.",
+                    detail: kingDetail,
                     card: JKCard(suit: .clubs, rank: .king)),
             RuleRow(title: "Queen",
-                    detail: "Move one marble forward 12.",
+                    detail: queenDetail,
                     card: JKCard(suit: .hearts, rank: .queen)),
             RuleRow(title: "Jack",
-                    detail: "Swap one of your marbles with an opponent's. Neither may be Home, on Base, or in Safe.",
+                    detail: jackDetail,
                     card: JKCard(suit: .spades, rank: .jack)),
             RuleRow(title: "Seven",
-                    detail: "Split 7 steps across two of your own marbles.",
+                    detail: sevenDetail,
                     card: JKCard(suit: .diamonds, rank: .seven)),
             RuleRow(title: "Four",
                     detail: "Move one marble backward 4.",
                     card: JKCard(suit: .clubs, rank: .four)),
             RuleRow(title: "Number cards",
-                    detail: "2, 3, 5, 6, 8, 9, 10 move one marble forward by their face value.",
+                    detail: numbersDetail,
                     card: JKCard(suit: .hearts, rank: .six)),
         ]
     }
@@ -87,7 +108,7 @@ final class JackarooRulesViewController: UIViewController {
         titleLabel.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(titleLabel)
 
-        subtitleLabel.text = "Jawaker Basic — card effects"
+        subtitleLabel.text = "\(preset.displayName) — card effects"
         subtitleLabel.font = MPFont.ui(12, weight: .semibold)
         subtitleLabel.textColor = MPTheme.muted
         subtitleLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -156,10 +177,16 @@ final class JackarooRulesViewController: UIViewController {
     }
 
     private func makeNoteCard() -> UIView {
-        infoCard(
-            title: nil,
-            body: "If you can't make any legal move with your whole hand, the hand is burned to the Fire Pile and play passes on."
-        )
+        var body = "If you can't make any legal move with your whole hand, the hand is burned to the Fire Pile and play passes on."
+        switch preset.dealCycle {
+        case .fourThenFive:
+            body += " The first deal is 4 cards; every deal after is 5."
+        case .fourFourFive:
+            body += " Deals rotate 4, 4, then 5 cards."
+        case .four:
+            break
+        }
+        return infoCard(title: nil, body: body)
     }
 
     private func infoCard(title: String?, body: String) -> UIView {
@@ -184,7 +211,10 @@ final class JackarooRulesViewController: UIViewController {
         }
         let b = UILabel()
         b.text = body
-        b.font = MPFont.ui(12, weight: .semibold)
+        // Dynamic Type: the rules sheet scrolls, so larger text just
+        // makes the cards taller — safe to scale.
+        b.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: MPFont.ui(12, weight: .semibold))
+        b.adjustsFontForContentSizeCategory = true
         b.textColor = MPTheme.muted
         b.numberOfLines = 0
         stack.addArrangedSubview(b)
@@ -221,7 +251,8 @@ final class JackarooRulesViewController: UIViewController {
 
         let detail = UILabel()
         detail.text = row.detail
-        detail.font = MPFont.ui(12, weight: .semibold)
+        detail.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: MPFont.ui(12, weight: .semibold))
+        detail.adjustsFontForContentSizeCategory = true
         detail.textColor = MPTheme.muted
         detail.numberOfLines = 0
         detail.translatesAutoresizingMaskIntoConstraints = false

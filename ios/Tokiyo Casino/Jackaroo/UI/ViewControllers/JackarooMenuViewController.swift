@@ -3,8 +3,8 @@
 //  Tokiyo Casino — Jackaroo (Phase 3)
 //
 //  Setup screen for Jackaroo. Pick Solo vs AI or Hot-Seat (2–4 humans
-//  on one device), with the ruleset locked to Jawaker Basic in V1
-//  (variant presets are Phase 5). Mirrors Poker's MenuViewController.
+//  on one device) and the ruleset (Basic / Complex / Community, the
+//  three locked-in V1 presets). Mirrors Poker's MenuViewController.
 //
 
 import UIKit
@@ -25,8 +25,15 @@ final class JackarooMenuViewController: UIViewController {
     private let playersSection = UIStackView()
 
     private let rulesetEyebrow = mpSectionEyebrow("Ruleset")
-    private let presetChip = JKLockedChip(title: "Jawaker Basic")
+    private let presetPicker = JKSegment(items: JKRulesPreset.selectableOptions.map { $0.name })
+    private let presetCaption = JackarooMenuViewController.makeCaption()
 
+    /// The ruleset the player has selected (locked at game start).
+    private var selectedPreset: JKRulesPreset {
+        JKRulesPreset.selectableOptions[presetPicker.selectedIndex].preset
+    }
+
+    private let resumeButton = MPPrimaryButton(title: "Resume game")
     private let startButton = MPPrimaryButton(title: "Start Game")
     private let rulesButton = MPSecondaryButton(title: "How to play")
 
@@ -40,6 +47,12 @@ final class JackarooMenuViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
+        refreshResume()
+    }
+
+    /// Show the Resume pill only when a mid-game autosave exists.
+    private func refreshResume() {
+        resumeButton.isHidden = !JKAutosave.hasResumableGame
     }
 
     override func viewWillDisappear(_ animated: Bool) {
@@ -70,6 +83,8 @@ final class JackarooMenuViewController: UIViewController {
         titleBlock.translatesAutoresizingMaskIntoConstraints = false
 
         modePicker.onChange = { [weak self] _ in self?.updateModeVisibility() }
+        presetPicker.onChange = { [weak self] _ in self?.updatePresetCaption() }
+        updatePresetCaption()
 
         playersSection.axis = .vertical
         playersSection.alignment = .fill
@@ -80,11 +95,20 @@ final class JackarooMenuViewController: UIViewController {
         startButton.addTarget(self, action: #selector(startTapped), for: .touchUpInside)
         rulesButton.addTarget(self, action: #selector(rulesTapped), for: .touchUpInside)
 
+        resumeButton.addTarget(self, action: #selector(resumeTapped), for: .touchUpInside)
+        resumeButton.isHidden = true
+        resumeButton.accessibilityHint = "Continues the game you left in progress."
+
         center.addArrangedSubview(titleBlock)
-        center.setCustomSpacing(28, after: titleBlock)
+        center.setCustomSpacing(24, after: titleBlock)
+        center.addArrangedSubview(resumeButton)
+        center.setCustomSpacing(20, after: resumeButton)
         center.addArrangedSubview(makeSection(modeEyebrow, modePicker))
         center.addArrangedSubview(playersSection)
-        center.addArrangedSubview(makeSection(rulesetEyebrow, presetChip))
+        let rulesetSection = makeSection(rulesetEyebrow, presetPicker)
+        rulesetSection.addArrangedSubview(presetCaption)
+        rulesetSection.setCustomSpacing(6, after: presetPicker)
+        center.addArrangedSubview(rulesetSection)
         center.setCustomSpacing(28, after: center.arrangedSubviews.last!)
         let cta = UIStackView(arrangedSubviews: [startButton, rulesButton])
         cta.axis = .vertical
@@ -138,6 +162,19 @@ final class JackarooMenuViewController: UIViewController {
         return header
     }
 
+    private static func makeCaption() -> UILabel {
+        let l = UILabel()
+        l.font = MPFont.ui(12, weight: .medium)
+        l.textColor = MPTheme.muted
+        l.numberOfLines = 0
+        return l
+    }
+
+    private func updatePresetCaption() {
+        let option = JKRulesPreset.selectableOptions[presetPicker.selectedIndex]
+        presetCaption.text = option.caption
+    }
+
     private func updateModeVisibility() {
         let isHotSeat = modePicker.selectedIndex == 1
         UIView.animate(withDuration: 0.2) {
@@ -159,7 +196,18 @@ final class JackarooMenuViewController: UIViewController {
 
     @objc private func rulesTapped() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        present(JackarooRulesViewController(), animated: true)
+        present(JackarooRulesViewController(preset: selectedPreset), animated: true)
+    }
+
+    @objc private func resumeTapped() {
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        guard let state = JKAutosave.load() else {
+            refreshResume()   // stale (finished/corrupt) — hide the pill
+            return
+        }
+        let game = JackarooGameViewController(restoring: state)
+        game.modalPresentationStyle = .fullScreen
+        navigationController?.pushViewController(game, animated: true)
     }
 
     @objc private func startTapped() {
@@ -170,14 +218,16 @@ final class JackarooMenuViewController: UIViewController {
             pushGame(players: players)
         } else {
             // Hot-seat — collect names + seats in the lobby.
-            let lobby = JackarooLobbyViewController(humanCount: playerPicker.value)
+            let lobby = JackarooLobbyViewController(humanCount: playerPicker.value,
+                                                    rules: selectedPreset)
             navigationController?.pushViewController(lobby, animated: true)
         }
     }
 
     private func pushGame(players: [JKPlayer]) {
         let game = JackarooGameViewController(players: players,
-                                             seed: UInt64.random(in: 1...UInt64.max))
+                                             seed: UInt64.random(in: 1...UInt64.max),
+                                             rules: selectedPreset)
         game.modalPresentationStyle = .fullScreen
         navigationController?.pushViewController(game, animated: true)
     }
@@ -196,51 +246,6 @@ enum JackarooSeating {
             return JKPlayer(seat: seat, name: p.displayName, kind: .ai(personality: p))
         }
     }
-}
-
-// MARK: - Locked ruleset chip
-
-private final class JKLockedChip: UIView {
-    init(title: String) {
-        super.init(frame: .zero)
-        backgroundColor = MPTheme.glassWeak
-        layer.cornerRadius = 14
-        layer.borderWidth = 1
-        layer.borderColor = MPTheme.border.cgColor
-
-        let icon = UIImageView(image: UIImage(systemName: "lock.fill"))
-        icon.tintColor = MPTheme.muted
-        icon.contentMode = .scaleAspectFit
-        icon.setContentHuggingPriority(.required, for: .horizontal)
-
-        let name = UILabel()
-        name.text = title
-        name.font = MPFont.ui(15, weight: .bold)
-        name.textColor = MPTheme.ink
-
-        let tag = UILabel()
-        tag.attributedText = NSAttributedString(string: "V1", attributes: [
-            .kern: 1.0, .font: MPFont.ui(10, weight: .heavy), .foregroundColor: MPTheme.muted,
-        ])
-
-        let stack = UIStackView(arrangedSubviews: [name, UIView(), tag, icon])
-        stack.axis = .horizontal
-        stack.alignment = .center
-        stack.spacing = 8
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            icon.widthAnchor.constraint(equalToConstant: 14),
-            heightAnchor.constraint(equalToConstant: 52),
-        ])
-        isAccessibilityElement = true
-        accessibilityLabel = "Ruleset: \(title). Locked in this version."
-    }
-    required init?(coder: NSCoder) { fatalError() }
 }
 
 // MARK: - Simple text segmented control (matches MPPlayerPicker styling)

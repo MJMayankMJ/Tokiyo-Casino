@@ -48,6 +48,15 @@ public enum JKMove: Codable, Hashable {
     /// forward 5.
     case anyMarble5(card: JKCard, marble: MarbleID, steps: Int)
 
+    /// `kingMode = .fieldOrThirteenCapture` only — move one own marble
+    /// 13 forward, capturing **every** opponent marble it passes
+    /// (subject to blockades / protected bases). Distinct from
+    /// `.forward(steps: 13)` because the standard walker stops at the
+    /// first blocker and captures only at the landing cell; this one
+    /// walks the path and may return multiple captures. See
+    /// JACKAROO_SPEC.md §7 ec10.
+    case kingThirteen(card: JKCard, marble: MarbleID)
+
     /// Red queen forces a victim to discard. The acting player picks
     /// `victim`; the resolver picks which of the victim's cards is
     /// lost at apply time (using `state.rng`) and logs the choice via
@@ -71,6 +80,7 @@ extension JKMove {
         case let .split7(c, _):              return [c]
         case let .swap(c, _, _):             return [c]
         case let .anyMarble5(c, _, _):       return [c]
+        case let .kingThirteen(c, _):        return [c]
         case let .redQueenDiscard(c, _):     return [c]
         case let .burnHand(cards):           return cards
         case let .burnCard(c):               return [c]

@@ -105,10 +105,11 @@ public struct JKAIEngine: JKAIPolicy {
 
         // progressDelta — Safe-distance reduction across ownable marbles,
         // weighted ×3 for a marble newly entering Safe.
+        let dir = state.direction
         var progressDelta = 0.0
         for before in state.marbles where ours.contains(before.owner) {
             guard let aft = after.marbles.first(where: { $0.id == before.id }) else { continue }
-            var delta = Double(progress(aft) - progress(before))
+            var delta = Double(progress(aft, direction: dir) - progress(before, direction: dir))
             if case .safe = aft.position, !isSafe(before.position) { delta *= 3 }
             progressDelta += delta
         }
@@ -118,7 +119,7 @@ public struct JKAIEngine: JKAIPolicy {
         for event in after.log {
             if case let .captured(mid, by) = event, by == seat,
                let victim = state.marbles.first(where: { $0.id == mid }) {
-                captureBonus += 5.0 * Double(max(1, progress(victim)))
+                captureBonus += 5.0 * Double(max(1, progress(victim, direction: dir)))
             }
         }
 
@@ -152,14 +153,16 @@ public struct JKAIEngine: JKAIPolicy {
     private var trackLen: Int { graph.trackCells.count }
 
     /// Monotonic "how far home" score: Home = 0, on track grows toward the
-    /// Safe gate, in Safe is beyond the whole track.
-    private func progress(_ m: JKMarble) -> Int {
+    /// Safe gate, in Safe is beyond the whole track. `direction` is the
+    /// table's travel direction (ccw under the Community preset), so the
+    /// metric stays correct regardless of seat order.
+    private func progress(_ m: JKMarble, direction: JKDirection) -> Int {
         switch m.position {
         case .home:
             return 0
         case .track(let cell):
             // distanceToSafeGate is measured in the player's travel direction.
-            let d = graph.distanceToSafeGate(from: cell, for: m.owner, direction: .cw)
+            let d = graph.distanceToSafeGate(from: cell, for: m.owner, direction: direction)
             return trackLen - d
         case .safe(let lane):
             return trackLen + 1 + lane
@@ -236,7 +239,8 @@ public struct JKAIEngine: JKAIPolicy {
     private func movedMarbleIDs(_ move: JKMove) -> [MarbleID] {
         switch move {
         case let .fieldFromHome(_, m), let .forward(_, m, _),
-             let .backward(_, m, _), let .anyMarble5(_, m, _):
+             let .backward(_, m, _), let .anyMarble5(_, m, _),
+             let .kingThirteen(_, m):
             return [m]
         case let .split7(_, allocs):
             return allocs.map { $0.marble }

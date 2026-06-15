@@ -49,6 +49,9 @@ public struct JKMoveResolver {
                            seat: seat, backward: false, state: &state,
                            allowSafeEntry: false)
 
+        case let .kingThirteen(card, marble):
+            applyKingThirteen(card: card, marble: marble, seat: seat, state: &state)
+
         case let .split7(card, allocations):
             applySplit7(card: card, allocations: allocations, seat: seat, state: &state)
 
@@ -120,6 +123,27 @@ public struct JKMoveResolver {
         if let captured = o.capture {
             sendHome(marbleID: captured, state: &state)
             state.log.append(.captured(captured, by: seat))
+        }
+        state.marbles[mIdx].position = o.destination
+        consumeCard(card, from: seat, state: &state)
+        state.log.append(.marbleMoved(marble, from: from, to: o.destination, via: o.path))
+    }
+
+    private func applyKingThirteen(card: JKCard, marble: MarbleID,
+                                   seat: SeatID, state: inout JKGameState) {
+        guard let mIdx = state.marbles.firstIndex(where: { $0.id == marble }) else { return }
+        let m = state.marbles[mIdx]
+        guard let o = generator.walkKingThirteen(marble: m, seat: seat, state: state) else {
+            assertionFailure("Resolver received an illegal King-13 move for marble \(marble)")
+            return
+        }
+        let from = m.position
+        // Send every marble the King passed Home, in path order. Each
+        // sendHome re-reads state so colliding Home slots are assigned
+        // distinctly.
+        for cap in o.captures {
+            sendHome(marbleID: cap, state: &state)
+            state.log.append(.captured(cap, by: seat))
         }
         state.marbles[mIdx].position = o.destination
         consumeCard(card, from: seat, state: &state)

@@ -110,12 +110,16 @@ public struct JKLegalMoveGenerator {
             }
         }
         if state.rules.kingMode == .fieldOrThirteenCapture {
+            // 13-step King is its own move: it captures every marble it
+            // passes (ec10), which the standard forward walker cannot
+            // express. Home marbles are covered by fieldFromHome above.
             for m in state.ownableMarbles(of: seat) {
-                out += forwardMovesForMarble(card: card, marble: m,
-                                             steps: 13, seat: seat, state: state)
+                if walkKingThirteen(marble: m, seat: seat, state: state) != nil {
+                    out.append(.kingThirteen(card: card, marble: m.id))
+                }
             }
         }
-        return out
+        return stableUnique(out)
     }
 
     // MARK: - Queen
@@ -236,6 +240,9 @@ public struct JKLegalMoveGenerator {
                                state: JKGameState, movable: [JKMarble]) -> [JKMove] {
         var out: [JKMove] = []
         let ids = movable.map { $0.id }
+        // No movable marbles (e.g. a 7 with everyone still Home) → no
+        // split is possible; bail before forming the 1...0 range below.
+        guard !ids.isEmpty else { return out }
         // Generate every composition of 7 over 1...4 distinct marbles.
         // Branching is bounded (4! × 7-choose-k ≈ small) so brute force is fine.
         for k in 1...min(4, ids.count) {
@@ -546,6 +553,70 @@ public struct JKLegalMoveGenerator {
         return WalkOutcome(destination: .safe(lane: endLane),
                            path: pathSoFar,
                            capture: nil)
+    }
+
+    // MARK: - King-13 walker (Complex / Community)
+
+    /// Like `WalkOutcome` but a 13-step King can capture more than one
+    /// marble — every opponent on the path is returned in order.
+    struct KingWalkOutcome {
+        let destination: JKPosition
+        let path: [CellID]
+        let captures: [MarbleID]
+    }
+
+    /// 13-step King (`kingMode == .fieldOrThirteenCapture`). Walks the
+    /// path cell-by-cell, capturing every opponent it passes; a
+    /// blockade front, a protected Base, or an own marble still stops
+    /// it (returns nil). May divert into the owner's Safe at the gate
+    /// exactly like a normal forward. Returns nil for a Home marble
+    /// (those field via `fieldFromHome`).
+    func walkKingThirteen(marble: JKMarble,
+                          seat: SeatID,
+                          state: JKGameState) -> KingWalkOutcome? {
+        guard case .track(let startCell) = marble.position else { return nil }
+        let steps = 13
+        let direction = state.direction
+        let owner = marble.owner
+        let rules = state.rules
+        let mayEnterOwnSafe =
+            owner == seat || (rules.partnerHandoff && state.handoffEngaged[seat]
+                              && owner == JKTeam.partner(of: seat))
+
+        var current = startCell
+        var path: [CellID] = []
+        var captures: [MarbleID] = []
+        var stepsLeft = steps
+
+        while stepsLeft > 0 {
+            // Safe diversion at the gate — no captures happen inside Safe,
+            // so the track captures collected so far carry through.
+            if mayEnterOwnSafe,
+               current == graph.safeGateCell[owner],
+               stepsLeft >= 1,
+               let outcome = trySafeEntryFromGate(owner: owner,
+                                                  stepsInsideSafe: stepsLeft,
+                                                  state: state,
+                                                  pathSoFar: path) {
+                return KingWalkOutcome(destination: outcome.destination,
+                                       path: outcome.path,
+                                       captures: captures)
+            }
+
+            guard let nxt = graph.next(from: current, direction: direction) else { return nil }
+            if let blocker = trackBlocker(at: nxt, mover: marble, state: state) {
+                switch blocker {
+                case .blockade, .protectedBase, .ownMarble:
+                    return nil               // King cannot pass these
+                case .opponent(let oid):
+                    captures.append(oid)     // pass through, sending it Home
+                }
+            }
+            current = nxt
+            path.append(current)
+            stepsLeft -= 1
+        }
+        return KingWalkOutcome(destination: .track(current), path: path, captures: captures)
     }
 
     // MARK: - Backward walker

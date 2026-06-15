@@ -161,3 +161,42 @@ public extension JKRulesPreset {
         queenMode: .blackTwelveRedDiscard
     )
 }
+
+// MARK: - V1 selectable presets (menu + settings + rules)
+
+public extension JKRulesPreset {
+    /// One pickable ruleset, with copy for the menu/settings/rules UI.
+    /// V1 ships locked-in presets only — no freeform toggle editor
+    /// (JACKAROO_SPEC.md §4).
+    struct Option: Hashable {
+        public let name: String
+        public let caption: String
+        public let preset: JKRulesPreset
+    }
+
+    /// The three presets a player can choose, in display order. The
+    /// menu segmented control, the in-game settings sheet, and the
+    /// rules screen all read from this single source.
+    static let selectableOptions: [Option] = [
+        Option(name: "Basic",
+               caption: "Jawaker Basic — the classic, balanced ruleset.",
+               preset: .jawakerBasic),
+        Option(name: "Complex",
+               caption: "Adds King-13 (captures all it passes) and 5-on-any-marble.",
+               preset: .jawakerComplex),
+        Option(name: "Community",
+               caption: "Complex, plus 4-then-5 deals, multi-marble 7s, and red Jack/Queen.",
+               preset: .community),
+    ]
+
+    /// Index of this preset among `selectableOptions`, or nil if it's a
+    /// non-standard combination.
+    var selectableIndex: Int? {
+        Self.selectableOptions.firstIndex { $0.preset == self }
+    }
+
+    /// Short label for the active preset (defaults to "Custom").
+    var displayName: String {
+        selectableIndex.map { Self.selectableOptions[$0].name } ?? "Custom"
+    }
+}

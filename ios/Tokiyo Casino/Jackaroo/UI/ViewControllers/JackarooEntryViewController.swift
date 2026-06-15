@@ -183,6 +183,7 @@ final class JackarooEntryViewController: UIViewController {
         case .forward(let c, let id, let s):  return "\(c.debugDescription) fwd \(s) on marble \(id)"
         case .backward(let c, let id, let s): return "\(c.debugDescription) bwd \(s) on marble \(id)"
         case .anyMarble5(let c, let id, _):   return "\(c.debugDescription) any-fwd-5 on marble \(id)"
+        case .kingThirteen(let c, let id):    return "\(c.debugDescription) king-13 on marble \(id)"
         case .split7(_, let allocs):
             let parts = allocs.map { "(m\($0.marble):\($0.steps))" }.joined(separator: "+")
             return "7 split \(parts)"

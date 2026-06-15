@@ -104,16 +104,32 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     /// Designated init. Exposed so tests can stand up an all-AI table
     /// and drive a complete game through the real delegate pipeline.
-    init(players: [JKPlayer], seed: UInt64) {
-        self.engine = JackarooEngine(players: players, seed: seed)
+    /// Pass `restoring:` to rebuild a saved mid-game state (resume).
+    init(players: [JKPlayer], seed: UInt64,
+         rules: JKRulesPreset = .jawakerBasic,
+         restoring: JKGameState? = nil) {
+        if let restoring {
+            self.engine = JackarooEngine(restoring: restoring)
+        } else {
+            self.engine = JackarooEngine(players: players, rules: rules, seed: seed)
+        }
         self.boardView = JKBoardView(graph: engine.graph)
         self.humanSeats = Set(players.compactMap { p in
             if case .human = p.kind { return p.seat }
             return nil
         })
+        self.isResuming = (restoring != nil)
         super.init(nibName: nil, bundle: nil)
     }
+
+    /// Resume a saved game. Players + ruleset come from the saved state.
+    convenience init(restoring state: JKGameState) {
+        self.init(players: state.players, seed: state.seed,
+                  rules: state.rules, restoring: state)
+    }
     required init?(coder: NSCoder) { fatalError() }
+
+    private let isResuming: Bool
 
     // MARK: - Lifecycle
 
@@ -122,6 +138,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = MPTheme.pageBg
+        if !isAutomatedTestMode { JKAudio.shared.preload() }
         setupUI()
         // Backgrounding can freeze a CAAnimation mid-flight; reconcile the
         // board to engine truth so a marble never strands off-position.
@@ -150,10 +167,10 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         }
         didStartEngine = true
         engine.delegate = self
-        // start() fires didDeal + didChangeTurn, which refresh the UI,
-        // snap the marbles, and schedule the first AI turn. Doing any of
-        // that again here would double-drive the AI loop.
-        engine.start()
+        // start()/resume() fire didDeal + didChangeTurn, which refresh the
+        // UI, snap the marbles, and schedule the first AI turn. Doing any
+        // of that again here would double-drive the AI loop.
+        if isResuming { engine.resume() } else { engine.start() }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -272,7 +289,16 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
         refreshAllUI()
         announceTurn(seat)
+        autosaveIfNeeded()
         scheduleAIStepIfNeeded()
+    }
+
+    /// Persist the live game after every turn so a crash / force-quit
+    /// can offer "Resume" on the menu. Skipped for pure-AI test tables.
+    private func autosaveIfNeeded() {
+        guard !isAutomatedTestMode, !humanSeats.isEmpty,
+              engine.state.winner == nil else { return }
+        JKAutosave.save(engine.state)
     }
 
     func willResolve(_ move: JKMove, by seat: SeatID, path: [CellID]) {
@@ -287,6 +313,16 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         boardView.setFirePileTop(engine.state.firePile.last)
         refreshPlayerCorners()
 
+        if !isAutomatedTestMode && !move.isBurn {
+            // Move resolves (DESIGN §6): coin_flip sound for all seats;
+            // a medium haptic only for a human's own move (so a long AI
+            // run doesn't buzz continuously).
+            JKAudio.shared.play(.move)
+            if humanSeats.contains(seat) {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            }
+        }
+
         if !isAutomatedTestMode,
            let primary = pendingPrimary, !pendingPath.isEmpty,
            let marble = engine.state.marbles.first(where: { $0.id == primary }) {
@@ -298,7 +334,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
             let token = animationToken
             boardView.animateMove(marble: primary, from: marble.position,
                                   to: marble.position, via: pendingPath,
-                                  owner: marble.owner) { [weak self] in
+                                  owner: marble.owner,
+                                  stepDuration: JKGamePreferences.marbleStepDuration) { [weak self] in
                 guard let self, token == self.animationToken else { return }
                 self.finishAnimation()
             }
@@ -317,7 +354,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     private func primaryAnimatableMarble(_ move: JKMove) -> MarbleID? {
         switch move {
         case let .fieldFromHome(_, m), let .forward(_, m, _),
-             let .backward(_, m, _), let .anyMarble5(_, m, _):
+             let .backward(_, m, _), let .anyMarble5(_, m, _),
+             let .kingThirteen(_, m):
             return m
         default:
             return nil
@@ -331,6 +369,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
     func didCapture(_ marble: MarbleID, by seat: SeatID) {
         UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
+        if !isAutomatedTestMode { JKAudio.shared.play(.capture) }
     }
 
     func didEngageHandoff(_ seat: SeatID) {
@@ -342,7 +381,20 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         UINotificationFeedbackGenerator().notificationOccurred(.success)
         invalidateAutoHide()
         hideCurtain(animated: false)
+        JKAutosave.clear()                 // finished game is not resumable
         guard !isAutomatedTestMode else { return }
+        JKAudio.shared.play(.win)
+        // Brass-spark celebration, then the summary modal (DESIGN §6).
+        let confetti = JKConfettiView(frame: view.bounds)
+        confetti.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(confetti)
+        confetti.burst(duration: 1.5) { [weak self] in
+            self?.presentSummary(winner: winner)
+        }
+    }
+
+    private func presentSummary(winner: JKTeam) {
+        guard presentedViewController == nil else { return }
         let summary = JackarooGameSummaryViewController(
             state: engine.state, winner: winner, humanSeats: humanSeats)
         summary.onPlayAgain = { [weak self] in self?.restartGame() }
@@ -578,6 +630,11 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
                                    seat: state.currentSeat,
                                    state: state,
                                    preferSafeEntry: false)?.destination
+        case .kingThirteen:
+            guard let m = mover else { return nil }
+            let gen = JKLegalMoveGenerator(graph: engine.graph)
+            return gen.walkKingThirteen(marble: m, seat: state.currentSeat,
+                                        state: state)?.destination
         case .split7, .swap, .redQueenDiscard, .burnHand, .burnCard:
             return nil
         }
@@ -590,6 +647,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         case let .forward(_, m, _):    id = m
         case let .backward(_, m, _):   id = m
         case let .anyMarble5(_, m, _): id = m
+        case let .kingThirteen(_, m):  id = m
         case let .swap(_, own, _):     id = own
         default: return nil
         }
@@ -669,6 +727,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
             return "Backward \(s) on marble \(m)"
         case .anyMarble5(_, let m, let s):
             return "Any +\(s) on marble \(m)"
+        case .kingThirteen(_, let m):
+            return "King 13 on marble \(m)"
         }
     }
 
@@ -687,9 +747,20 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         sheet.addAction(UIAlertAction(title: "How to play", style: .default) { [weak self] _ in
-            self?.present(JackarooRulesViewController(), animated: true)
+            guard let self else { return }
+            self.present(JackarooRulesViewController(preset: self.engine.state.rules), animated: true)
         })
-        sheet.addAction(UIAlertAction(title: "Settings (coming in Phase 5)", style: .default, handler: nil))
+        sheet.addAction(UIAlertAction(title: "Ruleset…", style: .default) { [weak self] _ in
+            self?.presentRulesetPicker()
+        })
+        sheet.addAction(UIAlertAction(title: "Animation speed (\(JKGamePreferences.moveSpeed.label))…",
+                                      style: .default) { [weak self] _ in
+            self?.presentSpeedPicker()
+        })
+        let muteTitle = SoundManager.isMuted ? "Unmute sounds" : "Mute sounds"
+        sheet.addAction(UIAlertAction(title: muteTitle, style: .default) { _ in
+            SoundManager.setMuted(!SoundManager.isMuted)
+        })
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         if let pop = sheet.popoverPresentationController {
             pop.sourceView = gearButton
@@ -698,14 +769,60 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         present(sheet, animated: true)
     }
 
-    private func restartGame() {
+    private func presentSpeedPicker() {
+        let sheet = UIAlertController(title: "Marble animation speed", message: nil,
+                                      preferredStyle: .actionSheet)
+        for speed in JKMoveSpeed.allCases {
+            let isCurrent = speed == JKGamePreferences.moveSpeed
+            let title = isCurrent ? "✓ \(speed.label)" : speed.label
+            sheet.addAction(UIAlertAction(title: title, style: .default) { _ in
+                JKGamePreferences.moveSpeed = speed
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let pop = sheet.popoverPresentationController {
+            pop.sourceView = gearButton
+            pop.sourceRect = gearButton.bounds
+        }
+        present(sheet, animated: true)
+    }
+
+    /// Per-session ruleset picker. Presets are locked once a game
+    /// starts, so choosing a different one starts a fresh game on the
+    /// new ruleset; choosing the current one is a no-op.
+    private func presentRulesetPicker() {
+        let current = engine.state.rules
+        let sheet = UIAlertController(
+            title: "Ruleset",
+            message: "Switching starts a new game on the chosen preset.",
+            preferredStyle: .actionSheet)
+        for option in JKRulesPreset.selectableOptions {
+            let isCurrent = option.preset == current
+            let title = isCurrent ? "✓ \(option.name)" : option.name
+            sheet.addAction(UIAlertAction(title: title, style: .default) { [weak self] _ in
+                guard !isCurrent else { return }
+                self?.restartGame(rules: option.preset)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        if let pop = sheet.popoverPresentationController {
+            pop.sourceView = gearButton
+            pop.sourceRect = gearButton.bounds
+        }
+        present(sheet, animated: true)
+    }
+
+    private func restartGame(rules: JKRulesPreset? = nil) {
         // Rebuild the same table (same humans + AIs, fresh hands) with a
-        // new seed, replacing this VC in the nav stack.
+        // new seed, replacing this VC in the nav stack. `rules` defaults
+        // to the current ruleset (Play again) or a newly chosen preset
+        // (Settings).
         let players = engine.state.players.map {
             JKPlayer(seat: $0.seat, name: $0.name, kind: $0.kind)
         }
         let fresh = JackarooGameViewController(players: players,
-                                              seed: UInt64.random(in: 1...UInt64.max))
+                                              seed: UInt64.random(in: 1...UInt64.max),
+                                              rules: rules ?? engine.state.rules)
         fresh.modalPresentationStyle = .fullScreen
         if let nav = navigationController {
             var stack = nav.viewControllers
@@ -740,6 +857,10 @@ extension JackarooGameViewController: JKHandStripDelegate {
             return
         }
 
+        // Card select feedback (DESIGN §6: light haptic + button_tap).
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        JKAudio.shared.play(.select)
+
         // Highlight cell-based targets.
         let highlights = computeHighlights()
         boardView.highlightLegalTargets(trackCells: highlights.tracks,
@@ -773,6 +894,7 @@ extension JackarooGameViewController: JKHandStripDelegate {
              let .forward(c, _, _),
              let .backward(c, _, _),
              let .anyMarble5(c, _, _),
+             let .kingThirteen(c, _),
              let .split7(c, _),
              let .swap(c, _, _),
              let .redQueenDiscard(c, _),

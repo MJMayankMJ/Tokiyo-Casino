@@ -80,11 +80,31 @@ public final class JackarooEngine {
         self.resolver = JKMoveResolver(graph: graph)
     }
 
+    /// Reconstruct an engine from a previously-saved `JKGameState`
+    /// (autosave / crash recovery). No cards are dealt — the state is
+    /// already mid-game. Call `resume()` instead of `start()`.
+    public init(restoring state: JKGameState,
+                cellsPerQuadrant: Int = 25,
+                ai: JKAIPolicy? = nil) {
+        self.graph = JKBoardGraph(cellsPerQuadrant: cellsPerQuadrant)
+        self.ai = ai ?? JKAIEngine(graph: graph)
+        self.state = state
+        self.generator = JKLegalMoveGenerator(graph: graph)
+        self.resolver = JKMoveResolver(graph: graph)
+    }
+
     // MARK: - Public control
 
     /// Start the first hand. Deals cards and begins the turn loop.
     public func start() {
         dealNewHand()
+        delegate?.didDeal()
+        delegate?.didChangeTurn(state.currentSeat)
+    }
+
+    /// Resume a restored game: no dealing, just re-notify the delegate
+    /// so the UI rebuilds and the turn loop picks up where it left off.
+    public func resume() {
         delegate?.didDeal()
         delegate?.didChangeTurn(state.currentSeat)
     }
@@ -267,6 +287,12 @@ public final class JackarooEngine {
             if let m = state.marbles.first(where: { $0.id == marble }),
                let o = generator.walkBackward(marble: m, steps: steps,
                                               seat: seat, state: state) {
+                return o.path
+            }
+            return []
+        case let .kingThirteen(_, marble):
+            if let m = state.marbles.first(where: { $0.id == marble }),
+               let o = generator.walkKingThirteen(marble: m, seat: seat, state: state) {
                 return o.path
             }
             return []

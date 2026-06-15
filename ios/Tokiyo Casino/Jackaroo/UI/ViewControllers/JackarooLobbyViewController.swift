@@ -13,6 +13,7 @@ import UIKit
 final class JackarooLobbyViewController: UIViewController {
 
     private let humanCount: Int
+    private let rules: JKRulesPreset
 
     private let backdrop = MPPageBackgroundView()
     private let backButton = MPBackPill()
@@ -23,8 +24,9 @@ final class JackarooLobbyViewController: UIViewController {
 
     private var nameFields: [Int: UITextField] = [:]   // seat -> field
 
-    init(humanCount: Int) {
+    init(humanCount: Int, rules: JKRulesPreset = .jawakerBasic) {
         self.humanCount = max(2, min(4, humanCount))
+        self.rules = rules
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -223,7 +225,8 @@ final class JackarooLobbyViewController: UIViewController {
             }
         }
         let game = JackarooGameViewController(players: players,
-                                             seed: UInt64.random(in: 1...UInt64.max))
+                                             seed: UInt64.random(in: 1...UInt64.max),
+                                             rules: rules)
         game.modalPresentationStyle = .fullScreen
         navigationController?.pushViewController(game, animated: true)
     }
