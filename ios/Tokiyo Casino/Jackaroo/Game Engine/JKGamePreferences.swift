@@ -32,6 +32,19 @@ enum JKMoveSpeed: String, CaseIterable {
 
 enum JKGamePreferences {
     private static let moveSpeedKey = "jackaroo.moveSpeed"
+    private static let activeStakeKey = "jackaroo.activeStake"
+
+    /// Selectable solo-vs-AI wagers (Tokyo Coins). Settled at game end:
+    /// the human's team winning pays +stake, losing costs −stake.
+    static let stakeTiers: [Int] = [1_000, 5_000, 25_000]
+
+    /// The wager riding on the in-progress solo game, persisted so a
+    /// resumed game still settles correctly. 0 means no wager (hot-seat
+    /// or a fun game).
+    static var activeStake: Int {
+        get { UserDefaults.standard.integer(forKey: activeStakeKey) }
+        set { UserDefaults.standard.set(newValue, forKey: activeStakeKey) }
+    }
 
     static var moveSpeed: JKMoveSpeed {
         get {

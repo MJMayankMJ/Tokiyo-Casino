@@ -108,7 +108,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     /// Pass `restoring:` to rebuild a saved mid-game state (resume).
     init(players: [JKPlayer], seed: UInt64,
          rules: JKRulesPreset = .jawakerBasic,
-         restoring: JKGameState? = nil) {
+         restoring: JKGameState? = nil,
+         stake: Int = 0) {
         if let restoring {
             self.engine = JackarooEngine(restoring: restoring)
         } else {
@@ -120,6 +121,9 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
             return nil
         })
         self.isResuming = (restoring != nil)
+        // A resumed game recovers its wager from the persisted active stake;
+        // a fresh game takes the caller's stake.
+        self.stake = (restoring != nil) ? JKGamePreferences.activeStake : stake
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -131,6 +135,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
     required init?(coder: NSCoder) { fatalError() }
 
     private let isResuming: Bool
+    /// Tokyo Coins wagered on this game (solo only; 0 = no wager).
+    private let stake: Int
 
     // MARK: - Lifecycle
 
@@ -168,6 +174,8 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         }
         didStartEngine = true
         engine.delegate = self
+        // Persist the wager so a mid-game quit + resume still settles it.
+        if !isResuming { JKGamePreferences.activeStake = stake }
         // start()/resume() fire didDeal + didChangeTurn, which refresh the
         // UI, snap the marbles, and schedule the first AI turn. Doing any
         // of that again here would double-drive the AI loop.
@@ -210,6 +218,14 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         }
         handStrip.delegate = self
 
+        // Board + hand strip grow to fill the available space but are
+        // capped so they don't become gigantic on iPad, and the board is
+        // bounded by the vertical gap so it never overflows in landscape.
+        let boardGrow = boardView.widthAnchor.constraint(equalToConstant: 4000)
+        boardGrow.priority = .defaultLow
+        let handGrow = handStrip.widthAnchor.constraint(equalTo: view.widthAnchor, constant: -32)
+        handGrow.priority = .defaultHigh
+
         NSLayoutConstraint.activate([
             backdrop.topAnchor.constraint(equalTo: view.topAnchor),
             backdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -230,11 +246,18 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
 
             boardView.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             boardView.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: -10),
-            boardView.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.92),
-            boardView.heightAnchor.constraint(equalTo: boardView.widthAnchor),
+            boardView.heightAnchor.constraint(equalTo: boardView.widthAnchor),     // square
+            boardView.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.92),
+            boardView.widthAnchor.constraint(lessThanOrEqualToConstant: 720),       // iPad cap
+            boardView.topAnchor.constraint(greaterThanOrEqualTo: turnPill.bottomAnchor, constant: 12),
+            boardView.bottomAnchor.constraint(lessThanOrEqualTo: handStrip.topAnchor, constant: -12),
+            boardGrow,
 
-            handStrip.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            handStrip.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
+            handStrip.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            handStrip.leadingAnchor.constraint(greaterThanOrEqualTo: view.leadingAnchor, constant: 16),
+            handStrip.trailingAnchor.constraint(lessThanOrEqualTo: view.trailingAnchor, constant: -16),
+            handStrip.widthAnchor.constraint(lessThanOrEqualToConstant: 600),       // iPad cap
+            handGrow,
             handStrip.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
             handStrip.heightAnchor.constraint(equalToConstant: 96),
         ])
@@ -385,6 +408,7 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         invalidateAutoHide()
         hideCurtain(animated: false)
         JKAutosave.clear()                 // finished game is not resumable
+        settleCoins(winner: winner)
         guard !isAutomatedTestMode else { return }
         JKAudio.shared.play(.win)
         // Brass-spark celebration, then the summary modal (DESIGN §6).
@@ -393,6 +417,19 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         view.addSubview(confetti)
         confetti.burst(duration: 1.5) { [weak self] in
             self?.presentSummary(winner: winner)
+        }
+    }
+
+    /// Solo wager settlement (Tokyo Coins): the human's team winning pays
+    /// +stake, losing costs −stake. Hot-seat games carry no stake. Runs
+    /// once — `didEnd` fires once — and clears the active stake after.
+    private func settleCoins(winner: JKTeam) {
+        defer { JKGamePreferences.activeStake = 0 }
+        guard !isAutomatedTestMode, stake > 0, let humanSeat = humanSeats.first else { return }
+        if JKTeam.of(seat: humanSeat) == winner {
+            CoinsManager.shared.addCoins(amount: Int64(stake)) { _ in }
+        } else {
+            CoinsManager.shared.deductCoins(amount: Int64(stake)) { _ in }
         }
     }
 
@@ -823,9 +860,14 @@ final class JackarooGameViewController: UIViewController, JackarooEngineDelegate
         let players = engine.state.players.map {
             JKPlayer(seat: $0.seat, name: $0.name, kind: $0.kind)
         }
+        // Re-wager the same stake on a rematch, but only if it's still
+        // affordable — otherwise the rematch is played for fun (stake 0).
+        let balance = CoinsManager.shared.userStats?.totalCoins ?? 0
+        let rematchStake = (stake > 0 && balance >= Int64(stake)) ? stake : 0
         let fresh = JackarooGameViewController(players: players,
                                               seed: UInt64.random(in: 1...UInt64.max),
-                                              rules: rules ?? engine.state.rules)
+                                              rules: rules ?? engine.state.rules,
+                                              stake: rematchStake)
         fresh.modalPresentationStyle = .fullScreen
         if let nav = navigationController {
             var stack = nav.viewControllers

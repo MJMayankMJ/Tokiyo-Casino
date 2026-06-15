@@ -65,6 +65,7 @@ This is the V1 shipping default — the **project default ruleset based on Jawak
 
 ### Movement & collision
 - Landing on another marble sends that marble Home.
+- **A lone marble may be passed over.** Only an own Base, a blockade front, or (under the `cannotPassOwn` consolidation) your own marble "cannot be bypassed"; a lone opponent is captured *only* when you land on it. Confirmed 2026-06-15 against Jawaker's published rules ("a piece on its own Base / the front of two consecutive pieces cannot be bypassed" — lone pieces are not listed).
 - A marble on its **own Base** is protected — cannot be captured, swapped, or bypassed.
 - **Blockade**: two consecutive marbles of the same player form a temporary base — the front marble is protected and cannot be bypassed, captured, or swapped (Jawaker Basic + Complex, explicit).
 - **Cannot pass your own marble** anywhere on the track (default-on consolidation per the audit; toggle exposed because Jawaker Basic English is translation-ambiguous).

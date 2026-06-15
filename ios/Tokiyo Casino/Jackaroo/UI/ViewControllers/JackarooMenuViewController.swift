@@ -17,12 +17,23 @@ final class JackarooMenuViewController: UIViewController {
     private let titleBlock = MPTitleView(eyebrow: "Board Game", title: "Jackaroo",
                                          subtitle: "Solo vs AI, or pass-and-play")
 
+    private let balancePill = MPCoinsPill()
+
     private let modeEyebrow = mpSectionEyebrow("Mode")
     private let modePicker = JKSegment(items: ["Solo vs AI", "Hot-Seat"])
 
     private let playersEyebrow = mpSectionEyebrow("Human players")
     private let playerPicker = MPPlayerPicker(value: 2, options: [2, 3, 4])
     private let playersSection = UIStackView()
+
+    private let stakeEyebrow = mpSectionEyebrow("Stake")
+    private let stakePicker = JKSegment(items: JKGamePreferences.stakeTiers.map(JackarooMenuViewController.stakeLabel))
+    private let stakeCaption = JackarooMenuViewController.makeCaption()
+    private let stakeSection = UIStackView()
+
+    /// Selected solo wager.
+    private var selectedStake: Int { JKGamePreferences.stakeTiers[stakePicker.selectedIndex] }
+    private var coinBalance: Int64 { CoinsManager.shared.userStats?.totalCoins ?? 0 }
 
     private let rulesetEyebrow = mpSectionEyebrow("Ruleset")
     private let presetPicker = JKSegment(items: JKRulesPreset.selectableOptions.map { $0.name })
@@ -48,6 +59,7 @@ final class JackarooMenuViewController: UIViewController {
         super.viewWillAppear(animated)
         MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
         refreshResume()
+        balancePill.setAmount(Int(coinBalance))
     }
 
     /// Show the Resume pill only when a mid-game autosave exists.
@@ -92,6 +104,16 @@ final class JackarooMenuViewController: UIViewController {
         playersSection.addArrangedSubview(wrapEyebrow(playersEyebrow))
         playersSection.addArrangedSubview(playerPicker)
 
+        stakeSection.axis = .vertical
+        stakeSection.alignment = .fill
+        stakeSection.spacing = 8
+        stakeSection.addArrangedSubview(wrapEyebrow(stakeEyebrow))
+        stakeSection.addArrangedSubview(stakePicker)
+        stakeSection.addArrangedSubview(stakeCaption)
+        stakeSection.setCustomSpacing(6, after: stakePicker)
+        stakePicker.onChange = { [weak self] _ in self?.updateStakeCaption() }
+        updateStakeCaption()
+
         startButton.addTarget(self, action: #selector(startTapped), for: .touchUpInside)
         rulesButton.addTarget(self, action: #selector(rulesTapped), for: .touchUpInside)
 
@@ -100,11 +122,14 @@ final class JackarooMenuViewController: UIViewController {
         resumeButton.accessibilityHint = "Continues the game you left in progress."
 
         center.addArrangedSubview(titleBlock)
-        center.setCustomSpacing(24, after: titleBlock)
+        center.setCustomSpacing(16, after: titleBlock)
+        center.addArrangedSubview(centered(balancePill))
+        center.setCustomSpacing(22, after: center.arrangedSubviews.last!)
         center.addArrangedSubview(resumeButton)
         center.setCustomSpacing(20, after: resumeButton)
         center.addArrangedSubview(makeSection(modeEyebrow, modePicker))
         center.addArrangedSubview(playersSection)
+        center.addArrangedSubview(stakeSection)
         let rulesetSection = makeSection(rulesetEyebrow, presetPicker)
         rulesetSection.addArrangedSubview(presetCaption)
         rulesetSection.setCustomSpacing(6, after: presetPicker)
@@ -175,11 +200,38 @@ final class JackarooMenuViewController: UIViewController {
         presetCaption.text = option.caption
     }
 
+    /// Compact coin label, e.g. 1000 → "1K", 25000 → "25K".
+    private static func stakeLabel(_ value: Int) -> String {
+        value % 1000 == 0 ? "\(value / 1000)K" : "\(value)"
+    }
+
+    private func updateStakeCaption() {
+        let f = NumberFormatter(); f.numberStyle = .decimal
+        let s = f.string(from: NSNumber(value: selectedStake)) ?? "\(selectedStake)"
+        stakeCaption.text = "Win to take \(s) coins from the other team; lose and you forfeit it."
+    }
+
+    /// Wrap an intrinsic-size view so it stays centered in a fill stack.
+    private func centered(_ inner: UIView) -> UIView {
+        let row = UIView()
+        inner.translatesAutoresizingMaskIntoConstraints = false
+        row.addSubview(inner)
+        NSLayoutConstraint.activate([
+            inner.centerXAnchor.constraint(equalTo: row.centerXAnchor),
+            inner.topAnchor.constraint(equalTo: row.topAnchor),
+            inner.bottomAnchor.constraint(equalTo: row.bottomAnchor),
+        ])
+        return row
+    }
+
     private func updateModeVisibility() {
         let isHotSeat = modePicker.selectedIndex == 1
         UIView.animate(withDuration: 0.2) {
             self.playersSection.isHidden = !isHotSeat
             self.playersSection.alpha = isHotSeat ? 1 : 0
+            // Wagers apply to solo vs AI only — hot-seat is local play.
+            self.stakeSection.isHidden = isHotSeat
+            self.stakeSection.alpha = isHotSeat ? 0 : 1
         }
     }
 
@@ -213,21 +265,36 @@ final class JackarooMenuViewController: UIViewController {
     @objc private func startTapped() {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         if modePicker.selectedIndex == 0 {
-            // Solo vs AI — you at seat 0, three AIs.
-            let players = JackarooSeating.solo()
-            pushGame(players: players)
+            // Solo vs AI — you at seat 0, three AIs. Must be able to cover
+            // the wager.
+            guard coinBalance >= Int64(selectedStake) else {
+                presentInsufficientCoins()
+                return
+            }
+            pushGame(players: JackarooSeating.solo(), stake: selectedStake)
         } else {
-            // Hot-seat — collect names + seats in the lobby.
+            // Hot-seat — collect names + seats in the lobby. No wager.
             let lobby = JackarooLobbyViewController(humanCount: playerPicker.value,
                                                     rules: selectedPreset)
             navigationController?.pushViewController(lobby, animated: true)
         }
     }
 
-    private func pushGame(players: [JKPlayer]) {
+    private func presentInsufficientCoins() {
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        let alert = UIAlertController(
+            title: "Not enough coins",
+            message: "You need \(selectedStake) coins for this stake. Pick a lower stake or earn more coins.",
+            preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    private func pushGame(players: [JKPlayer], stake: Int) {
         let game = JackarooGameViewController(players: players,
                                              seed: UInt64.random(in: 1...UInt64.max),
-                                             rules: selectedPreset)
+                                             rules: selectedPreset,
+                                             stake: stake)
         game.modalPresentationStyle = .fullScreen
         navigationController?.pushViewController(game, animated: true)
     }

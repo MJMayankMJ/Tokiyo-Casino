@@ -83,6 +83,38 @@ final class JKEdgeCaseTests: XCTestCase {
                      "Backward must respect own-marble blocking in reverse")
     }
 
+    // MARK: - Lone opponents are passable (Jawaker: only Base + blockade
+    // fronts "cannot be bypassed"; a lone piece is captured only on landing)
+
+    func testForward_passesLoneOpponentButCapturesOnLanding() {
+        var state = JKFixture.makeState()
+        JKFixture.place(0, at: .track(10), in: &state)   // mover
+        JKFixture.place(4, at: .track(12), in: &state)   // lone opponent on the path
+        // Forward 4 passes over the opponent at 12 and lands on empty 14.
+        let pass = gen().walkForward(marble: marble(0, in: state), steps: 4,
+                                     seat: 0, state: state)
+        XCTAssertEqual(pass?.destination, .track(14), "May pass a lone opponent")
+        XCTAssertNil(pass?.capture, "Passing over does not capture")
+        // Forward 2 lands exactly on the opponent → capture.
+        let land = gen().walkForward(marble: marble(0, in: state), steps: 2,
+                                     seat: 0, state: state)
+        XCTAssertEqual(land?.destination, .track(12))
+        XCTAssertEqual(land?.capture, 4, "Landing on a lone opponent captures it")
+    }
+
+    func testBackward_passesLoneOpponentButCapturesOnLanding() {
+        var state = JKFixture.makeState()
+        JKFixture.place(0, at: .track(10), in: &state)
+        JKFixture.place(4, at: .track(8), in: &state)    // lone opponent on the reverse path
+        let pass = gen().walkBackward(marble: marble(0, in: state), steps: 4,
+                                      seat: 0, state: state)
+        XCTAssertEqual(pass?.destination, .track(6), "May pass a lone opponent backward")
+        XCTAssertNil(pass?.capture)
+        let land = gen().walkBackward(marble: marble(0, in: state), steps: 2,
+                                      seat: 0, state: state)
+        XCTAssertEqual(land?.capture, 4, "Backward landing on a lone opponent captures it")
+    }
+
     // MARK: - ec 5 — Safe entry (cardValueAtMostRemaining default)
 
     /// Cell 95 is exactly 3 cw-steps before seat 0's Safe gate (98).

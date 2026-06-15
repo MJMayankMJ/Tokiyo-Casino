@@ -478,17 +478,18 @@ public struct JKLegalMoveGenerator {
                     }
                 }
 
-                // Check intermediate blockers.
-                if let blocker = trackBlocker(at: nxt, mover: marble, state: state) {
-                    // The blocker is on our path. If this is the final
-                    // step, captures are still possible (handled below);
-                    // otherwise we're blocked.
-                    if stepsLeft > 1 {
-                        // Mid-path blocker — illegal regardless of type.
-                        switch blocker {
-                        case .blockade, .protectedBase, .ownMarble, .opponent:
-                            return nil
-                        }
+                // Check intermediate blockers. Only an own Base, a blockade
+                // front, or (when cannotPassOwn) an own marble cannot be
+                // bypassed. A lone opponent CAN be passed — it is only
+                // captured if we *land* on it (Jawaker: "a piece on its own
+                // Base / the front of two consecutive pieces cannot be
+                // bypassed"; lone pieces are not listed). Handled at landing.
+                if stepsLeft > 1, let blocker = trackBlocker(at: nxt, mover: marble, state: state) {
+                    switch blocker {
+                    case .blockade, .protectedBase, .ownMarble:
+                        return nil
+                    case .opponent:
+                        break   // pass over it
                     }
                 }
 
@@ -642,12 +643,16 @@ public struct JKLegalMoveGenerator {
         while stepsLeft > 0 {
             guard let nxt = graph.next(from: current, direction: reverse) else { return nil }
             // Mid-path blockers stop a backward move exactly as they do a
-            // forward one (SPEC §3: own Base + blockade fronts cannot be
-            // bypassed; ec4: "still apply … in reverse direction").
+            // forward one (SPEC §3 + ec4, "still apply … in reverse"):
+            // own Base, blockade fronts, and own marbles cannot be
+            // bypassed; a lone opponent can be passed and is only captured
+            // on landing.
             if stepsLeft > 1, let blocker = trackBlocker(at: nxt, mover: marble, state: state) {
                 switch blocker {
-                case .blockade, .protectedBase, .ownMarble, .opponent:
+                case .blockade, .protectedBase, .ownMarble:
                     return nil
+                case .opponent:
+                    break   // pass over it
                 }
             }
             current = nxt

@@ -10,11 +10,19 @@
 import XCTest
 @testable import Tokiyo_Casino
 
+private extension UIView {
+    /// Depth-first list of every descendant view.
+    var recursiveSubviews: [UIView] {
+        subviews + subviews.flatMap { $0.recursiveSubviews }
+    }
+}
+
 final class JKPhase6SnapshotTest: XCTestCase {
 
     private func render(_ vc: UIViewController, _ name: String,
-                        style: UIUserInterfaceStyle = .dark) {
-        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 393, height: 852))
+                        style: UIUserInterfaceStyle = .dark,
+                        size: CGSize = CGSize(width: 393, height: 852)) {
+        let window = UIWindow(frame: CGRect(origin: .zero, size: size))
         window.overrideUserInterfaceStyle = style
         let nav = UINavigationController(rootViewController: vc)
         nav.setNavigationBarHidden(true, animated: false)
@@ -45,6 +53,32 @@ final class JKPhase6SnapshotTest: XCTestCase {
         render(gameVC(midGameState()), "game_mid_dark", style: .dark)
         render(gameVC(midGameState()), "game_mid_light", style: .light)
         render(gameVC(nearWinState()), "game_nearwin_dark", style: .dark)
+    }
+
+    /// iPad must lay out without the board overflowing — the bug was the
+    /// square board sized to 0.92×width, which overran the height in
+    /// landscape. Render both orientations and assert the board fits.
+    func testGameScreenFitsOnIPad() {
+        for (name, size) in [("ipad_portrait", CGSize(width: 1024, height: 1366)),
+                             ("ipad_landscape", CGSize(width: 1366, height: 1024))] {
+            let vc = gameVC(midGameState())
+            let window = UIWindow(frame: CGRect(origin: .zero, size: size))
+            window.rootViewController = UINavigationController(rootViewController: vc)
+            window.makeKeyAndVisible()
+            for _ in 0..<2 { vc.view.setNeedsLayout(); vc.view.layoutIfNeeded() }
+
+            let board = vc.view.recursiveSubviews.first { $0 is JKBoardView }
+            XCTAssertNotNil(board, "\(name): board exists")
+            if let b = board {
+                XCTAssertGreaterThan(b.bounds.width, 100, "\(name): board has a sane size")
+                XCTAssertLessThanOrEqual(b.bounds.height, size.height,
+                                         "\(name): board must not overflow the screen height")
+                XCTAssertLessThanOrEqual(b.bounds.width.rounded(), 720,
+                                         "\(name): board respects the iPad cap")
+            }
+            window.isHidden = true
+            window.rootViewController = nil
+        }
     }
 
     // MARK: - Fixtures
