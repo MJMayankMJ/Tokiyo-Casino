@@ -15,7 +15,9 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
 
     private enum HomeGame: Int {
         case poker = 1
-        case jackaroo = 2
+        // Jackaroo is parked while Teen Do Paanch is built out; the tile
+        // slot is reused rather than adding a third card to the grid.
+        case teenDoPaanch = 2
     }
 
     private var viewModel = HomeViewModel()
@@ -262,16 +264,14 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             badgeText: nil
         )
 
-        let jackarooBadge: String? = nil
-
-        let jackarooCard = makeGameCard(
-            game: .jackaroo,
-            title: "JACKAROO",
+        let teenDoPaanchCard = makeGameCard(
+            game: .teenDoPaanch,
+            title: "5-3-2",
             imageName: "game2icon",
-            badgeText: jackarooBadge
+            badgeText: "NEW"
         )
 
-        [pokerCard, jackarooCard].forEach {
+        [pokerCard, teenDoPaanchCard].forEach {
             stackView.addArrangedSubview($0)
             gameCards.append($0)
         }
@@ -458,8 +458,8 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             switch HomeGame(rawValue: card.tag) {
             case .poker:
                 self.openPokerGame()
-            case .jackaroo:
-                self.openJackarooGame()
+            case .teenDoPaanch:
+                self.openTeenDoPaanchGame()
             case .none:
                 break
             }
@@ -474,6 +474,16 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
             navigationController.pushViewController(pokerVC, animated: true)
         } else {
             present(pokerVC, animated: true)
+        }
+    }
+
+    private func openTeenDoPaanchGame() {
+        let entry = TDPEntryViewController()
+        if let navigationController = navigationController {
+            navigationController.pushViewController(entry, animated: true)
+        } else {
+            entry.modalPresentationStyle = .fullScreen
+            present(entry, animated: true)
         }
     }
 
