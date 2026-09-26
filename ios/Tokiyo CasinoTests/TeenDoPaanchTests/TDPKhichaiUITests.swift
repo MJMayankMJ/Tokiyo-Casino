@@ -144,7 +144,7 @@ final class TDPKhichaiUITests: XCTestCase {
         XCTAssertNil(driver.sent.first?.cardID, "…and never a card id")
     }
 
-    func testCreditorAfterDrawingCanOnlyReturnLegalCards() {
+    func testCreditorAfterDrawingCanReturnAnyCardIncludingTheDrawnOne() {
         let (creditorBase, debtor, _) = hands()
         let drawn = debtor[0]
         let creditor = TDPDeck.sortHand(creditorBase + [drawn])   // holding 11
@@ -165,13 +165,16 @@ final class TDPKhichaiUITests: XCTestCase {
         XCTAssertEqual(buttons.count, 11, "The creditor sees their own 11 cards now")
 
         let enabled = buttons.filter { $0.isEnabled }.compactMap { $0.card?.tdpID }
-        XCTAssertEqual(Set(enabled), Set(legal.map(\.tdpID)))
-        XCTAssertFalse(enabled.contains(drawn.tdpID),
-                       "The just-drawn card cannot be handed straight back via keep")
+        XCTAssertEqual(Set(enabled), Set(creditor.map(\.tdpID)), "Every card can go back")
 
-        // Selecting then confirming sends the right intent.
-        let target = buttons.first { $0.isEnabled && $0.card != nil }!
-        target.sendActions(for: .touchUpInside)
+        // The pulled card stays marked, so you can see which one you got…
+        let pulled = try! XCTUnwrap(buttons.first { $0.card?.tdpID == drawn.tdpID })
+        XCTAssertNotNil(pulled.ringColor, "The drawn card keeps its outline")
+        XCTAssertTrue(buttons.filter { $0.card?.tdpID != drawn.tdpID }.allSatisfy { $0.ringColor == nil },
+                      "…and it is the only one outlined")
+
+        // …and it can be handed straight back: select, then confirm.
+        pulled.sendActions(for: .touchUpInside)
         controller.view.layoutIfNeeded()
         let confirm = controller.view.recursiveButtons()
             .first { ($0.title(for: .normal) ?? "").hasPrefix("Confirm") }
@@ -180,11 +183,7 @@ final class TDPKhichaiUITests: XCTestCase {
 
         let decision = driver.sent.last
         XCTAssertEqual(decision?.kind, .khichaiReturn)
-        XCTAssertEqual(decision?.cardID, target.card?.tdpID)
-
-        let handBack = controller.view.recursiveButtons()
-            .first { ($0.title(for: .normal) ?? "") == "Hand it back" }
-        XCTAssertNil(handBack, "Classic khichai never allows the pulled card to be returned")
+        XCTAssertEqual(decision?.cardID, drawn.tdpID)
     }
 
     func testDebtorAndObserverNeverSeeTheDrawnCard() {

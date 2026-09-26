@@ -62,8 +62,7 @@ final class TDPCardButton: UIButton {
     private let rankLabel = UILabel()
     private var smallSuit: TDPSuitGlyph?
     private var bigSuit: TDPSuitGlyph?
-    private let backFrame = UIView()
-    private let backMark = UILabel()
+    private var backArt: TDPCardBackArt?
     private let dimView = UIView()
     private let ringLayer = CALayer()
 
@@ -80,16 +79,10 @@ final class TDPCardButton: UIButton {
         layer.cornerCurve = .continuous
 
         if isFaceDown {
-            backgroundColor = TDPTheme.cardBack
-            backFrame.isUserInteractionEnabled = false
-            backFrame.layer.borderWidth = 1.5
-            backFrame.layer.cornerCurve = .continuous
-            addSubview(backFrame)
-            backMark.text = "5·3·2"
-            backMark.textColor = TDPTheme.cardBackInner
-            backMark.textAlignment = .center
-            backMark.isUserInteractionEnabled = false
-            addSubview(backMark)
+            backgroundColor = TDPCardBackArt.brownDeep
+            let art = TDPCardBackArt()
+            addSubview(art)
+            backArt = art
             accessibilityLabel = "Face-down card"
         } else if let card {
             backgroundColor = TDPTheme.cardFace
@@ -149,10 +142,7 @@ final class TDPCardButton: UIButton {
         ringLayer.cornerRadius = radius + 3
 
         if isFaceDown {
-            backFrame.frame = bounds.insetBy(dx: w * 0.085, dy: w * 0.085)
-            backFrame.layer.cornerRadius = radius * 0.7
-            backMark.font = .systemFont(ofSize: w * 0.19, weight: .semibold)
-            backMark.frame = bounds
+            backArt?.frame = bounds
             return
         }
 
@@ -188,9 +178,117 @@ final class TDPCardButton: UIButton {
             layer.shadowOffset = CGSize(width: 0, height: 6)    // ref: 0 6px 18px
             layer.shadowRadius = 9
         }
-        backFrame.layer.borderColor = TDPTheme.cardBackInner.resolvedColor(with: traitCollection).cgColor
         ringLayer.isHidden = ringColor == nil
         ringLayer.borderColor = ringColor?.resolvedColor(with: traitCollection).cgColor
+    }
+}
+
+// MARK: - Card back
+
+/// The Tokiyo Cards back: chocolate brown from the logo's outline, a faint
+/// lattice of suits like the app icon's ground, a thin orange frame, the
+/// logo on a cream medallion, and two sparkles. Drawn, so it stays crisp
+/// at every card size; the same in light and dark, like a real deck.
+final class TDPCardBackArt: UIView {
+
+    static let brownDeep = UIColor(red: 0x2E / 255, green: 0x1B / 255, blue: 0x12 / 255, alpha: 1)
+    private static let brownLift = UIColor(red: 0x5A / 255, green: 0x36 / 255, blue: 0x22 / 255, alpha: 1)
+    private static let orange = UIColor(red: 0xF4 / 255, green: 0xA2 / 255, blue: 0x23 / 255, alpha: 1)
+    private static let cream = UIColor(red: 0xF8 / 255, green: 0xEB / 255, blue: 0xCF / 255, alpha: 1)
+    private static let logo = UIImage(named: "TokiyoCards")
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        isUserInteractionEnabled = false
+        isOpaque = false
+        backgroundColor = .clear
+        contentMode = .redraw
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+    override func draw(_ rect: CGRect) {
+        guard let ctx = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
+        let w = bounds.width
+        let h = bounds.height
+        let radius = w * 0.145
+
+        ctx.saveGState()
+        UIBezierPath(roundedRect: bounds, cornerRadius: radius).addClip()
+
+        // Ground: a soft diagonal lift from the top-left.
+        let colors = [Self.brownLift.cgColor, Self.brownDeep.cgColor] as CFArray
+        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
+            ctx.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: w, y: h), options: [])
+        }
+
+        // Faint suit lattice, offset every other row.
+        let glyphs = ["\u{2660}\u{FE0E}", "\u{2665}\u{FE0E}", "\u{2666}\u{FE0E}", "\u{2663}\u{FE0E}"]
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: w * 0.15, weight: .bold),
+            .foregroundColor: Self.cream.withAlphaComponent(0.1)
+        ]
+        let step = w * 0.25
+        var row = 0
+        var y = -step * 0.3
+        while y < h {
+            var x = (row % 2 == 0 ? 0 : step / 2) - step * 0.3
+            var column = 0
+            while x < w {
+                (glyphs[(row + column) % 4] as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
+                x += step
+                column += 1
+            }
+            y += step * 0.9
+            row += 1
+        }
+
+        // Thin orange frame.
+        let inset = w * 0.075
+        let frame = UIBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), cornerRadius: radius * 0.6)
+        frame.lineWidth = max(1, w * 0.02)
+        Self.orange.withAlphaComponent(0.85).setStroke()
+        frame.stroke()
+
+        // The logo on a cream medallion, as on the app icon.
+        if let logo = Self.logo {
+            let logoWidth = w * 0.72
+            let logoHeight = logoWidth * logo.size.height / max(logo.size.width, 1)
+            let medallion = CGRect(x: (w - logoWidth) / 2 - w * 0.05,
+                                   y: (h - logoHeight) / 2 - w * 0.05,
+                                   width: logoWidth + w * 0.1,
+                                   height: logoHeight + w * 0.1)
+            Self.cream.setFill()
+            UIBezierPath(roundedRect: medallion, cornerRadius: medallion.height * 0.32).fill()
+            logo.draw(in: CGRect(x: (w - logoWidth) / 2, y: (h - logoHeight) / 2,
+                                 width: logoWidth, height: logoHeight))
+        }
+
+        // The logo's sparkle diamonds, in two corners.
+        Self.orange.setFill()
+        sparkle(at: CGPoint(x: w * 0.25, y: h * 0.2), size: w * 0.07).fill()
+        sparkle(at: CGPoint(x: w * 0.75, y: h * 0.8), size: w * 0.07).fill()
+        Self.cream.withAlphaComponent(0.7).setFill()
+        sparkle(at: CGPoint(x: w * 0.74, y: h * 0.19), size: w * 0.04).fill()
+        sparkle(at: CGPoint(x: w * 0.26, y: h * 0.81), size: w * 0.04).fill()
+
+        ctx.restoreGState()
+    }
+
+    /// Four-point star.
+    private func sparkle(at c: CGPoint, size s: CGFloat) -> UIBezierPath {
+        let path = UIBezierPath()
+        let pinch = s * 0.28
+        path.move(to: CGPoint(x: c.x, y: c.y - s))
+        path.addLine(to: CGPoint(x: c.x + pinch, y: c.y - pinch))
+        path.addLine(to: CGPoint(x: c.x + s, y: c.y))
+        path.addLine(to: CGPoint(x: c.x + pinch, y: c.y + pinch))
+        path.addLine(to: CGPoint(x: c.x, y: c.y + s))
+        path.addLine(to: CGPoint(x: c.x - pinch, y: c.y + pinch))
+        path.addLine(to: CGPoint(x: c.x - s, y: c.y))
+        path.addLine(to: CGPoint(x: c.x - pinch, y: c.y - pinch))
+        path.close()
+        return path
     }
 }
 

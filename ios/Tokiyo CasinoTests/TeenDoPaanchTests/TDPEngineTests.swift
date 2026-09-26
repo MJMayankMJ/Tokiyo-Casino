@@ -270,7 +270,9 @@ final class TDPEngineTests: XCTestCase {
             creditor: creditorHand + [drawn],
             debtor: debtorHand.filter { $0.tdpID != drawn.tdpID }
         )
-        let returning = TDPKhichai.legalReturns(hand: hands.creditor, drawn: drawn).first!
+        // Keep the drawn card and return another, to check conservation.
+        let returning = TDPKhichai.legalReturns(hand: hands.creditor, drawn: drawn)
+            .first { $0.tdpID != drawn.tdpID }!
 
         guard case .success(let after) = TDPKhichai.applyReturn(
             hands: hands, drawn: drawn, returnCardID: returning.tdpID
@@ -284,7 +286,7 @@ final class TDPEngineTests: XCTestCase {
 
     }
 
-    func testDrawnCardCannotBeReturned() {
+    func testDrawnCardMayBeHandedStraightBack() {
         var rng = TDPRNG(seed: 9)
         let deck = TDPDeck.shuffled(TDPDeck.build(), rng: &rng)
         let creditor = Array(deck[0..<10])
@@ -293,26 +295,34 @@ final class TDPEngineTests: XCTestCase {
 
         let hands = TDPKhichai.Hands(creditor: creditor + [drawn],
                                      debtor: debtor.filter { $0.tdpID != drawn.tdpID })
-        guard case .failure = TDPKhichai.applyReturn(
+        guard case .success(let after) = TDPKhichai.applyReturn(
             hands: hands, drawn: drawn, returnCardID: drawn.tdpID
-        ) else { return XCTFail("R1 must reject returning the card just pulled") }
+        ) else { return XCTFail("Handing the pulled card straight back is allowed") }
+        XCTAssertEqual(Set(after.creditor.map(\.tdpID)), Set(creditor.map(\.tdpID)), "Creditor's hand is as it was")
+        XCTAssertEqual(Set(after.debtor.map(\.tdpID)), Set(debtor.map(\.tdpID)), "Debtor gets the same card back")
     }
 
-    func testRetainTwoRestrictionAlwaysLeavesALegalReturn() {
-        // Pigeonhole: 11 cards over 4 suits always leaves a legal return.
+    func testAnyCardMayGoBackIncludingThePulledOne() {
         var rng = TDPRNG(seed: 99)
         for _ in 0..<2_000 {
             let deck = TDPDeck.shuffled(TDPDeck.build(), rng: &rng)
             let hand = Array(deck[0..<11])
             let drawn = hand[rng.int(upperBound: hand.count)]
             let legal = TDPKhichai.legalReturns(hand: hand, drawn: drawn)
-            XCTAssertFalse(legal.isEmpty)
-            for card in legal {
-                XCTAssertNotEqual(card.tdpID, drawn.tdpID, "R1: cannot return the drawn card")
-                let remaining = hand.filter { $0.suit == card.suit && $0.tdpID != card.tdpID }.count
-                XCTAssertGreaterThanOrEqual(remaining, 2, "R2: must keep two of the returned suit")
-            }
+            XCTAssertEqual(legal.count, 11, "Every card in hand")
+            XCTAssertTrue(legal.contains(drawn), "The pulled card may go straight back")
         }
+    }
+
+    func testReturningACardMayEmptyASuit() {
+        // No "keep two of the suit" rule: a singleton can go back.
+        let creditor = ["AS", "KS", "QS", "10H", "9H", "8H", "AD", "KD", "QD", "JC"].compactMap(Card.init(tdpID:))
+        let drawn = Card(tdpID: "9S")!
+        let hands = TDPKhichai.Hands(creditor: creditor + [drawn], debtor: [])
+        guard case .success(let after) = TDPKhichai.applyReturn(
+            hands: hands, drawn: drawn, returnCardID: "JC"
+        ) else { return XCTFail("Returning the last club must be allowed") }
+        XCTAssertFalse(after.creditor.contains { $0.suit == .clubs }, "Now void in clubs — that's fine")
     }
 
     func testInvalidFanPermutationIsRejected() {

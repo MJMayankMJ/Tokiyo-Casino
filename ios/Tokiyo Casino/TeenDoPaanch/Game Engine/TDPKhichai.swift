@@ -3,7 +3,7 @@
 //  Tokiyo Casino — Teen Do Paanch
 //
 //  खिंचाई — "the pulling". The creditor draws blind from the debtor's fanned
-//  hand, looks at it, then keeps it and returns a different legal card.
+//  hand, looks at it, then hands back any card — even the one just drawn.
 //
 //  The draw is blind by construction: the creditor picks a *position in a
 //  shuffled fan*, and only the host can map that position to a card.
@@ -61,7 +61,7 @@ enum TDPKhichai {
         var debtor: [Card]
     }
 
-    /// Applies the creditor's mandatory return of a different card.
+    /// Applies the creditor's return of any card they hold (the drawn one too).
     /// Called *after* the drawn card has already moved into the creditor's
     /// hand, so the creditor is holding 11 cards on entry.
     static func applyReturn(hands: Hands,
@@ -74,27 +74,21 @@ enum TDPKhichai {
         guard let returning = hands.creditor.first(where: { $0.tdpID == returnCardID }) else {
             return .failure(TDPError("You can only return a card you hold."))
         }
-        // R1 — never return the card just taken.
-        guard returning.tdpID != drawn.tdpID else {
-            return .failure(TDPError("The pulled card must be kept; return a different card."))
-        }
-        // R2 — retain at least two cards in the suit being returned.
-        let remaining = hands.creditor.filter { $0.suit == returning.suit && $0.tdpID != returning.tdpID }
-        if remaining.count < 2 {
-            return .failure(TDPError("You'd be left with too few \(returning.suit.rawValue)."))
-        }
-
+        // Any card may go back, including the one just drawn.
         var next = hands
         next.creditor.removeAll { $0.tdpID == returnCardID }
         next.debtor.append(returning)
         return .success(next)
     }
 
-    /// Cards the creditor may legally return, given the restrictions.
+    /// Cards the creditor may return: any card in hand, the drawn one too.
+    ///
+    /// Written rules vary. Pagat and CatsAtCards forbid returning the drawn
+    /// card and require keeping two of the returned suit; Ways to Play,
+    /// GameRules.com and CardzMania's default have no suit rule, and one
+    /// open-source implementation lets the drawn card go straight back.
+    /// This table plays with no restriction (decided 2026-09-26).
     static func legalReturns(hand: [Card], drawn: Card) -> [Card] {
-        let candidates = hand.filter { $0.tdpID != drawn.tdpID }
-        return candidates.filter { card in
-            hand.filter { $0.suit == card.suit && $0.tdpID != card.tdpID }.count >= 2
-        }
+        hand
     }
 }

@@ -269,6 +269,17 @@ final class TDPHostService {
         }
     }
 
+    #if DEBUG
+    /// Debug only: runs a prepared mid-session state (see
+    /// `TDPDebugScenario`) instead of dealing a fresh game. Players and
+    /// local seats must already match this service's mode.
+    func debugStart(with state: TDPGameState) {
+        engine = TDPEngine(state: state)
+        started = true
+        pump()
+    }
+    #endif
+
     private func refreshArrangeDeadline() {
         guard engine.state.phase == .khichai,
               let step = engine.state.khichaiCurrent, step.arranging else {

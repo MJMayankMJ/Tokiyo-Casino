@@ -304,7 +304,7 @@ final class TDPGameViewController: UIViewController {
             guard let pull = view.khichai, pull.pullTotal > 1 else { return ("Pull a card", true) }
             return ("Pull a card — \(pull.pullNumber) of \(pull.pullTotal)", true)
         case .khichaiReturn:
-            return (selectedCardID == nil ? "Give back a different card" : "Tap again to give it back", true)
+            return (selectedCardID == nil ? "Give a card back — any card" : "Tap again to give it back", true)
         default:
             break
         }
@@ -824,10 +824,9 @@ final class TDPGameViewController: UIViewController {
             confirm.addTarget(self, action: #selector(didTapConfirmReturn), for: .touchUpInside)
             prompt.primaryRow.addArrangedSubview(confirm)
         } else {
-            // Classic rules: the pulled card stays, and you may not strip a
-            // suit below two cards — which is why some cards are greyed out.
+            // Any card may go back — the outlined one you just drew included.
             prompt.reset(title: "You drew \(drawn)",
-                         subtitle: "Choose a different card to give \(debtor). You must keep at least two of its suit.")
+                         subtitle: "Choose a card to give \(debtor) — keep it, or hand the same one back.")
         }
     }
 

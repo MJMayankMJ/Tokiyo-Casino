@@ -215,20 +215,15 @@ trick under quota. Since deltas sum to zero, supply always equals demand.
 2. The creditor picks one **blind** — they do not know what it is, and the
    third player never sees it.
 3. The creditor looks at it. They now hold 11 cards.
-4. The creditor **returns one card** to the debtor, subject to two
-   restrictions:
-   - **R1** — it may not be the card they just took.
-   - **R2** — after returning it, the creditor must still hold **at least two
-     cards of that card's suit**.
+4. The creditor **returns any one card** to the debtor — including the one they
+   just drew. (The UI keeps the drawn card outlined so it's clear which it was.)
 
-R2 is the important one: it stops a creditor from using the pull to void
-themselves in a suit and set up cheap trumping.
-
-> **Invariant (proved, asserted in tests):** a legal return always exists.
-> The creditor holds 11 cards across 4 suits, so by pigeonhole some suit has
-> ≥ 3 cards; at least two of those are not the just‑taken card, and returning
-> one leaves ≥ 2 in the suit. Both restrictions are therefore always
-> satisfiable for the fixed 10-card game.
+> **No return restrictions (decided 2026‑09‑26).** Written rules vary: Pagat and
+> CatsAtCards forbid returning the drawn card *and* require keeping two of the
+> returned suit; Ways to Play and GameRules.com have no suit rule; CardzMania
+> makes "Min Suit" an option (2 / 1 / off); one open-source implementation lets
+> the drawn card go straight back. The game has no governing body, so this
+> table plays with no restriction on the returned card.
 
 **Result:** both players are back to 10 cards. The debtor has gained an unknown
 card and lost a card the creditor chose to be rid of. Repeat for each owed card.
@@ -359,7 +354,7 @@ deliberately theatrical screen.
 **As creditor (pulling):** the debtor's ten cards fan out face down and
 slightly separated. You tap one. It flips toward you with a lift animation —
 **only you see it**. Your hand is then shown with the new card highlighted, and
-every card you may legally return is enabled; cards blocked by R2 are dimmed
+every card you may legally return is enabled; nothing is blocked; the pulled card stays outlined
 with the reason on long‑press ("You'd be left with only one spade").
 
 **As debtor (being pulled from):** you see your own fan face **up** (it's your
@@ -407,7 +402,7 @@ Tokiyo Casino/TeenDoPaanch/
 │   ├── TDPLegalMoves.swift        follow-suit + trick resolution
 │   ├── TDPTrickResolver.swift     winner determination
 │   ├── TDPScoring.swift           deltas, debts, session end
-│   ├── TDPKhichai.swift           pull order, blind draw, R1/R2
+│   ├── TDPKhichai.swift           pull order, blind draw, return
 │   ├── TDPAIEngine.swift          see §7
 │   ├── TDPAutosave.swift          resume-in-progress
 │   └── TDPAudio.swift
@@ -545,7 +540,7 @@ sampling discipline already in `EquityCalculator`.
   via the seeded RNG. No cheating: the AI must not read the debtor's hand.
   This is enforced by passing the AI a `TDPKhichaiView` that exposes only the
   *count* of the debtor's cards.
-- **Returning:** discard the lowest‑value card that satisfies R1 and R2, where
+- **Returning:** return the lowest‑value card (which may be the pulled one), where
   value weights trumps heavily, then aces/kings, then length in the suit.
   Prefer returning from the longest non‑trump suit.
 
@@ -615,7 +610,7 @@ creditor must learn *one* card of the debtor's hand and no more:
 3. The next redacted `clientView` includes the drawn card and legal return ids
    **only** for the creditor.
 4. The creditor sends a `khichaiReturn` intent containing a card id.
-5. **Host re‑validates R1 and R2 authoritatively** and rejects an illegal
+5. **Host re‑validates the return authoritatively** (the card must be in hand) and rejects an illegal
    return rather than trusting the client, then publishes fresh redacted views.
 
 A compromised client can therefore learn exactly one card per pull it is
@@ -641,7 +636,7 @@ by a bot inheriting a human's result and card pulls.
 5. **Khichai with one creditor and two debtors** (`+3, −1, −2`) → creditor
    drains the dealer first (if under), then the third player, then the selector.
 6. **A creditor pulls a card and their only legal returns are all trumps** →
-   R2 still applies; legal by the pigeonhole invariant (§2.9), no special case.
+   any card may go back, so a legal return always exists.
 7. **Everyone hits quota exactly** → no khichai; skip the phase silently.
 8. **A player wins all 10 tricks** → deltas `+5, −3, −2`; next round's
    khichai moves 5 cards.
@@ -670,7 +665,7 @@ Mirrors `Tokiyo CasinoTests/JackarooTests/`, as `TeenDoPaanchTests/`.
   and discards never win.
 - `TDPScoringTests` — one point per trick, delta maths, and
   **`Σ delta == 0` after every round**.
-- `TDPKhichaiTests` — pull order for all six delta configurations; R1 and R2
+- `TDPKhichaiTests` — pull order for all six delta configurations; R1
   enforcement; the pigeonhole invariant across 10 000 random hands; card
   conservation (30 cards in play, always).
 
@@ -684,7 +679,7 @@ Mirrors `Tokiyo CasinoTests/JackarooTests/`, as `TeenDoPaanchTests/`.
   `ProtocolGoldenFixtures.swift`.
 - **Redaction tests**: no public snapshot ever contains another seat's cards;
   `khichaiDrawResult` sent to non‑creditors carries no card.
-- Host rejects an illegal `khichaiReturn` (R1 and R2 both).
+- Host rejects an illegal `khichaiReturn` (a card not in hand).
 
 **AI**
 - Determinized AI never reads hidden state (type‑level, plus a runtime assert).
@@ -719,7 +714,7 @@ Sized to match the Jackaroo phase plan.
 | --- | --- | --- |
 | **1. Models & deal** | `TDPCard`, pack, `TDPGameState`, dealer/rotation, 5‑3‑2 deal, seeded RNG | Deck + deal + roles tests green |
 | **2. Core round** | Trump selection (3 options), legal moves, trick resolution, scoring, phase machine | A full 10‑trick round plays headless; `Σ delta == 0` |
-| **3. Khichai** | Mandatory previous-round pull order, blind draw, R1/R2, queue | Delta configurations tested; card conservation holds |
+| **3. Khichai** | Mandatory previous-round pull order, blind draw, return, queue | Delta configurations tested; card conservation holds |
 | **4. AI** | Easy + Medium; redacted `TDPAIView`; trump + play + khichai heuristics | Full AI‑only sessions run clean; no hidden‑state access |
 | **5. UI** | Table, hand strip, quota pills, trump badge, khichai screen, round/session summary, rules screen, handoff overlay | Practice + pass‑and‑play fully playable |
 | **6. Multiplayer** | Transport generalization, `TDPProtocol`, host/client services, lobby, redaction, reconnect | 3 devices complete a session; golden fixtures + redaction tests green |
@@ -736,7 +731,7 @@ Implemented and audited. **34 focused Teen Do Paanch tests green**, including
 | --- | --- | --- |
 | 1. Models & deal | **done** | 30-card pack, 5-3-2 deal, roles, seeded RNG |
 | 2. Core round | **done** | All three trump options, legal moves, tricks, one-point-per-trick scoring |
-| 3. Khichai | **done** | Mandatory previous-round pull; blind draw; R1 and R2 enforced; score unchanged. |
+| 3. Khichai | **done** | Mandatory previous-round pull; blind draw; no return restrictions (dropped 2026‑09‑26); score unchanged. |
 | 4. AI | **done** | Easy + Medium. Reads only its own hand; pulls blind |
 | 5. UI | **done, unstyled** | Playable table, quota pills, khichai screen, handoff curtain, rules. Visual pass deferred |
 | 6. Multiplayer | **done** | `tokiyo-tdp` over MPC, host-authoritative, redaction enforced by `TDPViewBuilder` |

@@ -68,15 +68,20 @@ final class TDPEntryViewController: UIViewController {
         note.numberOfLines = 0
         note.textAlignment = .center
 
-        let stack = UIStackView(arrangedSubviews: [
-            heading, subtitle, nameField, practice, pass, host, join, rules, note
-        ])
+        var items: [UIView] = [heading, subtitle, nameField, practice, pass, host, join, rules]
+        #if DEBUG
+        let debug = TDPDesign.button("Debug · khichai", filled: false)
+        debug.addTarget(self, action: #selector(didTapDebugKhichai), for: .touchUpInside)
+        items.append(debug)
+        #endif
+        items.append(note)
+        let stack = UIStackView(arrangedSubviews: items)
         stack.axis = .vertical
         stack.spacing = 12
         stack.setCustomSpacing(4, after: heading)
         stack.setCustomSpacing(24, after: subtitle)
         stack.setCustomSpacing(24, after: nameField)
-        stack.setCustomSpacing(24, after: rules)
+        stack.setCustomSpacing(24, after: items[items.count - 2])
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
 
@@ -120,6 +125,31 @@ final class TDPEntryViewController: UIViewController {
     @objc private func didTapJoin() {
         push(TDPLobbyViewController(role: .guest(name: playerName)))
     }
+
+    #if DEBUG
+    /// Debug builds: jump straight to settling up in round 2+.
+    @objc private func didTapDebugKhichai() {
+        let sheet = UIAlertController(
+            title: "Debug · khichai",
+            message: "Starts at settle-up with the cards dealt. You and Player 2 share this phone; Meera is a bot.",
+            preferredStyle: .actionSheet)
+        for scenario in TDPDebugScenario.allCases {
+            sheet.addAction(UIAlertAction(title: scenario.title, style: .default) { [weak self] _ in
+                self?.launchDebug(scenario)
+            })
+        }
+        sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
+        sheet.popoverPresentationController?.sourceView = view
+        present(sheet, animated: true)
+    }
+
+    private func launchDebug(_ scenario: TDPDebugScenario) {
+        let service = TDPHostService(mode: .passAndPlay(humanSeats: 2), hostName: playerName)
+        let driver = TDPHostDriver(service: service)       // attach before the first publish
+        service.debugStart(with: scenario.makeState(playerName: playerName))
+        push(TDPGameViewController(driver: driver))
+    }
+    #endif
 
     @objc private func didTapRules() {
         push(TDPRulesViewController())
@@ -184,8 +214,14 @@ final class TDPRulesViewController: UIViewController {
         under quota, whoever finished over it may pull cards out of your
         hand — one for each trick they were owed.
 
-        They draw blind from your fanned hand, keep it, then return a different
-        card while retaining at least two cards of the returned card's suit.
+        Before any card moves you choose, for each player you owe: give up the
+        tricks — no cards move, but this round your target rises by what you
+        owe and theirs falls by the same (never to the same player two rounds
+        running) — or give cards.
+
+        Giving cards: if a person is pulling, you get 10 seconds to arrange
+        your cards face down. They pull blind, then hand you back any card —
+        even the one they drew — which lands at a random spot in your cards.
 
         A session runs three rounds, or any multiple of three, so everyone
         deals, selects trump and sits third the same number of times.

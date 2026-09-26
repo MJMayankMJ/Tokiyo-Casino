@@ -50,8 +50,6 @@ enum TDPTheme {
     static let suitBlack     = UIColor.dyn(light: 0x1A1A1F, dark: 0x181B1F)  // ref oklch(.22 .01 255)
     /// Suit glyph on the trump pill — brighter red to read on the dark pill.
     static let trumpRed      = UIColor.dyn(light: 0xE13D44, dark: 0xF66C6D)  // ref oklch(.70 .17 22)
-    static let cardBack      = UIColor.dyn(light: 0xC9A674, dark: 0x262A2F)
-    static let cardBackInner = UIColor.dyn(light: 0xF5E6C8, dark: 0x33383E)
     /// Wash over cards you can't play. The reference darkens them
     /// (`brightness(.42) saturate(.6)`); on parchment a cream wash reads
     /// better than black.
