@@ -350,6 +350,10 @@ final class TDPEngineTests: XCTestCase {
 
         let engine = TDPEngine(state: state)
         XCTAssertNil(engine.apply(.dealTwo))
+        // The debtor first chooses how to settle; giving cards is the
+        // classic pull this test is about.
+        XCTAssertEqual(engine.state.phase, .settle)
+        XCTAssertNil(engine.apply(.settle(seat: 0, choices: [1: .giveCards])))
         XCTAssertEqual(engine.state.phase, .khichai)
         XCTAssertEqual(engine.state.khichaiCurrent?.creditorSeat, 1)
         XCTAssertEqual(engine.state.khichaiCurrent?.debtorSeat, 0)

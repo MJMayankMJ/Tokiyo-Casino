@@ -107,6 +107,7 @@ final class TDPOpponentBadge: UIView {
     let avatar = TDPAvatarView(side: 52, radius: 18)
     private let nameLabel = UILabel()
     private let tallyLabel = UILabel()
+    private let chipLabel = TDPChipLabel()
     private let detailLabel = UILabel()
 
     init(side: Side) {
@@ -121,7 +122,11 @@ final class TDPOpponentBadge: UIView {
         let alignment: NSTextAlignment = side == .left ? .left : .right
         [nameLabel, tallyLabel, detailLabel].forEach { $0.textAlignment = alignment }
 
-        let info = UIStackView(arrangedSubviews: [nameLabel, tallyLabel, detailLabel])
+        // The chip sits on the inside edge, next to the tally.
+        let tallyRow = UIStackView(arrangedSubviews: side == .left ? [tallyLabel, chipLabel] : [chipLabel, tallyLabel])
+        tallyRow.spacing = 6
+        tallyRow.alignment = .center
+        let info = UIStackView(arrangedSubviews: [nameLabel, tallyRow, detailLabel])
         info.axis = .vertical
         info.spacing = 4
         info.alignment = side == .left ? .leading : .trailing
@@ -144,9 +149,12 @@ final class TDPOpponentBadge: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func configure(name: String, tally: String, quotaMet: Bool, detail: String,
-                   isActive: Bool, tint: TDPTheme.Tint, isOffline: Bool) {
+                   isActive: Bool, tint: TDPTheme.Tint, isOffline: Bool, chip: String? = nil) {
         nameLabel.text = name
         tallyLabel.text = tally
+        chipLabel.text = chip
+        chipLabel.isHidden = chip == nil
+        chipLabel.invalidateIntrinsicContentSize()
         tallyLabel.textColor = quotaMet ? TDPTheme.accent : TDPTheme.inkSoft
         detailLabel.text = detail
         avatar.setName(name)
@@ -164,6 +172,7 @@ final class TDPSelfBadge: UIView {
     let avatar = TDPAvatarView(side: 44, radius: 16)
     private let nameLabel = UILabel()
     private let tallyLabel = UILabel()
+    private let chipLabel = TDPChipLabel()
     private let statusLabel = UILabel()
 
     init() {
@@ -174,10 +183,11 @@ final class TDPSelfBadge: UIView {
         tallyLabel.font = TDPTheme.mono(13)
         statusLabel.font = TDPTheme.font(12)
 
-        let top = UIStackView(arrangedSubviews: [nameLabel, tallyLabel])
+        chipLabel.isAccent = true
+        let top = UIStackView(arrangedSubviews: [nameLabel, tallyLabel, chipLabel])
         top.axis = .horizontal
         top.spacing = 10
-        top.alignment = .firstBaseline
+        top.alignment = .center
 
         let info = UIStackView(arrangedSubviews: [top, statusLabel])
         info.axis = .vertical
@@ -202,9 +212,12 @@ final class TDPSelfBadge: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func configure(name: String, tally: String, quotaMet: Bool, status: String,
-                   statusIsAction: Bool, isActive: Bool) {
+                   statusIsAction: Bool, isActive: Bool, chip: String? = nil) {
         nameLabel.text = name
         tallyLabel.text = tally
+        chipLabel.text = chip
+        chipLabel.isHidden = chip == nil
+        chipLabel.invalidateIntrinsicContentSize()
         tallyLabel.textColor = quotaMet ? TDPTheme.accent : TDPTheme.inkSoft
         statusLabel.text = status
         statusLabel.textColor = statusIsAction ? TDPTheme.accent : TDPTheme.muted

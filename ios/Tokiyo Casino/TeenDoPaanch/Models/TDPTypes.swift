@@ -45,6 +45,8 @@ enum TDPPhase: String, Codable {
     case trumpSelect
     case dealThree
     case dealTwo
+    /// A debtor chooses, per creditor, to give up tricks or give cards.
+    case settle
     case khichai
     case play
     case trickResolve
@@ -69,6 +71,25 @@ enum TDPTrumpMethod: String, Codable {
         case .highestOfThree: return "Highest of 3"
         }
     }
+}
+
+// MARK: - Settling up
+
+/// How a debtor settles one debt at the start of a round.
+enum TDPSettleMethod: String, Codable {
+    /// No cards move; this round the debtor's target rises by the amount
+    /// owed and the creditor's falls by the same amount.
+    case giveTricks
+    /// The creditor pulls that many cards, blind (classic khichai).
+    case giveCards
+}
+
+/// A debt settled by giving up tricks. Kept per round because the same
+/// debtor may not do this to the same creditor in consecutive rounds.
+struct TDPConcession: Codable, Equatable {
+    let debtor: TDPSeat
+    let creditor: TDPSeat
+    let amount: Int
 }
 
 // MARK: - Errors

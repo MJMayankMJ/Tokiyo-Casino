@@ -24,6 +24,12 @@ enum TDPAction: Equatable {
     case selectTrumpHighestOfThree(seat: TDPSeat)
     case dealThree
     case dealTwo
+    /// The debtor's choice for every debt they owe, keyed by creditor.
+    case settle(seat: TDPSeat, choices: [TDPSeat: TDPSettleMethod])
+    /// The debtor's face-down order during their arranging window.
+    case khichaiArrange(seat: TDPSeat, order: [String], done: Bool)
+    /// Host-only: the arranging window ran out.
+    case khichaiArrangeTimeout
     case khichaiDraw(seat: TDPSeat, fanIndex: Int?)
     case khichaiReturn(seat: TDPSeat, cardID: String)
     case playCard(seat: TDPSeat, cardID: String)
@@ -103,6 +109,9 @@ final class TDPEngine {
         case .selectTrumpHighestOfThree(let seat):      error = selectTrump(&draft, seat, .highestOfThree, suit: nil)
         case .dealThree:                                error = dealThree(&draft)
         case .dealTwo:                                  error = dealTwo(&draft)
+        case .settle(let seat, let choices):            error = settle(&draft, seat, choices)
+        case .khichaiArrange(let seat, let order, let done): error = khichaiArrange(&draft, seat, order, done)
+        case .khichaiArrangeTimeout:                    error = khichaiArrangeTimeout(&draft)
         case .khichaiDraw(let seat, let index):         error = khichaiDraw(&draft, seat, index)
         case .khichaiReturn(let seat, let cardID):       error = khichaiReturn(&draft, seat, cardID)
         case .playCard(let seat, let cardID):           error = playCard(&draft, seat, cardID)
@@ -349,29 +358,158 @@ final class TDPEngine {
         s.debts = TDPScoring.computeDebts(players: s.players,
                                           deltas: previousDeltas,
                                           dealerSeat: dealerSeat)
-        return beginKhichaiOrPlay(&s)
+        return beginSettle(&s)
+    }
+
+    // MARK: Settling up
+
+    static func settleKey(debtor: TDPSeat, creditor: TDPSeat) -> String { "\(debtor)-\(creditor)" }
+
+    /// A debtor may not give up tricks to the same creditor in consecutive
+    /// rounds: a debt that could be pushed forward every round would never
+    /// be paid. Owing a different player is a fresh start.
+    static func isGiveTricksLocked(_ s: TDPGameState, debtor: TDPSeat, creditor: TDPSeat) -> Bool {
+        guard let last = s.roundHistory.last else { return false }
+        return last.concessions.contains { $0.debtor == debtor && $0.creditor == creditor }
+    }
+
+    private func beginSettle(_ s: inout TDPGameState) -> TDPError? {
+        guard !s.debts.isEmpty else { return beginPlay(&s) }
+        s.settleChoices = [:]
+        s.phase = .settle
+        s.currentTurnSeat = nil
+        var debtors: [TDPSeat] = []
+        for debt in s.debts where !debtors.contains(debt.from) { debtors.append(debt.from) }
+        s.message = "\(debtors.map { s.name(at: $0) }.joined(separator: " and ")) settling up."
+        return nil
+    }
+
+    private func settle(_ s: inout TDPGameState,
+                        _ seat: TDPSeat,
+                        _ choices: [TDPSeat: TDPSettleMethod]) -> TDPError? {
+        guard s.phase == .settle else { return TDPError("There is nothing to settle right now.") }
+        let mine = s.debts.filter { $0.from == seat }
+        guard !mine.isEmpty else { return TDPError("You don't owe anyone tricks.") }
+        guard mine.allSatisfy({ s.settleChoices[Self.settleKey(debtor: seat, creditor: $0.to)] == nil }) else {
+            return TDPError("You've already settled up.")
+        }
+        guard Set(choices.keys) == Set(mine.map(\.to)) else {
+            return TDPError("Choose how to settle with each player you owe.")
+        }
+        for debt in mine where choices[debt.to] == .giveTricks
+            && Self.isGiveTricksLocked(s, debtor: seat, creditor: debt.to) {
+            return TDPError("You gave \(s.name(at: debt.to)) tricks last round — this time they pull cards.")
+        }
+        for debt in mine {
+            s.settleChoices[Self.settleKey(debtor: seat, creditor: debt.to)] = choices[debt.to]
+        }
+        let waiting = s.debts.filter { s.settleChoices[Self.settleKey(debtor: $0.from, creditor: $0.to)] == nil }
+        guard waiting.isEmpty else {
+            s.message = "\(s.name(at: seat)) has settled up."
+            return nil
+        }
+        return resolveSettlement(&s)
+    }
+
+    /// Applies every choice at once: tricks given up shift this round's
+    /// targets (in equal and opposite amounts, so they still sum to 10);
+    /// cards given become the pull queue.
+    private func resolveSettlement(_ s: inout TDPGameState) -> TDPError? {
+        var cardDebts: [TDPDebt] = []
+        for debt in s.debts {
+            switch s.settleChoices[Self.settleKey(debtor: debt.from, creditor: debt.to)] ?? .giveCards {
+            case .giveTricks:
+                s.targetAdjust[String(debt.from), default: 0] += debt.amount
+                s.targetAdjust[String(debt.to), default: 0] -= debt.amount
+                s.concessions.append(TDPConcession(debtor: debt.from, creditor: debt.to, amount: debt.amount))
+            case .giveCards:
+                cardDebts.append(debt)
+            }
+        }
+        return beginKhichaiOrPlay(&s, debts: cardDebts)
     }
 
     // MARK: Khichai setup
 
-    private func beginKhichaiOrPlay(_ s: inout TDPGameState) -> TDPError? {
-        let pairs = TDPScoring.expandKhichaiQueue(debts: s.debts)
+    private func beginKhichaiOrPlay(_ s: inout TDPGameState, debts: [TDPDebt]) -> TDPError? {
+        let pairs = TDPScoring.expandKhichaiQueue(debts: debts)
         guard !pairs.isEmpty else { return beginPlay(&s) }
 
-        var queue: [TDPKhichaiStep] = []
-        for pair in pairs {
-            let count = s.player(at: pair.debtor)?.hand.count ?? 0
-            queue.append(TDPKhichaiStep(creditorSeat: pair.creditor,
-                                        debtorSeat: pair.debtor,
-                                        drawnCard: nil,
-                                        fanOrder: TDPKhichai.makeFanOrder(count: count, rng: &s.rng)))
+        var queue = pairs.map {
+            TDPKhichaiStep(creditorSeat: $0.creditor, debtorSeat: $0.debtor, drawnCard: nil, fanOrder: [])
         }
-        s.khichaiCurrent = queue.removeFirst()
+        var first = queue.removeFirst()
         s.khichaiQueue = queue
         s.phase = .khichai
-        if let step = s.khichaiCurrent {
-            s.message = "\(s.name(at: step.creditorSeat)) pulls from \(s.name(at: step.debtorSeat))."
+        prepareStep(&s, &first)
+        s.khichaiCurrent = first
+        s.message = first.arranging
+            ? "\(s.name(at: first.debtorSeat)) is arranging their cards."
+            : "\(s.name(at: first.creditorSeat)) pulls from \(s.name(at: first.debtorSeat))."
+        return nil
+    }
+
+    /// Readies a pull. The first time a debtor is pulled from this round
+    /// their face-down order is fixed: shuffled for them, then — when they
+    /// are a person and a person is pulling — theirs to rearrange in a
+    /// timed window. After that the order persists for the round.
+    private func prepareStep(_ s: inout TDPGameState, _ step: inout TDPKhichaiStep) {
+        let key = String(step.debtorSeat)
+        let hand = s.player(at: step.debtorSeat)?.hand ?? []
+        if s.arrangements[key] == nil {
+            // Start shuffled so a player who never touches the order does
+            // not hand the puller a sorted (predictable) fan.
+            s.arrangements[key] = TDPKhichai.makeFanOrder(count: hand.count, rng: &s.rng).map { hand[$0].tdpID }
+            step.arranging = Self.arrangingWindowApplies(s, step: step)
+        } else {
+            step.arranging = false
         }
+        step.fanOrder = Self.fanOrder(hand: hand, arrangement: s.arrangements[key] ?? [])
+    }
+
+    /// Arranging only matters against a person: a bot picks blind at random.
+    static func arrangingWindowApplies(_ s: TDPGameState, step: TDPKhichaiStep) -> Bool {
+        guard let debtor = s.player(at: step.debtorSeat), !debtor.isAI else { return false }
+        let pullers = ([step] + s.khichaiQueue)
+            .filter { $0.debtorSeat == step.debtorSeat }
+            .map(\.creditorSeat)
+        return pullers.contains { s.player(at: $0).map { !$0.isAI } ?? false }
+    }
+
+    /// Maps an arrangement of card ids onto indices of the (sorted) hand.
+    static func fanOrder(hand: [Card], arrangement: [String]) -> [Int] {
+        arrangement.compactMap { id in hand.firstIndex { $0.tdpID == id } }
+    }
+
+    private func khichaiArrange(_ s: inout TDPGameState,
+                                _ seat: TDPSeat,
+                                _ order: [String],
+                                _ done: Bool) -> TDPError? {
+        guard s.phase == .khichai, var step = s.khichaiCurrent, step.arranging else {
+            return TDPError("It's not time to arrange cards.")
+        }
+        guard step.debtorSeat == seat else { return TDPError("Only the player giving cards arranges them.") }
+        let hand = s.player(at: seat)?.hand ?? []
+        guard order.count == hand.count, Set(order) == Set(hand.map(\.tdpID)) else {
+            return TDPError("That order doesn't match your hand.")
+        }
+        s.arrangements[String(seat)] = order
+        step.fanOrder = Self.fanOrder(hand: hand, arrangement: order)
+        if done {
+            step.arranging = false
+            s.message = "\(s.name(at: step.creditorSeat)) pulls from \(s.name(at: seat))."
+        }
+        s.khichaiCurrent = step
+        return nil
+    }
+
+    private func khichaiArrangeTimeout(_ s: inout TDPGameState) -> TDPError? {
+        guard s.phase == .khichai, var step = s.khichaiCurrent, step.arranging else {
+            return TDPError("No arranging window is open.")
+        }
+        step.arranging = false
+        s.khichaiCurrent = step
+        s.message = "\(s.name(at: step.creditorSeat)) pulls from \(s.name(at: step.debtorSeat))."
         return nil
     }
 
@@ -382,6 +520,7 @@ final class TDPEngine {
             return TDPError("There is no pull in progress.")
         }
         guard step.creditorSeat == seat else { return TDPError("Only the winning player draws.") }
+        guard !step.arranging else { return TDPError("\(s.name(at: step.debtorSeat)) is still arranging.") }
         guard step.drawnCard == nil else { return TDPError("A card has already been drawn.") }
         guard let debtorIndex = s.players.firstIndex(where: { $0.seat == step.debtorSeat }),
               let creditorIndex = s.players.firstIndex(where: { $0.seat == seat })
@@ -396,6 +535,7 @@ final class TDPEngine {
             return error
         case .success(let card):
             s.players[debtorIndex].hand.removeAll { $0.tdpID == card.tdpID }
+            s.arrangements[String(step.debtorSeat)]?.removeAll { $0 == card.tdpID }
             s.players[creditorIndex].hand = TDPDeck.sortHand(s.players[creditorIndex].hand + [card])
             step.drawnCard = card
             s.khichaiCurrent = step
@@ -426,13 +566,18 @@ final class TDPEngine {
         case .success(let next):
             s.players[creditorIndex].hand = TDPDeck.sortHand(next.creditor)
             s.players[debtorIndex].hand = TDPDeck.sortHand(next.debtor)
+            // The returned card is slipped into the debtor's face-down order
+            // at a random spot, so the puller can't track it.
+            let debtorKey = String(step.debtorSeat)
+            var order = s.arrangements[debtorKey] ?? []
+            order.insert(returnCardID, at: s.rng.int(upperBound: order.count + 1))
+            s.arrangements[debtorKey] = order
             if s.khichaiQueue.isEmpty {
                 s.khichaiCurrent = nil
                 return beginPlay(&s)
             }
             var following = s.khichaiQueue.removeFirst()
-            let count = s.player(at: following.debtorSeat)?.hand.count ?? 0
-            following.fanOrder = TDPKhichai.makeFanOrder(count: count, rng: &s.rng)
+            prepareStep(&s, &following)
             s.khichaiCurrent = following
             s.message = "\(s.name(at: following.creditorSeat)) pulls next."
             return nil
@@ -509,7 +654,8 @@ final class TDPEngine {
         var quotas: [String: Int] = [:]
         var deltas: [String: Int] = [:]
         for player in s.players {
-            let quota = TDPRoles.quota(seat: player.seat, dealerSeat: dealerSeat)
+            // The effective target: tricks given up while settling count.
+            let quota = s.quota(at: player.seat)
             let delta = TDPScoring.delta(tricks: player.tricksWon, quota: quota)
             let key = String(player.seat)
             tricks[key] = player.tricksWon
@@ -528,7 +674,8 @@ final class TDPEngine {
                                             trumpMethod: s.trumpMethod ?? .choose,
                                             tricks: tricks,
                                             quotas: quotas,
-                                            delta: deltas))
+                                            delta: deltas,
+                                            concessions: s.concessions))
         let nextDealer = TDPRoles.rotateDealer(dealerSeat)
         s.debts = TDPScoring.computeDebts(players: s.players,
                                           deltas: deltas,

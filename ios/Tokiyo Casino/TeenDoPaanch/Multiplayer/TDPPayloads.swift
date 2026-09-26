@@ -111,6 +111,9 @@ struct TDPSeatView: Codable {
     let isConnected: Bool
     /// Card drawn in the first-dealer draw; public by nature.
     let drawnCard: Card?
+    /// The role quota before any tricks were given up this round; `quota`
+    /// is the effective target.
+    var baseQuota: Int = 0
 }
 
 /// The pull in progress. `drawnCard` and `legalReturnIDs` are populated
@@ -124,6 +127,33 @@ struct TDPKhichaiView: Codable {
     let iAmDebtor: Bool
     let drawnCard: Card?
     let legalReturnIDs: [String]?
+    /// The debtor is arranging; nobody may pull until it closes.
+    var isArranging: Bool = false
+    var arrangeSecondsLeft: Int?
+    /// "1 of 2" — this pull within the current creditor/debtor pair.
+    var pullNumber: Int = 1
+    var pullTotal: Int = 1
+}
+
+/// One debt the viewer owes, for the settle-up choice.
+struct TDPSettleDebt: Codable, Equatable {
+    let creditorSeat: TDPSeat
+    let amount: Int
+    /// Gave this creditor tricks last round — must give cards this time.
+    let giveTricksLocked: Bool
+}
+
+struct TDPSettleView: Codable {
+    /// The viewer's own debts still awaiting a choice (empty once chosen).
+    let mine: [TDPSettleDebt]
+    /// Debtors who haven't chosen yet — public.
+    let waitingOn: [TDPSeat]
+}
+
+/// One line of a settle-up intent.
+struct TDPSettleChoice: Codable, Equatable {
+    let creditorSeat: TDPSeat
+    let method: TDPSettleMethod
 }
 
 /// What the host is waiting on from this client, so the UI knows which
@@ -132,6 +162,10 @@ enum TDPPrompt: String, Codable {
     case none
     case ready
     case chooseTrump
+    /// You owe tricks: give them up, or give cards, per creditor.
+    case settleUp
+    /// Your arranging window is open.
+    case arrangeCards
     case khichaiDraw
     case khichaiReturn
     case playCard
@@ -176,6 +210,13 @@ struct TDPClientView: Codable {
     let canEndSession: Bool
     let isHost: Bool
     let message: String
+
+    var settlement: TDPSettleView?
+    /// The debtor's own cards in their face-down order. Only ever sent to
+    /// the debtor — it is their hand.
+    var myArrangement: [Card]?
+    /// Debts settled in tricks this round; public.
+    var concessions: [TDPConcession] = []
 }
 
 // MARK: - Intents (client → host)
@@ -190,6 +231,8 @@ struct TDPIntent: Codable {
         case trumpSuit
         case trumpSeventh
         case trumpHighestOfThree
+        case settle
+        case arrange
         case khichaiDraw
         case khichaiReturn
         case playCard
@@ -205,19 +248,29 @@ struct TDPIntent: Codable {
     /// Position in the fanned hand, never a card id — the host resolves it.
     var fanIndex: Int?
     var cardID: String?
+    var settlements: [TDPSettleChoice]?
+    /// The debtor's own card ids in their chosen face-down order.
+    var order: [String]?
+    var done: Bool?
 
     init(kind: Kind,
          ready: Bool? = nil,
          rounds: Int? = nil,
          suit: Suit? = nil,
          fanIndex: Int? = nil,
-         cardID: String? = nil) {
+         cardID: String? = nil,
+         settlements: [TDPSettleChoice]? = nil,
+         order: [String]? = nil,
+         done: Bool? = nil) {
         self.kind = kind
         self.ready = ready
         self.rounds = rounds
         self.suit = suit
         self.fanIndex = fanIndex
         self.cardID = cardID
+        self.settlements = settlements
+        self.order = order
+        self.done = done
     }
 
     /// Maps to an engine action for `seat`. The host always supplies the
@@ -229,6 +282,16 @@ struct TDPIntent: Codable {
         case .trumpSuit:           return suit.map { .selectTrumpSuit(seat: seat, suit: $0) }
         case .trumpSeventh:        return .selectTrumpSeventh(seat: seat)
         case .trumpHighestOfThree: return .selectTrumpHighestOfThree(seat: seat)
+        case .settle:
+            guard let settlements else { return nil }
+            var choices: [TDPSeat: TDPSettleMethod] = [:]
+            for line in settlements {
+                guard choices[line.creditorSeat] == nil else { return nil }   // duplicate creditor
+                choices[line.creditorSeat] = line.method
+            }
+            return .settle(seat: seat, choices: choices)
+        case .arrange:
+            return order.map { .khichaiArrange(seat: seat, order: $0, done: done ?? false) }
         case .khichaiDraw:         return .khichaiDraw(seat: seat, fanIndex: fanIndex)
         case .khichaiReturn:       return cardID.map { .khichaiReturn(seat: seat, cardID: $0) }
         case .playCard:            return cardID.map { .playCard(seat: seat, cardID: $0) }

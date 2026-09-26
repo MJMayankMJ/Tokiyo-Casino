@@ -55,6 +55,14 @@ final class TDPHostService {
     var aiThinkTime: TimeInterval = 0.7
     var dealPace: TimeInterval = 0.35
     var trickHold: TimeInterval = 1.1
+    /// How long a debtor gets to arrange their cards for a person pulling.
+    var arrangeWindow: TimeInterval = 10
+
+    /// Wall-clock end of the open arranging window. Held as a deadline, not
+    /// a scheduled timer, because `pump()` cancels pending work on every
+    /// pass — a debtor dragging a card must not restart their own clock.
+    private var arrangeDeadline: Date?
+    private var arrangeKey: String?
 
     private let tableID: String
     private var transport: TDPTransport?
@@ -202,7 +210,21 @@ final class TDPHostService {
     /// AI seat whose turn it is. Re-entrant-safe via `cancelPending`.
     func pump() {
         cancelPending()
+        refreshArrangeDeadline()
         publish()
+
+        if let deadline = arrangeDeadline {
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else {
+                engine.apply(.khichaiArrangeTimeout)
+                pump()
+                return
+            }
+            // Tick on each whole second so every screen's countdown moves.
+            let fraction = remaining.truncatingRemainder(dividingBy: 1)
+            schedule(after: fraction > 0.05 ? fraction : 1) { [weak self] in self?.pump() }
+            return
+        }
 
         switch engine.state.phase {
         case .dealerDraw, .dealFirstFive, .dealThree, .dealTwo:
@@ -247,6 +269,25 @@ final class TDPHostService {
         }
     }
 
+    private func refreshArrangeDeadline() {
+        guard engine.state.phase == .khichai,
+              let step = engine.state.khichaiCurrent, step.arranging else {
+            arrangeDeadline = nil
+            arrangeKey = nil
+            return
+        }
+        // One window per debtor per round.
+        let key = "\(engine.state.roundNumber)-\(step.debtorSeat)"
+        if arrangeKey != key {
+            arrangeKey = key
+            arrangeDeadline = Date().addingTimeInterval(arrangeWindow)
+        }
+    }
+
+    private var arrangeSecondsLeft: Int? {
+        arrangeDeadline.map { max(0, Int(ceil($0.timeIntervalSinceNow))) }
+    }
+
     private func schedule(after delay: TimeInterval, _ block: @escaping () -> Void) {
         let item = DispatchWorkItem(block: block)
         pendingWork.append(item)
@@ -275,12 +316,14 @@ final class TDPHostService {
         let connected = connectedSeats
         for seat in localSeats.sorted() {
             let view = TDPViewBuilder.view(from: engine.state, for: seat,
-                                           isHost: seat == 0, connectedSeats: connected)
+                                           isHost: seat == 0, connectedSeats: connected,
+                                           arrangeSecondsLeft: arrangeSecondsLeft)
             delegate?.host(self, didUpdateLocalView: view, seat: seat)
         }
         for (seat, peer) in remoteSeats {
             let view = TDPViewBuilder.view(from: engine.state, for: seat,
-                                           isHost: false, connectedSeats: connected)
+                                           isHost: false, connectedSeats: connected,
+                                           arrangeSecondsLeft: arrangeSecondsLeft)
             send(type: .clientView, payload: view, to: [peer])
         }
         delegate?.hostDidPublish(self)

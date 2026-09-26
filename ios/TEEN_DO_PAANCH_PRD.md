@@ -233,6 +233,32 @@ themselves in a suit and set up cheap trumping.
 **Result:** both players are back to 10 cards. The debtor has gained an unknown
 card and lost a card the creditor chose to be rid of. Repeat for each owed card.
 
+#### 2.9.1 Settling up — give up tricks or give cards (table rule, 2026‑09‑26)
+
+Before any pull, each debtor chooses **per creditor**:
+
+- **Give up the tricks.** No cards move. For **this round only** the debtor's
+  target rises by the amount owed and the creditor's falls by the same amount
+  (you owe Kabir 2: your 3 → 5, Kabir's 5 → 3). The three targets still sum to
+  10, so deltas still cancel. Scoring is unchanged — one point per trick; the
+  shifted targets only decide next round's settling.
+- **Give cards** — the classic pull above.
+
+**Not twice in a row:** a debtor may not give up tricks to the **same** creditor
+in consecutive rounds; that debt must be settled in cards. Giving up tricks to a
+different creditor is fine, and a round in between clears the lock.
+
+**Arranging (when cards are given):** if the debtor *and* at least one of their
+pullers are people, the debtor gets **10 seconds** (Done ends it early) to
+rearrange their own face-down order; the puller then picks a position in that
+order. Against a bot puller there is no window — a bot picks blind at random,
+so the order can't matter. The order starts shuffled, is set **once per round**,
+and each card handed back is slipped in at a **random position**. The window's
+clock is host-authoritative (a deadline, not a restartable timer).
+
+A creditor owed more than their whole target has an effective target below
+zero; screens show it as 0.
+
 ### 2.10 Session length and winner
 
 A session is **a multiple of three rounds** (default: 3, offerable as 6 or 9),

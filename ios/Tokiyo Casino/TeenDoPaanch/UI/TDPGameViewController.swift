@@ -27,6 +27,15 @@ final class TDPGameViewController: UIViewController {
     private let prompt = TDPPromptCard()
     private let toast = TDPToastView()
     private let curtain = TDPHandoffCurtain()
+    private let arrangeView = TDPArrangeView()
+    private let countdown = TDPCountdownView(diameter: 120 * TDPTheme.scale)
+    private let banner = TDPBannerView()
+
+    /// Settle-up choices being made on this screen, per creditor, reset
+    /// each round.
+    private var settleSelection: [TDPSeat: TDPSettleMethod] = [:]
+    private var settleRound: Int?
+    private var showWhy = false
 
     private var lastView: TDPClientView?
     /// First tap picks a card, second tap commits it — the reference's guard
@@ -94,10 +103,20 @@ final class TDPGameViewController: UIViewController {
         let safe = view.safeAreaLayoutGuide
         let side: CGFloat = 24 * s
 
-        [header, leftBadge, rightBadge, trickTable, selfBadge, fan, prompt, toast, curtain]
+        [header, leftBadge, rightBadge, trickTable, countdown, banner, selfBadge, fan,
+         arrangeView, prompt, toast, curtain]
             .forEach { view.addSubview($0) }
         view.addLayoutGuide(tableArea)
         prompt.isHidden = true
+        arrangeView.isHidden = true
+        countdown.isHidden = true
+        banner.isHidden = true
+        arrangeView.onReorder = { [weak self] order in
+            self?.driver.send(TDPIntent(kind: .arrange, order: order, done: false))
+        }
+        arrangeView.onDone = { [weak self] order in
+            self?.driver.send(TDPIntent(kind: .arrange, order: order, done: true))
+        }
 
         // The circle is 280pt in the reference; smaller phones shrink it to
         // whatever fits between the opponents and you.
@@ -151,6 +170,18 @@ final class TDPGameViewController: UIViewController {
             toast.bottomAnchor.constraint(equalTo: selfBadge.topAnchor, constant: -10),
             toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48),
 
+            arrangeView.topAnchor.constraint(equalTo: leftBadge.bottomAnchor, constant: 18 * s),
+            arrangeView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            arrangeView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            arrangeView.bottomAnchor.constraint(equalTo: safe.bottomAnchor),
+
+            countdown.centerXAnchor.constraint(equalTo: trickTable.centerXAnchor),
+            countdown.centerYAnchor.constraint(equalTo: trickTable.centerYAnchor),
+
+            banner.topAnchor.constraint(equalTo: trickTable.topAnchor, constant: 30 * s),
+            banner.leadingAnchor.constraint(equalTo: trickTable.leadingAnchor, constant: 10),
+            banner.trailingAnchor.constraint(equalTo: trickTable.trailingAnchor, constant: -10),
+
             curtain.topAnchor.constraint(equalTo: view.topAnchor),
             curtain.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             curtain.leadingAnchor.constraint(equalTo: view.leadingAnchor),
@@ -186,11 +217,14 @@ final class TDPGameViewController: UIViewController {
                             quotaMet: quotaMet(myInfo),
                             status: status,
                             statusIsAction: isAction,
-                            isActive: acting.contains(me))
+                            isActive: acting.contains(me),
+                            chip: targetChip(myInfo))
 
         renderTable(view, previous: previous)
         renderHand(view, animated: previous != nil)
         renderPrompt(view)
+        renderArrange(view)
+        renderCountdownAndBanner(view)
         renderCurtain(view)
     }
 
@@ -201,17 +235,28 @@ final class TDPGameViewController: UIViewController {
         if seat.kind == "ai" { detail += " · bot" }
         if !seat.isConnected { detail += " · offline" }
         badge.configure(name: seat.name, tally: tally(seat), quotaMet: quotaMet(seat),
-                        detail: detail, isActive: active, tint: tint, isOffline: !seat.isConnected)
+                        detail: detail, isActive: active, tint: tint, isOffline: !seat.isConnected,
+                        chip: targetChip(seat))
     }
+
+    /// Targets are known once there is a dealer. A target can reach zero
+    /// (or below) when tricks were given up, so test the role quota.
+    private func targetKnown(_ seat: TDPSeatView) -> Bool { seat.baseQuota > 0 || seat.quota > 0 }
 
     private func tally(_ seat: TDPSeatView?) -> String {
         guard let seat else { return "—" }
-        return seat.quota > 0 ? "\(seat.tricksWon) / \(seat.quota)" : "\(seat.tricksWon)"
+        return targetKnown(seat) ? "\(seat.tricksWon) / \(max(0, seat.quota))" : "\(seat.tricksWon)"
     }
 
     private func quotaMet(_ seat: TDPSeatView?) -> Bool {
-        guard let seat, seat.quota > 0 else { return false }
+        guard let seat, targetKnown(seat) else { return false }
         return seat.tricksWon >= seat.quota
+    }
+
+    /// "5 → 3" when this round's target moved because tricks were given up.
+    private func targetChip(_ seat: TDPSeatView?) -> String? {
+        guard let seat, seat.baseQuota > 0, seat.quota != seat.baseQuota else { return nil }
+        return "\(seat.baseQuota) \u{2192} \(max(0, seat.quota))"
     }
 
     /// Seats the table is waiting on — they get the glowing ring.
@@ -222,8 +267,11 @@ final class TDPGameViewController: UIViewController {
         case .trumpSelect:
             let selector = view.seats.first { $0.role == TDPRole.trumpSelector.rawValue }?.seat
             return selector.map { [$0] } ?? []
+        case .settle:
+            return Set(view.settlement?.waitingOn ?? [])
         case .khichai:
-            return view.khichai.map { [$0.creditorSeat] } ?? []
+            guard let pull = view.khichai else { return [] }
+            return [pull.isArranging ? pull.debtorSeat : pull.creditorSeat]
         default:
             return []
         }
@@ -241,17 +289,20 @@ final class TDPGameViewController: UIViewController {
         switch view.prompt {
         case .playCard:
             if selectedCardID != nil { return ("Tap again to play", true) }
-            guard let lead = view.leadSuit else {
-                let heldBack = view.trickNumber == 0 && view.myLegalCardIDs.count < view.myHand.count
-                return (heldBack ? "Your lead · no trump on the first trick" : "Your lead", true)
-            }
+            guard let lead = view.leadSuit else { return ("Your lead", true) }
             let suit = TDPTheme.suitName(lead)
             let canFollow = view.myHand.contains { $0.suit == lead }
             return (canFollow ? "Your turn · follow \(suit)" : "Your turn · no \(suit) — trump or throw", true)
         case .chooseTrump:
             return ("Call trump from your first five", true)
+        case .settleUp:
+            let owed = (view.settlement?.mine ?? []).map { name($0.creditorSeat, in: view) }
+            return ("Settle up with \(owed.joined(separator: " and "))", true)
+        case .arrangeCards:
+            return ("Arrange your cards", true)
         case .khichaiDraw:
-            return ("Pull a card", true)
+            guard let pull = view.khichai, pull.pullTotal > 1 else { return ("Pull a card", true) }
+            return ("Pull a card — \(pull.pullNumber) of \(pull.pullTotal)", true)
         case .khichaiReturn:
             return (selectedCardID == nil ? "Give back a different card" : "Tap again to give it back", true)
         default:
@@ -270,8 +321,16 @@ final class TDPGameViewController: UIViewController {
             return ("\(name(selector, in: view)) is calling trump", false)
         case .dealerDraw, .dealFirstFive, .dealThree, .dealTwo:
             return ("Dealing…", false)
+        case .settle:
+            let waiting = (view.settlement?.waitingOn ?? []).map { name($0, in: view) }
+            guard !waiting.isEmpty else { return ("Settling up", false) }
+            return ("\(waiting.joined(separator: " and ")) \(waiting.count == 1 ? "is" : "are") deciding how to settle up", false)
         case .khichai:
             guard let pull = view.khichai else { return ("Settling up", false) }
+            if pull.isArranging {
+                if pull.iAmCreditor { return ("Then you pull \(pull.pullTotal), blind", false) }
+                return ("\(name(pull.debtorSeat, in: view)) is arranging for \(name(pull.creditorSeat, in: view))", false)
+            }
             if pull.iAmDebtor { return ("\(name(pull.creditorSeat, in: view)) is pulling a card from you", false) }
             return ("\(name(pull.creditorSeat, in: view)) is pulling from \(name(pull.debtorSeat, in: view))", false)
         case .roundEnd:
@@ -319,7 +378,13 @@ final class TDPGameViewController: UIViewController {
         case .dealerDraw:                         return "Drawing for the deal"
         case .dealFirstFive, .dealThree, .dealTwo: return "Dealing"
         case .trumpSelect:                        return "Calling trump"
-        case .khichai:                            return "Khichai"
+        case .settle:                             return "Settling up"
+        case .khichai:
+            guard let pull = view.khichai else { return "Khichai" }
+            if pull.isArranging {
+                return "\(name(pull.debtorSeat, in: view)) \(pull.iAmDebtor ? "are" : "is") arranging their cards"
+            }
+            return pull.pullTotal > 1 ? "Khichai · \(pull.pullNumber) of \(pull.pullTotal)" : "Khichai"
         case .roundEnd:                           return "Round \(view.roundHistory.count) complete"
         case .sessionEnd:                         return "Session complete"
         case .lobby:                              return "Waiting for players"
@@ -331,10 +396,15 @@ final class TDPGameViewController: UIViewController {
     private func renderHand(_ view: TDPClientView, animated: Bool) {
         // Pulling: the fan becomes the debtor's face-down hand. Positions
         // only — the host shuffled them, so an index names no card.
+        // Calling trump: the five cards are shown large in the sheet instead.
+        fan.alpha = view.prompt == .chooseTrump ? 0 : 1
+
         if let pull = view.khichai, pull.iAmCreditor, pull.drawnCard == nil {
+            // While the debtor is still arranging, the fan is inert.
+            let live = !pull.isArranging
             let items = (0..<pull.fanCount).map {
                 TDPHandFanView.Item(key: "fan-\($0)", card: nil, tag: $0,
-                                    enabled: true, dimmed: false, lift: .hint, highlighted: false)
+                                    enabled: live, dimmed: false, lift: live ? .hint : .none, highlighted: false)
             }
             fan.setItems(items, animated: animated)
             return
@@ -410,6 +480,7 @@ final class TDPGameViewController: UIViewController {
     private func renderPrompt(_ view: TDPClientView) {
         switch view.prompt {
         case .chooseTrump:   buildTrumpPrompt(view)
+        case .settleUp:      buildSettlePrompt(view)
         case .khichaiDraw:   buildDrawPrompt(view)
         case .khichaiReturn: buildReturnPrompt(view)
         case .roundEnd:      buildRoundPrompt(view)
@@ -441,6 +512,22 @@ final class TDPGameViewController: UIViewController {
     private func buildTrumpPrompt(_ view: TDPClientView) {
         prompt.reset(title: "Call trump",
                      subtitle: "You need 5 tricks. Pick from your first five — or leave it to the cards.")
+        // Your first five, large enough to read, right where you choose.
+        let five = UIStackView()
+        five.spacing = 7
+        five.alignment = .center
+        let size = CGSize(width: 54 * TDPTheme.scale, height: 76 * TDPTheme.scale)
+        for card in view.myHand.prefix(5) {
+            let face = TDPCardButton(card: card, elevation: .hand)
+            face.isUserInteractionEnabled = false
+            face.translatesAutoresizingMaskIntoConstraints = false
+            face.widthAnchor.constraint(equalToConstant: size.width).isActive = true
+            face.heightAnchor.constraint(equalToConstant: size.height).isActive = true
+            five.addArrangedSubview(face)
+        }
+        let centered = UIStackView(arrangedSubviews: [UIView(), five, UIView()])
+        centered.distribution = .equalCentering
+        prompt.bodyStack.addArrangedSubview(centered)
         for suit in [Suit.spades, .hearts, .diamonds, .clubs] {
             let button = TDPSuitButton(suit: suit)
             button.addTarget(self, action: #selector(didTapTrumpSuit(_:)), for: .touchUpInside)
@@ -461,11 +548,271 @@ final class TDPGameViewController: UIViewController {
         let reason = owed > 0
             ? "\(debtor) came up \(owed) short of quota last round. "
             : ""
-        prompt.reset(title: "Pull a card from \(debtor)",
+        let pull = view.khichai
+        let count = (pull?.pullTotal ?? 1) > 1 ? " · \(pull!.pullNumber) of \(pull!.pullTotal)" : ""
+        prompt.reset(title: "Pull a card from \(debtor)\(count)",
                      subtitle: reason + "Tap any face-down card — you'll see it, they won't know which.")
         let random = TDPButton(title: "Pick for me", style: .secondary)
         random.addTarget(self, action: #selector(didTapRandomPull), for: .touchUpInside)
         prompt.primaryRow.addArrangedSubview(random)
+    }
+
+    // MARK: Settling up
+
+    private func buildSettlePrompt(_ view: TDPClientView) {
+        let mine = view.settlement?.mine ?? []
+        guard !mine.isEmpty else { return }
+        if settleRound != view.roundNumber || Set(settleSelection.keys) != Set(mine.map(\.creditorSeat)) {
+            settleRound = view.roundNumber
+            showWhy = false
+            settleSelection = Dictionary(uniqueKeysWithValues: mine.map {
+                ($0.creditorSeat, $0.giveTricksLocked ? TDPSettleMethod.giveCards : .giveTricks)
+            })
+        }
+        let seats = Dictionary(view.seats.map { ($0.seat, $0) }, uniquingKeysWith: { a, _ in a })
+        let myBase = seats[view.mySeat]?.baseQuota ?? 0
+        let total = mine.reduce(0) { $0 + $1.amount }
+
+        if mine.count == 1, let debt = mine.first {
+            buildSingleSettle(view, debt: debt, myBase: myBase, seats: seats)
+        } else {
+            prompt.reset(title: "You owe \(total) tricks",
+                         subtitle: mine.map { "\(name($0.creditorSeat, in: view)) is owed \($0.amount)" }
+                            .joined(separator: ", ") + ". Settle each one.")
+            for debt in mine { prompt.bodyStack.addArrangedSubview(settleRow(view, debt: debt)) }
+            prompt.bodyStack.addArrangedSubview(settleSummary(view, mine: mine, myBase: myBase, seats: seats))
+            let confirm = TDPButton(title: "Confirm", style: .primary)
+            confirm.addTarget(self, action: #selector(didTapConfirmSettle), for: .touchUpInside)
+            prompt.primaryRow.addArrangedSubview(confirm)
+        }
+    }
+
+    private func buildSingleSettle(_ view: TDPClientView, debt: TDPSettleDebt,
+                                   myBase: Int, seats: [TDPSeat: TDPSeatView]) {
+        let creditor = name(debt.creditorSeat, in: view)
+        let n = debt.amount
+        let tricks = "\(n) trick\(n == 1 ? "" : "s")"
+        let cards = "\(n) card\(n == 1 ? "" : "s")"
+        let theirBase = seats[debt.creditorSeat]?.baseQuota ?? 0
+        let isPerson = seats[debt.creditorSeat]?.kind != "ai"
+        prompt.reset(title: "You owe \(creditor) \(tricks)",
+                     subtitle: "\(creditor) won \(n) more than their target last round.")
+
+        let giveUp = TDPOptionCard(
+            title: "Give up \(tricks)",
+            chip: debt.giveTricksLocked ? nil : "\(myBase) \u{2192} \(myBase + n)",
+            body: debt.giveTricksLocked
+                ? "Not this round."
+                : "No cards move. This round you need \(myBase + n) (instead of \(myBase)) and \(creditor) needs \(max(0, theirBase - n)) (instead of \(theirBase)).")
+        giveUp.tag = debt.creditorSeat * 10
+        giveUp.isEnabled = !debt.giveTricksLocked
+        giveUp.isSelected = settleSelection[debt.creditorSeat] == .giveTricks
+        giveUp.addTarget(self, action: #selector(didTapSettleOption(_:)), for: .touchUpInside)
+
+        let giveCards = TDPOptionCard(
+            title: "Give \(cards)",
+            chip: "blind",
+            body: "\(creditor) pulls \(cards) from your hand, blind."
+                + (isPerson ? " You get 10 seconds to arrange them first." : " A bot picks at random."))
+        giveCards.tag = debt.creditorSeat * 10 + 1
+        giveCards.isSelected = settleSelection[debt.creditorSeat] == .giveCards
+        giveCards.addTarget(self, action: #selector(didTapSettleOption(_:)), for: .touchUpInside)
+
+        prompt.bodyStack.addArrangedSubview(giveUp)
+        prompt.bodyStack.addArrangedSubview(giveCards)
+        if debt.giveTricksLocked { prompt.bodyStack.addArrangedSubview(lockedNote(creditor)) }
+
+        let method = settleSelection[debt.creditorSeat] ?? .giveCards
+        let confirm = TDPButton(title: method == .giveTricks ? "Give up \(tricks)" : "Give \(cards)", style: .primary)
+        confirm.addTarget(self, action: #selector(didTapConfirmSettle), for: .touchUpInside)
+        prompt.primaryRow.addArrangedSubview(confirm)
+    }
+
+    /// Explains the "not twice in a row" rule — the part players won't expect.
+    private func lockedNote(_ creditor: String) -> UIView {
+        let lock = UIImageView(image: UIImage(systemName: "lock.fill"))
+        lock.tintColor = TDPTheme.inkSoft
+        lock.setContentHuggingPriority(.required, for: .horizontal)
+        let text = UILabel()
+        text.text = "You gave \(creditor) tricks last round — two in a row isn't allowed, so this time they pull cards."
+        text.font = TDPTheme.font(13)
+        text.textColor = TDPTheme.inkSoft
+        text.numberOfLines = 0
+        let line = UIStackView(arrangedSubviews: [lock, text])
+        line.spacing = 10
+        line.alignment = .top
+
+        let why = UIButton(type: .system)
+        why.setTitle(showWhy ? "Hide" : "Why?", for: .normal)
+        why.titleLabel?.font = TDPTheme.font(13, .semibold)
+        why.tintColor = TDPTheme.accent
+        why.contentHorizontalAlignment = .leading
+        why.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        why.addTarget(self, action: #selector(didTapWhy), for: .touchUpInside)
+
+        let stack = UIStackView(arrangedSubviews: [line])
+        stack.axis = .vertical
+        stack.spacing = 4
+        if showWhy {
+            let detail = UILabel()
+            detail.text = "Giving up tricks moves a debt into this round. If it could be done every round the debt would never be paid — so the next time you owe the same player, it's settled in cards. Owing someone else is a fresh start."
+            detail.font = TDPTheme.font(12)
+            detail.textColor = TDPTheme.muted
+            detail.numberOfLines = 0
+            stack.addArrangedSubview(detail)
+        }
+        stack.addArrangedSubview(why)
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 2, trailing: 14)
+        stack.backgroundColor = TDPTheme.raisedAlt
+        stack.layer.cornerRadius = 14
+        stack.layer.cornerCurve = .continuous
+        return stack
+    }
+
+    private func settleRow(_ view: TDPClientView, debt: TDPSettleDebt) -> UIView {
+        let seat = view.seats.first { $0.seat == debt.creditorSeat }
+        let tint: TDPTheme.Tint = debt.creditorSeat == TDPRoles.nextSeat(view.mySeat) ? .amber : .blue
+        let avatar = TDPAvatarView(side: 36, radius: 12)
+        avatar.setName(seat?.name ?? "?")
+        avatar.tint = tint
+        let nameLabel = UILabel()
+        nameLabel.text = name(debt.creditorSeat, in: view)
+        nameLabel.font = TDPTheme.font(14, .medium)
+        nameLabel.textColor = TDPTheme.ink
+        let owed = UILabel()
+        owed.text = debt.giveTricksLocked ? "owed \(debt.amount) · cards only" : "owed \(debt.amount)"
+        owed.font = TDPTheme.mono(12)
+        owed.textColor = TDPTheme.muted
+        let labels = UIStackView(arrangedSubviews: [nameLabel, owed])
+        labels.axis = .vertical
+        labels.spacing = 2
+
+        let choice = TDPSegmentedChoice(first: "Give up \(debt.amount)", second: "Give cards")
+        choice.tag = debt.creditorSeat
+        choice.isFirstEnabled = !debt.giveTricksLocked
+        choice.select(settleSelection[debt.creditorSeat] == .giveTricks ? 0 : 1)
+        choice.addTarget(self, action: #selector(didChangeSettleChoice(_:)), for: .valueChanged)
+        choice.widthAnchor.constraint(equalToConstant: 184 * TDPTheme.scale).isActive = true
+
+        let row = UIStackView(arrangedSubviews: [avatar, labels, choice])
+        row.spacing = 10
+        row.alignment = .center
+        return row
+    }
+
+    private func settleSummary(_ view: TDPClientView, mine: [TDPSettleDebt],
+                               myBase: Int, seats: [TDPSeat: TDPSeatView]) -> UIView {
+        var targets: [TDPSeat: Int] = [view.mySeat: myBase]
+        var pulls: [String] = []
+        for debt in mine {
+            let theirBase = seats[debt.creditorSeat]?.baseQuota ?? 0
+            if settleSelection[debt.creditorSeat] == .giveTricks {
+                targets[view.mySeat, default: myBase] += debt.amount
+                targets[debt.creditorSeat] = theirBase - debt.amount
+            } else {
+                targets[debt.creditorSeat] = theirBase
+                pulls.append("\(name(debt.creditorSeat, in: view)) pulls \(debt.amount)")
+            }
+        }
+        let order = [view.mySeat] + mine.map(\.creditorSeat)
+        let line = order.map { seat -> String in
+            let who = seat == view.mySeat ? "you" : name(seat, in: view)
+            return "\(who) \(max(0, targets[seat] ?? 0))"
+        }.joined(separator: " · ")
+        let summary = UILabel()
+        summary.text = "This round: " + line
+        summary.font = TDPTheme.mono(13)
+        summary.textColor = TDPTheme.ink
+        summary.numberOfLines = 0
+        let pullLine = UILabel()
+        pullLine.text = pulls.isEmpty ? "No cards move." : pulls.joined(separator: " and ") + ", blind."
+        pullLine.font = TDPTheme.font(12)
+        pullLine.textColor = TDPTheme.muted
+        let stack = UIStackView(arrangedSubviews: [summary, pullLine])
+        stack.axis = .vertical
+        stack.spacing = 4
+        stack.isLayoutMarginsRelativeArrangement = true
+        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
+        stack.backgroundColor = TDPTheme.raisedAlt
+        stack.layer.cornerRadius = 14
+        stack.layer.cornerCurve = .continuous
+        return stack
+    }
+
+    @objc private func didTapSettleOption(_ sender: TDPOptionCard) {
+        guard sender.isEnabled, let view = lastView else { return }
+        settleSelection[sender.tag / 10] = sender.tag % 10 == 0 ? .giveTricks : .giveCards
+        render(view)
+    }
+
+    @objc private func didChangeSettleChoice(_ sender: TDPSegmentedChoice) {
+        guard let view = lastView else { return }
+        settleSelection[sender.tag] = sender.selectedIndex == 0 ? .giveTricks : .giveCards
+        render(view)
+    }
+
+    @objc private func didTapWhy() {
+        showWhy.toggle()
+        if let view = lastView { render(view) }
+    }
+
+    @objc private func didTapConfirmSettle() {
+        guard let mine = lastView?.settlement?.mine, !mine.isEmpty else { return }
+        let lines = mine.map {
+            TDPSettleChoice(creditorSeat: $0.creditorSeat,
+                            method: $0.giveTricksLocked ? .giveCards : (settleSelection[$0.creditorSeat] ?? .giveCards))
+        }
+        driver.send(TDPIntent(kind: .settle, settlements: lines))
+    }
+
+    // MARK: Arranging
+
+    private func renderArrange(_ view: TDPClientView) {
+        let arranging = view.prompt == .arrangeCards
+        arrangeView.isHidden = !arranging
+        trickTable.isHidden = arranging
+        selfBadge.isHidden = arranging
+        fan.isHidden = arranging
+        guard arranging, let pull = view.khichai else {
+            arrangeView.clear()
+            return
+        }
+        arrangeView.configure(cards: view.myArrangement ?? view.myHand,
+                              puller: name(pull.creditorSeat, in: view),
+                              count: pull.pullTotal,
+                              seconds: pull.arrangeSecondsLeft)
+    }
+
+    private func renderCountdownAndBanner(_ view: TDPClientView) {
+        // Everyone but the arranger watches the same clock on the table.
+        if let pull = view.khichai, pull.isArranging, !pull.iAmDebtor {
+            if countdown.isHidden { countdown.reset() }
+            countdown.isHidden = false
+            countdown.set(seconds: pull.arrangeSecondsLeft ?? 10, of: 10)
+        } else {
+            countdown.isHidden = true
+        }
+
+        // Targets moved while settling up: say so as play begins.
+        let opening = view.phase == .play && view.trickNumber == 0 && view.currentTrick.isEmpty
+        guard opening, !view.concessions.isEmpty else { banner.isHidden = true; return }
+        let target = { (seat: TDPSeat) in max(0, view.seats.first { $0.seat == seat }?.quota ?? 0) }
+        let titles = view.concessions.map { c in
+            "\(name(c.debtor, in: view)) gave up \(c.amount) trick\(c.amount == 1 ? "" : "s")"
+                + (view.concessions.count > 1 ? " to \(name(c.creditor, in: view))" : "")
+        }
+        var involved: [TDPSeat] = []
+        for c in view.concessions {
+            for seat in [c.creditor, c.debtor] where !involved.contains(seat) { involved.append(seat) }
+        }
+        let needs = involved.map { seat -> String in
+            seat == view.mySeat && !driver.isSharedDevice
+                ? "You need \(target(seat))" : "\(name(seat, in: view)) needs \(target(seat))"
+        }
+        banner.configure(title: titles.joined(separator: " · "),
+                         subtitle: needs.joined(separator: ", ") + " — this round only.")
+        banner.isHidden = false
     }
 
     private func buildReturnPrompt(_ view: TDPClientView) {

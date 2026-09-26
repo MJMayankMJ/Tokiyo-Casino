@@ -47,7 +47,15 @@ extension TDPGameState {
         return TDPRoles.role(seat: seat, dealerSeat: dealerSeat)
     }
 
+    /// This round's target: the role quota plus any tricks given up to or
+    /// by this seat while settling. Can dip below zero for a creditor owed
+    /// more than their whole quota; the three still sum to 10.
     func quota(at seat: TDPSeat) -> Int {
+        baseQuota(at: seat) + (targetAdjust[String(seat)] ?? 0)
+    }
+
+    /// The role quota alone (5, 3 or 2).
+    func baseQuota(at seat: TDPSeat) -> Int {
         guard let dealerSeat else { return 0 }
         return TDPRoles.quota(seat: seat, dealerSeat: dealerSeat)
     }

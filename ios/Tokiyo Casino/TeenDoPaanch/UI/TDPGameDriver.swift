@@ -44,7 +44,7 @@ final class TDPHostDriver: TDPGameDriver, TDPHostServiceDelegate {
 
     /// Decisions that need a hand only its owner may see.
     private static let privatePrompts: Set<TDPPrompt> = [
-        .chooseTrump, .khichaiDraw, .khichaiReturn, .playCard
+        .chooseTrump, .settleUp, .arrangeCards, .khichaiDraw, .khichaiReturn, .playCard
     ]
 
     init(service: TDPHostService) {

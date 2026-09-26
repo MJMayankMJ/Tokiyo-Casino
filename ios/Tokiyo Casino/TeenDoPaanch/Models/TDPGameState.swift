@@ -61,6 +61,8 @@ struct TDPKhichaiStep: Codable, Equatable {
     let debtorSeat: TDPSeat
     var drawnCard: Card?
     var fanOrder: [Int]
+    /// The debtor is in their arranging window; nobody may pull yet.
+    var arranging: Bool = false
 }
 
 // MARK: - Round record
@@ -72,8 +74,11 @@ struct TDPRoundScore: Codable, Equatable {
     let trumpMethod: TDPTrumpMethod
     /// Keyed by seat, stringified because JSON object keys must be strings.
     let tricks: [String: Int]
+    /// Effective targets — the role quota plus any tricks given up.
     let quotas: [String: Int]
     let delta: [String: Int]
+    /// Debts settled by giving up tricks at the start of this round.
+    var concessions: [TDPConcession] = []
 }
 
 // MARK: - State
@@ -121,6 +126,16 @@ struct TDPGameState: Codable {
     var debts: [TDPDebt]
     var khichaiQueue: [TDPKhichaiStep]
     var khichaiCurrent: TDPKhichaiStep?
+
+    // Settling up (all round-scoped)
+    /// "debtor-creditor" → the debtor's choice for that debt.
+    var settleChoices: [String: TDPSettleMethod] = [:]
+    /// Target changes from debts settled in tricks; always sums to zero.
+    var targetAdjust: [String: Int] = [:]
+    var concessions: [TDPConcession] = []
+    /// Each debtor's face-down order, as card ids. Set once per round; a
+    /// returned card is slipped in at a random position.
+    var arrangements: [String: [String]] = [:]
 
     // First-dealer draw
     var dealerDrawPending: [TDPSeat]
@@ -202,6 +217,10 @@ struct TDPGameState: Codable {
         debts = []
         khichaiQueue = []
         khichaiCurrent = nil
+        settleChoices = [:]
+        targetAdjust = [:]
+        concessions = []
+        arrangements = [:]
         for index in players.indices {
             players[index].hand = []
             players[index].tricksWon = 0

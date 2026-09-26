@@ -43,8 +43,13 @@ enum TDPAIEngine {
             guard state.trumpSelectorSeat == seat else { return nil }
             return trumpAction(hand: me.hand, seat: seat, difficulty: difficulty)
 
+        case .settle:
+            return settleAction(state: state, me: me, difficulty: difficulty)
+
         case .khichai:
             guard let step = state.khichaiCurrent, step.creditorSeat == seat else { return nil }
+            // A person is arranging the cards we'll pull from; wait.
+            guard !step.arranging else { return nil }
             guard let drawn = step.drawnCard else {
                 // fanIndex nil → the engine draws blind on our behalf.
                 return .khichaiDraw(seat: seat, fanIndex: nil)
@@ -101,6 +106,49 @@ enum TDPAIEngine {
             return lhs.key.tdpTieBreak < rhs.key.tdpTieBreak
         }
         return (best?.key ?? .spades, best?.value ?? 0)
+    }
+
+    // MARK: Settling up
+
+    /// Give up tricks when the hand can carry the raised target; otherwise
+    /// give cards. Reads only this seat's hand and public state.
+    private static func settleAction(state: TDPGameState,
+                                     me: TDPPlayer,
+                                     difficulty: TDPAIDifficulty) -> TDPAction? {
+        let mine = state.debts.filter { $0.from == me.seat }
+        guard !mine.isEmpty,
+              mine.allSatisfy({ state.settleChoices[TDPEngine.settleKey(debtor: me.seat, creditor: $0.to)] == nil })
+        else { return nil }
+
+        let expected = expectedTricks(me.hand, trump: state.trump)
+        var target = Double(state.quota(at: me.seat))
+        var choices: [TDPSeat: TDPSettleMethod] = [:]
+        for debt in mine {
+            let locked = TDPEngine.isGiveTricksLocked(state, debtor: me.seat, creditor: debt.to)
+            let affordable = expected >= target + Double(debt.amount) - 0.5
+            if !locked && difficulty != .easy && affordable {
+                choices[debt.to] = .giveTricks
+                target += Double(debt.amount)
+            } else {
+                choices[debt.to] = .giveCards
+            }
+        }
+        return .settle(seat: me.seat, choices: choices)
+    }
+
+    /// Rough trick expectation for a 10-card hand. Trump length is the main
+    /// engine; side aces and kings add entries.
+    static func expectedTricks(_ hand: [Card], trump: Suit?) -> Double {
+        guard let trump else {
+            return Double(hand.filter { $0.rank >= .king }.count) * 0.7
+        }
+        let trumps = hand.filter { $0.suit == trump }
+        let trumpTricks = max(0.0, Double(trumps.count) - 2.0) * 0.9
+            + Double(trumps.filter { $0.rank >= .queen }.count) * 0.55
+        let side = hand.filter { $0.suit != trump }
+        let sideTricks = Double(side.filter { $0.rank == .ace }.count) * 0.75
+            + Double(side.filter { $0.rank == .king }.count) * 0.35
+        return trumpTricks + sideTricks
     }
 
     // MARK: Khichai
