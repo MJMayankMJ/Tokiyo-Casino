@@ -6,7 +6,8 @@
 //  and callouts — shared by 5-3-2 (`TDPMomentEffects`) and Poker
 //  (`PokerMomentEffects`). Everything is drawn in an overlay above a stage
 //  (the table), so the stage can shake while the effects hold still.
-//  Each game's effects decide what Reduce Motion drops; these only draw.
+//  Each game's effects decide what Reduce Motion drops; the callouts and
+//  floating numbers here fade instead of springing when it's on.
 //
 
 import UIKit
@@ -31,6 +32,8 @@ final class MomentKit {
     let style: Style
     private(set) var isBusy = false
     private var queue: [() -> Void] = []
+    /// Which job is playing; a `finish` from any other is stale.
+    private var playing = 0
 
     /// `stage` is everything that shakes; `overlay` sits above it and holds
     /// the effects.
@@ -54,11 +57,21 @@ final class MomentKit {
             return
         }
         isBusy = true
+        playing += 1
+        let token = playing
         job { [weak self] in
-            guard let self else { return }
+            guard let self, self.isBusy, self.playing == token else { return }
             self.isBusy = false
             if !self.queue.isEmpty { self.queue.removeFirst()() }
         }
+    }
+
+    /// Drops the job that's playing and everything waiting; a late `finish`
+    /// from the dropped job is ignored.
+    func cancelAll() {
+        queue.removeAll()
+        isBusy = false
+        playing += 1
     }
 
     // MARK: Motion
@@ -339,16 +352,23 @@ final class MomentKit {
         pill.center = point
         overlay.addSubview(pill)
 
-        pill.transform = CGAffineTransform(scaleX: 0.3, y: 0.3).rotated(by: -0.12)
+        let rest = CGAffineTransform(rotationAngle: -0.05)
         pill.alpha = 0
-        UIView.animate(withDuration: 0.5, delay: 0.04, usingSpringWithDamping: 0.5,
-                       initialSpringVelocity: 0.8, options: []) {
-            pill.transform = CGAffineTransform(rotationAngle: -0.05)
-            pill.alpha = 1
+        // Reduce Motion: it fades in and out where it stands.
+        if reduceMotion {
+            pill.transform = rest
+            UIView.animate(withDuration: 0.2) { pill.alpha = 1 }
+        } else {
+            pill.transform = CGAffineTransform(scaleX: 0.3, y: 0.3).rotated(by: -0.12)
+            UIView.animate(withDuration: 0.5, delay: 0.04, usingSpringWithDamping: 0.5,
+                           initialSpringVelocity: 0.8, options: []) {
+                pill.transform = rest
+                pill.alpha = 1
+            }
         }
         UIView.animate(withDuration: 0.3, delay: hold, options: [.curveEaseIn]) {
             pill.alpha = 0
-            pill.transform = CGAffineTransform(translationX: 0, y: -14).rotated(by: -0.05)
+            if !self.reduceMotion { pill.transform = rest.translatedBy(x: 0, y: -14) }
         } completion: { _ in
             pill.removeFromSuperview()
         }
@@ -367,13 +387,18 @@ final class MomentKit {
         label.sizeToFit()
         label.center = point
         overlay.addSubview(label)
-        label.transform = CGAffineTransform(scaleX: 0.4, y: 0.4)
-        UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.5,
-                       initialSpringVelocity: 0.8, options: []) {
-            label.transform = CGAffineTransform(scaleX: 1.15, y: 1.15)
-        }
-        UIView.animate(withDuration: 0.85, delay: 0.1, options: [.curveEaseOut]) {
-            label.center.y -= 46
+        if reduceMotion {
+            label.alpha = 0
+            UIView.animate(withDuration: 0.2) { label.alpha = 1 }
+        } else {
+            label.transform = CGAffineTransform(scaleX: 0.4, y: 0.4)
+            UIView.animate(withDuration: 0.4, delay: 0, usingSpringWithDamping: 0.5,
+                           initialSpringVelocity: 0.8, options: []) {
+                label.transform = CGAffineTransform(scaleX: 1.15, y: 1.15)
+            }
+            UIView.animate(withDuration: 0.85, delay: 0.1, options: [.curveEaseOut]) {
+                label.center.y -= 46
+            }
         }
         UIView.animate(withDuration: 0.35, delay: 0.6, options: [.curveEaseIn]) {
             label.alpha = 0

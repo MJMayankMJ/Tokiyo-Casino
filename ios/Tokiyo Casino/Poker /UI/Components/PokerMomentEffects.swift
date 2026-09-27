@@ -14,7 +14,7 @@
 //    what you had to win, the card that did it is squeezed over like a
 //    baccarat card through two heartbeats, and the odds flip to WIN.
 //  • Hero call — Ace Attorney's "OBJECTION!": a jagged bubble slams in, the
-//    table jolts, and the bluff you caught flinches and dims.
+//    table jolts, and the hand you called down flinches and dims.
 //  • The Hammer — Marvel Snap's slam, the one 5-3-2's first cut uses: your
 //    7 and 2 thrown down onto the felt one after the other.
 //  • Knockout — Street Fighter's K.O.: a stamp slams onto the player you
@@ -22,9 +22,11 @@
 //    your stack like a bounty.
 //
 //  Effects run on stand-ins ("ghosts") in an overlay above the table while
-//  the real cards hide under them, so nothing on the table changes. Reduce
-//  Motion keeps the light, the callouts and the haptics and drops the
-//  throws, the shake and the particles.
+//  the real cards hide under them, so nothing on the table changes; if the
+//  table moves on first (a new hand or a new game), `cancel()` puts it
+//  back at once. Reduce Motion keeps the light, the callouts and the
+//  haptics, fades what would fly, flip or pop, and drops the shake and the
+//  particles.
 //
 
 import UIKit
@@ -33,6 +35,13 @@ final class PokerMomentEffects {
 
     private let kit: MomentKit
     private weak var table: PokerTableView?
+    /// Bumped by `cancel()`: anything scheduled before it is dropped.
+    private var generation = 0
+    /// What a cancel has to put back: cards hidden under stand-ins, cards
+    /// dimmed, and the dimming sheets.
+    private var hidden: [UIView] = []
+    private var dimmed: [(view: UIView, alpha: CGFloat)] = []
+    private var scrims: [UIView] = []
 
     /// `table` shakes; `overlay` sits above everything and holds the effects.
     init(table: PokerTableView, overlay: UIView) {
@@ -69,6 +78,23 @@ final class PokerMomentEffects {
             completion()
             finish()
         }
+    }
+
+    /// Stops whatever is playing or waiting, at once: the real cards come
+    /// back, everything drawn goes, and the pending `completion` is dropped.
+    /// For when the table moves on under a moment — a new hand or a new
+    /// game.
+    func cancel() {
+        generation += 1
+        kit.cancelAll()
+        show(hidden)
+        for (view, alpha) in dimmed { view.alpha = alpha }
+        dimmed.removeAll()
+        scrims.forEach { $0.removeFromSuperview() }
+        scrims.removeAll()
+        guard let overlay = kit.overlay else { return }
+        overlay.subviews.forEach { $0.removeFromSuperview() }
+        overlay.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
     }
 
     // MARK: Monster hand
@@ -220,7 +246,7 @@ final class PokerMomentEffects {
                 kit.confetti(colors: colors.map { $0.resolvedColor(with: traits) }, count: 44, duration: 1.8...2.6)
             }
         }
-        if moment != .fourOfAKind {
+        if moment != .fourOfAKind, !kit.reduceMotion {
             for (index, ghost) in ghosts.enumerated() {
                 after(Double(index) * 0.06) {
                     self.kit.sheen(across: ghost, cornerRadius: max(4, ghost.bounds.width * 0.18), duration: 0.55)
@@ -233,12 +259,13 @@ final class PokerMomentEffects {
                         size: royal ? 24 : 21, hold: hold - 0.25)
     }
 
-    /// A monster hand's name and how rarely seven cards make it.
+    /// A monster hand's name and how rarely any seven cards make it — the
+    /// hand's odds, not the odds of winning a pot with it.
     static func name(of moment: PokerMoment) -> (title: String, odds: String?) {
         switch moment {
-        case .royalFlush:    return ("ROYAL FLUSH", "1 IN 30,940 HANDS")
-        case .straightFlush: return ("STRAIGHT FLUSH", "1 IN 3,590 HANDS")
-        case .fourOfAKind:   return ("FOUR OF A KIND", "1 IN 595 HANDS")
+        case .royalFlush:    return ("ROYAL FLUSH", "1 IN 30,940 SEVEN-CARD HANDS")
+        case .straightFlush: return ("STRAIGHT FLUSH", "1 IN 3,590 SEVEN-CARD HANDS")
+        case .fourOfAKind:   return ("FOUR OF A KIND", "1 IN 595 SEVEN-CARD HANDS")
         default:             return ("", nil)
         }
     }
@@ -268,7 +295,7 @@ final class PokerMomentEffects {
         let chip = OddsChip(odds: odds, typeScale: kit.style.typeScale)
         chip.center = oddsSpot(seat: seat, below: board)
         overlay.addSubview(chip)
-        chip.popIn()
+        chip.popIn(still: still)
 
         // 1. The card that won it turns face down again and lifts.
         after(0.1) {
@@ -314,7 +341,7 @@ final class PokerMomentEffects {
                 self.kit.sparks(at: spot, width: w, behind: ghosts.first)
             }
             self.kit.shakeStage(amplitude: 6, duration: 0.35)
-            chip.win(gold: self.kit.gold)
+            chip.win(gold: self.kit.gold, still: still)
             let top = ghosts.map(\.frame.minY).min() ?? spot.y
             self.kit.showCallout(runnerRunner ? "RUNNER-RUNNER" : "RIVER MIRACLE",
                                  subtitle: "\(OddsChip.percent(odds)) ON THE \(runnerRunner ? "FLOP" : "TURN")",
@@ -366,8 +393,9 @@ final class PokerMomentEffects {
 
     private func turn(_ ghost: CardView, faceUp: Bool, duration: TimeInterval) {
         guard let card = ghost.card else { return }
-        UIView.transition(with: ghost, duration: duration,
-                          options: [faceUp ? .transitionFlipFromBottom : .transitionFlipFromLeft, .curveEaseIn]) {
+        let flip: UIView.AnimationOptions = kit.reduceMotion ? .transitionCrossDissolve
+            : faceUp ? .transitionFlipFromBottom : .transitionFlipFromLeft
+        UIView.transition(with: ghost, duration: duration, options: [flip, .curveEaseIn]) {
             ghost.setCard(card, faceUp: faceUp)
         }
     }
@@ -381,8 +409,10 @@ final class PokerMomentEffects {
         let still = kit.reduceMotion
         let board = overlay.convert(table.communityCardViews[2].center, from: table)
 
-        // "OBJECTION!" — a jagged bubble slams in.
-        let bubble = JaggedBubble(title: "HERO CALL!", subtitle: "YOU CAUGHT THE BLUFF",
+        // "OBJECTION!" — a jagged bubble slams in. A bluff only if the hand
+        // you beat had nothing; otherwise your call simply held.
+        let bubble = JaggedBubble(title: "HERO CALL!",
+                                  subtitle: PokerMoments.caughtBluff(hand) ? "YOU CAUGHT THE BLUFF" : "YOUR CALL HELD UP",
                                   fill: kit.gold, typeScale: kit.style.typeScale)
         bubble.center = CGPoint(x: board.x, y: board.y - 6)
         overlay.addSubview(bubble)
@@ -405,8 +435,9 @@ final class PokerMomentEffects {
             self.kit.shakeStage(amplitude: 12, duration: 0.45)
         }
 
-        // The bluff you caught flinches and dims; your cards light up.
+        // The hand you called down flinches and dims; your cards light up.
         let before = caught.map(\.alpha)
+        dimmed += zip(caught, before).map { (view: $0, alpha: $1) }
         after(0.22) {
             for card in caught {
                 if !still { self.kit.shake(card, amplitude: 5, duration: 0.35) }
@@ -432,6 +463,7 @@ final class PokerMomentEffects {
             UIView.animate(withDuration: 0.3) {
                 for (card, alpha) in zip(caught, before) { card.alpha = alpha }
             }
+            self.dimmed.removeAll { entry in caught.contains { $0 === entry.view } }
         }
         after(1.9) {
             bubble.removeFromSuperview()
@@ -461,12 +493,13 @@ final class PokerMomentEffects {
         GameHaptics.shared.play(.hammer)
 
         if kit.reduceMotion {
-            UIView.animate(withDuration: 0.3) {
-                for index in 0..<2 {
-                    ghosts[index].center = landings[index]
-                    ghosts[index].transform = CGAffineTransform(rotationAngle: tilts[index])
-                }
+            // No throw: they fade out of your hand and in on the felt.
+            for index in 0..<2 {
+                ghosts[index].alpha = 0
+                ghosts[index].center = landings[index]
+                ghosts[index].transform = CGAffineTransform(rotationAngle: tilts[index])
             }
+            UIView.animate(withDuration: 0.25) { ghosts.forEach { $0.alpha = 1 } }
         } else {
             // 7, then 2: thrown up out of your hand and smashed down.
             for index in 0..<2 {
@@ -482,8 +515,12 @@ final class PokerMomentEffects {
         after(2.0) {
             UIView.animate(withDuration: 0.3, delay: 0, options: [.curveEaseInOut]) {
                 for (ghost, home) in zip(ghosts, homes) {
-                    ghost.center = home.center
-                    ghost.transform = home.transform
+                    if self.kit.reduceMotion {
+                        ghost.alpha = 0
+                    } else {
+                        ghost.center = home.center
+                        ghost.transform = home.transform
+                    }
                 }
             }
             self.clear(scrim)
@@ -497,6 +534,7 @@ final class PokerMomentEffects {
 
     /// Up out of your hand, then smashed down onto the felt.
     private func slam(_ ghost: CardView, onto spot: CGPoint, tilt: CGFloat) {
+        let generation = self.generation
         let rest = CGAffineTransform(rotationAngle: tilt)
         let shadow = (radius: ghost.layer.shadowRadius, offset: ghost.layer.shadowOffset,
                       opacity: ghost.layer.shadowOpacity)
@@ -508,6 +546,7 @@ final class PokerMomentEffects {
             ghost.layer.shadowOffset = CGSize(width: 0, height: 28)
             ghost.layer.shadowOpacity = 0.3
         } completion: { _ in
+            guard self.generation == generation else { return }
             UIView.animate(withDuration: 0.12, delay: 0, options: [.curveEaseIn]) {
                 ghost.center = spot
                 ghost.transform = rest
@@ -515,6 +554,7 @@ final class PokerMomentEffects {
                 ghost.layer.shadowOffset = shadow.offset
                 ghost.layer.shadowOpacity = shadow.opacity
             } completion: { _ in
+                guard self.generation == generation else { return }
                 self.impact(ghost, rest: rest)
             }
         }
@@ -596,7 +636,7 @@ final class PokerMomentEffects {
                 UIView.animate(withDuration: 0.25) { veil.alpha = 1 }
             }
             // Their chips arc into your stack.
-            after(0.45) { self.bounty(from: spot, to: stack, quiet: index > 0) }
+            if !still { after(0.45) { self.bounty(from: spot, to: stack, quiet: index > 0) } }
         }
         after(0.13) { self.kit.shakeStage(amplitude: 9, duration: 0.4) }
         if seats.count > 1 {
@@ -608,12 +648,13 @@ final class PokerMomentEffects {
         }
         after(1.2) {
             GameAudio.shared.play(.pot, volume: 0.9)
+            guard !still else { return }
             let bump = CAKeyframeAnimation(keyPath: "transform.scale")
             bump.values = [1, 1.35, 0.95, 1]
             bump.keyTimes = [0, 0.3, 0.65, 1]
             bump.duration = 0.4
             me.stackTarget.layer.add(bump, forKey: "bounty")
-            if !still { self.kit.shockwave(at: stack, from: 24, to: 76, lineWidth: 4, duration: 0.45) }
+            self.kit.shockwave(at: stack, from: 24, to: 76, lineWidth: 4, duration: 0.45)
         }
         after(1.65) {
             UIView.animate(withDuration: 0.3) { marks.forEach { $0.alpha = 0 } }
@@ -734,9 +775,15 @@ final class PokerMomentEffects {
 
     /// The real cards hide under their stand-ins — behind an empty mask, so
     /// nothing the table does to them meanwhile brings them back early.
-    private func hide(_ views: [UIView]) { views.forEach { $0.layer.mask = CALayer() } }
+    private func hide(_ views: [UIView]) {
+        views.forEach { $0.layer.mask = CALayer() }
+        hidden += views
+    }
 
-    private func show(_ views: [UIView]) { views.forEach { $0.layer.mask = nil } }
+    private func show(_ views: [UIView]) {
+        views.forEach { $0.layer.mask = nil }
+        hidden.removeAll { view in views.contains { $0 === view } }
+    }
 
     /// Dims everything under the effects.
     private func scrim(alpha: CGFloat) -> UIView? {
@@ -746,19 +793,26 @@ final class PokerMomentEffects {
         scrim.isUserInteractionEnabled = false
         scrim.alpha = 0
         host.insertSubview(scrim, belowSubview: overlay)
+        scrims.append(scrim)
         UIView.animate(withDuration: 0.25) { scrim.alpha = alpha }
         return scrim
     }
 
     private func clear(_ scrim: UIView?) {
         guard let scrim else { return }
+        scrims.removeAll { $0 === scrim }
         UIView.animate(withDuration: 0.3, animations: { scrim.alpha = 0 }) { _ in
             scrim.removeFromSuperview()
         }
     }
 
+    /// Runs `work` after `delay` — unless the moment is cancelled first.
     private func after(_ delay: TimeInterval, _ work: @escaping () -> Void) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+        let generation = self.generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.generation == generation else { return }
+            work()
+        }
     }
 }
 
@@ -799,8 +853,13 @@ private final class OddsChip: UIView {
         odds < 0.005 ? "<1%" : "\(Int((odds * 100).rounded()))%"
     }
 
-    func popIn() {
+    /// Springs in; with Reduce Motion (`still`) it fades in.
+    func popIn(still: Bool) {
         alpha = 0
+        guard !still else {
+            UIView.animate(withDuration: 0.25, delay: 0.1) { self.alpha = 1 }
+            return
+        }
         transform = CGAffineTransform(scaleX: 0.4, y: 0.4)
         UIView.animate(withDuration: 0.45, delay: 0.1, usingSpringWithDamping: 0.6,
                        initialSpringVelocity: 0.6, options: []) {
@@ -809,8 +868,9 @@ private final class OddsChip: UIView {
         }
     }
 
-    func win(gold: UIColor) {
-        UIView.transition(with: self, duration: 0.35, options: [.transitionFlipFromTop]) {
+    func win(gold: UIColor, still: Bool) {
+        UIView.transition(with: self, duration: 0.35,
+                          options: [still ? .transitionCrossDissolve : .transitionFlipFromTop]) {
             self.backgroundColor = gold
             self.layer.borderWidth = 0
             self.value.text = "WIN"

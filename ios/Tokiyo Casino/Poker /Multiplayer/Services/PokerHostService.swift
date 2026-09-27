@@ -251,6 +251,7 @@ final class PokerHostService {
             }
         } else {
             let occupied = seatRegistry.seats.filter { $0.kind != .open }
+            let renumbered = occupied.enumerated().contains { $0.offset != $0.element.seatId }
             seatRegistry.seats = occupied.enumerated().map { (i, rec) in
                 SeatRegistry.SeatRecord(
                     seatId: i, kind: rec.kind, displayName: rec.displayName,
@@ -259,6 +260,10 @@ final class PokerHostService {
                     aiTookOver: rec.aiTookOver
                 )
             }
+            // Guests only know the seat they joined; if closing a gap moved
+            // anyone, send the new seats before the game starts so each
+            // guest can find itself again.
+            if renumbered { broadcastLobbySnapshot() }
         }
 
         let personalities = AIPersonality.allCases

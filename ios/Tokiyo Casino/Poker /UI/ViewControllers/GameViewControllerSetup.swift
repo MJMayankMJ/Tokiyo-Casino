@@ -130,6 +130,18 @@ extension GameViewController {
     }
 
     func setupGame() {
+        // A new game drops whatever the last one still had going: its
+        // manager stops reaching the table, and a result or moment still
+        // playing from it can't deal a hand into this one.
+        gameManager?.delegate = nil
+        gameSession += 1
+        pendingResultWork?.cancel()
+        pendingResultWork = nil
+        handWinners = []
+        isShowingRoundResult = false
+        momentEffects.cancel()
+        tableView.dismissRoundResultBanner()
+
         gameManager = GameManager(playerCount: playerCount, startingChips: startingChips)
         gameManager.delegate = self
 
@@ -144,7 +156,9 @@ extension GameViewController {
         )
 
         // Start first hand after a delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        let session = gameSession
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            guard let self, self.gameSession == session else { return }
             self.startNewHand()
         }
     }

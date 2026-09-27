@@ -17,7 +17,9 @@ extension GameViewController {
         guard let userInfo = notification.userInfo,
               let player = userInfo["player"] as? Player,
               let amount = userInfo["amount"] as? Int,
-              let handDescription = userInfo["handDescription"] as? String else {
+              let handDescription = userInfo["handDescription"] as? String,
+              // A game replaced by New Game can still finish its last hand.
+              gameManager?.players.contains(where: { $0 === player }) == true else {
             return
         }
 
@@ -101,11 +103,19 @@ extension GameViewController {
 
         // Highlight winning cards on the table for the main (largest) pot
         // winner — this is the hand the user is currently being shown.
-        if let main = handWinners.max(by: { $0.amount < $1.amount }),
-           let mainEval = evaluations[main.player.id] {
+        let main = handWinners.max(by: { $0.amount < $1.amount })
+        let mainEval = main.flatMap { evaluations[$0.player.id] }
+        if let main, let mainEval {
             tableView.highlightWinningCards(mainEval.cards, winnerPlayerId: main.player.id)
-            if moments.isEmpty { tableView.showWinner(main.player) }
-            tableView.animatePotTo(playerId: main.player.id)
+        }
+        // The pot slides to the winner with the chips' sound — after your
+        // moment, if there is one, which has already been felt.
+        let humanWon = winnerIds.contains(human?.id ?? -1)
+        let payOut: () -> Void = { [weak self] in
+            guard let self, let main, mainEval != nil else { return }
+            self.tableView.showWinner(main.player)
+            self.tableView.animatePotTo(playerId: main.player.id)
+            PokerFeel.potWon(byYou: humanWon, felt: moments.isEmpty)
         }
 
         // Build banner entries. Multiple winners (side pots) → one entry per
@@ -136,9 +146,13 @@ extension GameViewController {
 
         isShowingRoundResult = true
         let displayDuration: TimeInterval = multi ? 3.5 : 2.8
+        let session = gameSession
         let showBanner: () -> Void = { [weak self] in
-            self?.tableView.showRoundResultBanner(entries: entries, duration: displayDuration) { [weak self] in
-                self?.finishRoundResultMoment()
+            guard let self, self.gameSession == session else { return }
+            payOut()
+            self.tableView.showRoundResultBanner(entries: entries, duration: displayDuration) { [weak self] in
+                guard let self, self.gameSession == session else { return }
+                self.finishRoundResultMoment()
             }
         }
         if let record, let human, !moments.isEmpty {

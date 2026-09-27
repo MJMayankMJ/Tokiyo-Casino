@@ -55,10 +55,15 @@ final class PokerMomentsTests: XCTestCase {
 
     // MARK: Comebacks
 
-    func testEightOutsOnTheRiverIsAMiracle() {
-        // Open-ended against aces on the turn; the nine comes.
-        let moments = PokerMoments.moments(for: hand("8H 7H", "5H 6C KD 2S 9D", against: ["AS AC"]))
-        XCTAssertEqual(moments, [.riverMiracle(odds: 8.0 / 44.0)])
+    func testAGutshotOnTheRiverIsAMiracle() {
+        // Four outs against aces on the turn; the seven comes.
+        let moments = PokerMoments.moments(for: hand("9H 8H", "5H 6C KD 2S 7D", against: ["AS AC"]))
+        XCTAssertEqual(moments, [.riverMiracle(odds: 4.0 / 44.0)])
+    }
+
+    func testEightOutsHittingIsJustADrawComingIn() {
+        // Open-ended against aces: 18% on the turn is no miracle.
+        XCTAssertEqual(PokerMoments.moments(for: hand("8H 7H", "5H 6C KD 2S 9D", against: ["AS AC"])), [])
     }
 
     func testRunningHeartsAgainstASetIsRunnerRunner() {
@@ -80,6 +85,11 @@ final class PokerMomentsTests: XCTestCase {
         XCTAssertNil(PokerMoments.comeback(hole: cards("AS AD"), board: cards("9C 5H 2D JS 3C"), against: [cards("KS KD")]))
     }
 
+    func testATieIsNotAWin() {
+        // Same two ranks, no flush possible: every river ties or loses.
+        XCTAssertEqual(PokerMoments.odds(hole: cards("AS KD"), board: cards("2C 7D 9S JH"), against: [cards("AC KH")]), 0)
+    }
+
     func testOddsCountEveryRiver() {
         // A two-outer: queens against kings, and only the last two queens
         // save you — 2 of the 44 cards left.
@@ -88,6 +98,29 @@ final class PokerMomentsTests: XCTestCase {
     }
 
     // MARK: Hero call
+
+    func testItsOnlyABluffIfTheyHadNothing() {
+        // The missed flush draw added nothing to the board: a bluff caught.
+        XCTAssertTrue(PokerMoments.caughtBluff(hand("AC QD", "KS 7S 2D 4C 3H", against: ["JS 10S"], calledRiver: true)))
+        // Top pair with a worse kicker may have been a thin value bet.
+        let valueBet = hand("AS KD", "AD 9C 5S 3H 2C", against: ["AC QH"], calledRiver: true)
+        XCTAssertEqual(PokerMoments.moments(for: valueBet), [.heroCall], "still a hero call…")
+        XCTAssertFalse(PokerMoments.caughtBluff(valueBet), "…but not a bluff")
+    }
+
+    func testARiverAllInThatDoesntRaiseIsACall() {
+        XCTAssertTrue(PokerMoments.calls(.call, betBefore: 100, betAfter: 100))
+        XCTAssertTrue(PokerMoments.calls(.allIn, betBefore: 100, betAfter: 100), "all-in for the bet or less")
+        XCTAssertFalse(PokerMoments.calls(.allIn, betBefore: 100, betAfter: 350), "all-in over the bet is a raise")
+        XCTAssertFalse(PokerMoments.calls(.raise(200), betBefore: 100, betAfter: 300))
+        XCTAssertFalse(PokerMoments.calls(.check, betBefore: 0, betAfter: 0))
+
+        let history = HandHistoryTracker()
+        history.handStarted(button: 0, seats: [0, 1])
+        history.streetBegan(.river)
+        history.recordAction(seat: 0, action: .allIn, callAmount: 300, raisedBet: false)
+        XCTAssertEqual(history.lastAction(of: 0, on: .river), .call, "the table counts it as a call too")
+    }
 
     func testCallingTheRiverWithAceHighAndWinningIsAHeroCall() {
         XCTAssertEqual(PokerMoments.moments(for: hand("AC QD", "KS 7S 2D 4C 3H", against: ["JS 10S"], calledRiver: true)),
@@ -99,6 +132,22 @@ final class PokerMomentsTests: XCTestCase {
     }
 
     // MARK: Knockouts
+
+    func testTheKnockoutGoesToWhoeverTookTheLastChip() {
+        // X is all in for 100 and Y for 200 with the best hand; Z and you
+        // play on, and you beat Z for the side pot. Y knocked X out, you
+        // knocked Z out.
+        let takers = PokerMoments.lastChipTakers(
+            invested: [1: 100, 2: 200, 3: 500, 0: 500, 4: 20],     // 4 folded
+            hands: [1: 100, 2: 400, 3: 200, 0: 300])
+        XCTAssertEqual(takers[1], [2])
+        XCTAssertEqual(takers[3], [0])
+        XCTAssertEqual(takers[4], [2], "a folded stake goes to the pot it was in")
+        XCTAssertNil(takers[2], "Y won what it paid in")
+
+        let split = PokerMoments.lastChipTakers(invested: [0: 100, 1: 100, 2: 100], hands: [0: 300, 1: 300, 2: 100])
+        XCTAssertEqual(split[2], [0, 1], "a split pot shares the knockout")
+    }
 
     func testKnockoutsCountThePlayersOut() {
         XCTAssertEqual(PokerMoments.moments(for: hand("AS AD", "9C 5H 2D JS 3C", against: ["KS KD", "QS QD"],
@@ -121,9 +170,13 @@ final class PokerMomentsTests: XCTestCase {
         table.handHistory.streetBegan(.river)
         table.handHistory.recordAction(seat: 1, action: .raise(100), callAmount: 0, raisedBet: true)
         table.handHistory.recordAction(seat: 0, action: .call, callAmount: 100, raisedBet: false)
+        you.totalInvested = 400
+        caught.totalInvested = 400
+        out.totalInvested = 100
+        folded.totalInvested = 20
         caught.chips = 400
         out.chips = 0
-        you.win(amount: 900)
+        you.win(amount: 920)
 
         let record = PokerHandRecord(finishedAt: table, by: you)
         XCTAssertTrue(record.won)
@@ -132,6 +185,25 @@ final class PokerMomentsTests: XCTestCase {
         XCTAssertEqual(record.knockedOut, [2])
         XCTAssertEqual(PokerMoments.moments(for: record), [.heroCall, .knockout(count: 1)],
                        "ace-high called the river, caught the bluff and took the other player's last chip")
+    }
+
+    func testASidePotWinnerDoesntGetSomeoneElsesKnockout() {
+        // X (all in for 100) loses to Y (all in for 200, best hand); you beat
+        // Z for the last side pot. Z is your knockout; X is Y's.
+        let table = GameManager(playerCount: 4)
+        let you = table.players[0], x = table.players[1], y = table.players[2], z = table.players[3]
+        you.holeCards = cards("KC KD")
+        x.holeCards = cards("5C 4D")
+        y.holeCards = cards("AS AD")
+        z.holeCards = cards("QC QD")
+        table.communityCards = cards("2S 7H 9C JD 3S")
+        (you.totalInvested, x.totalInvested, y.totalInvested, z.totalInvested) = (500, 100, 200, 500)
+        (x.chips, z.chips) = (0, 0)
+        y.win(amount: 700)
+        you.win(amount: 600)
+
+        XCTAssertEqual(PokerHandRecord(finishedAt: table, by: you).knockedOut, [3])
+        XCTAssertEqual(PokerHandRecord(finishedAt: table, by: y).knockedOut, [1])
     }
 
     func testEveryoneFoldingShowsNothingDown() {
@@ -161,6 +233,47 @@ final class PokerMomentsTests: XCTestCase {
         XCTAssertEqual(history.lastAction(of: 0, on: .river), .aggressive)
         history.handStarted(button: 1, seats: [0, 1])
         XCTAssertNil(history.lastAction(of: 0, on: .river), "a new hand starts clean")
+    }
+
+    // MARK: Interruptions
+
+    func testCancellingPutsTheTableBackAndDropsTheCompletion() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 402, height: 874))
+        let screen = UIView(frame: window.bounds)
+        window.addSubview(screen)
+        window.isHidden = false
+        let table = PokerTableView(frame: screen.bounds)
+        let overlay = UIView(frame: screen.bounds)
+        screen.addSubview(table)
+        screen.addSubview(overlay)
+        let hand = PokerMomentSample.fourOfAKind.hand(against: [1])
+        let you = Player(id: 0, name: "You", type: .human, chips: 1000)
+        let bot = Player(id: 1, name: "Bot", type: .ai(personality: .balanced), chips: 0)
+        you.holeCards = hand.hole
+        bot.holeCards = hand.shownDown[0].cards
+        table.setupPlayers([you, bot], dealerIndex: 0)
+        table.showCommunityCards(hand.board)
+        table.layoutIfNeeded()
+        let cards = table.communityCardViews + (table.playerView(for: 0)?.holeCardViews ?? [])
+
+        let effects = PokerMomentEffects(table: table, overlay: overlay)
+        var finished = false
+        effects.play([.fourOfAKind, .knockout(count: 1)], hand: hand, seat: 0) { finished = true }
+        XCTAssertTrue(cards.contains { $0.layer.mask != nil }, "the real cards hide under stand-ins")
+        XCTAssertFalse(overlay.subviews.isEmpty)
+
+        effects.cancel()
+        XCTAssertTrue(cards.allSatisfy { $0.layer.mask == nil }, "a cancel brings them back at once")
+        XCTAssertTrue(overlay.subviews.isEmpty)
+        XCTAssertEqual(screen.subviews.count, 2, "and leaves no dimming behind")
+        RunLoop.main.run(until: Date().addingTimeInterval(3.3))
+        XCTAssertFalse(finished, "a cancelled moment never completes")
+
+        var next = false
+        effects.play([.hammer], hand: PokerMomentSample.hammer.hand(against: [1]), seat: 0) { next = true }
+        RunLoop.main.run(until: Date().addingTimeInterval(2.7))
+        XCTAssertTrue(next, "the next moment plays through")
+        XCTAssertTrue(cards.allSatisfy { $0.layer.mask == nil })
     }
 
     // MARK: Debug samples

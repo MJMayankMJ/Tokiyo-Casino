@@ -182,6 +182,38 @@ final class MultiplayerPokerFixesTests: XCTestCase {
         XCTAssertEqual(harness.observer.lobbies.last?.aiFillEnabled, false)
     }
 
+    func testStartingWithoutAIFillTellsGuestsTheirNewSeats() throws {
+        // A and B join as seats 1 and 2; A leaves; the host starts without
+        // AI fill and closes the gap, so B becomes seat 1.
+        let harness = try HostHarness(totalSeats: 4, aiFillEnabled: false)
+        try harness.joinGuest(peerId: "A")
+        try harness.joinGuest(peerId: "B")
+        XCTAssertEqual(harness.host.seatRegistry.seat(forPeer: "B"), 2)
+        harness.transport.injectEvent(.peerDisconnected(peerId: "A", displayName: "A"))
+        XCTAssertTrue(harness.host.startGame())
+        XCTAssertEqual(harness.host.seatRegistry.seat(forPeer: "B"), 1)
+
+        let broadcasts = try harness.broadcastMessages()
+        let start = try XCTUnwrap(broadcasts.lastIndex { $0.type == .startGame })
+        let update = try XCTUnwrap(broadcasts[..<start].last { $0.type == .seatUpdate },
+                                   "the new seats go out before the game starts")
+        let seats = try update.decodePayload(SeatUpdatePayload.self).seats
+        XCTAssertEqual(seats.first { $0.peerId == "B" }?.seatId, 1)
+    }
+
+    func testGuestFindsItsSeatAgainWhenSeatsAreRenumbered() throws {
+        let harness = ClientHarness()
+        try harness.joinAndAccept()
+        XCTAssertEqual(harness.client.seatId, 1)
+        let seats = [
+            LobbySeatPayload(seatId: 0, displayName: "Host", kind: "host", peerId: nil, isHost: true, isReady: true),
+            LobbySeatPayload(seatId: 1, displayName: "Other", kind: "remote", peerId: "Other", isHost: false, isReady: true),
+            LobbySeatPayload(seatId: 2, displayName: "Guest", kind: "remote", peerId: "Guest", isHost: false, isReady: true)
+        ]
+        try harness.inject(.seatUpdate, payload: SeatUpdatePayload(seats: seats))
+        XCTAssertEqual(harness.client.seatId, 2, "found by its peer id")
+    }
+
     func testReconnectTokenStoreRoundTripCapClearAndCorruptionHandling() {
         for idx in 0..<20 {
             XCTAssertTrue(ReconnectTokenStore.save(

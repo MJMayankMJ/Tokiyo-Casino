@@ -24,8 +24,10 @@ extension GameViewController {
         // Add preparation haptic
         addHapticFeedback(.medium)
         
-        // Start new hand after table is cleared
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        // Start new hand after table is cleared — in this game only.
+        let session = gameSession
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.gameSession == session else { return }
             self.gameManager.startNewHand()
         }
     }

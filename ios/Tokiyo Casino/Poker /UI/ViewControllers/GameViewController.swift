@@ -58,6 +58,10 @@ class GameViewController: UIViewController {
     let momentsLayer = UIView()
     lazy var momentEffects = PokerMomentEffects(table: tableView, overlay: momentsLayer)
 
+    // Bumped by every new game, so a result, moment or deal still pending
+    // from the last one can't reach into it.
+    var gameSession = 0
+
     struct LastHandSummary {
         let playerSummaries: [PlayerSummary]
         let totalPot: Int

@@ -219,6 +219,19 @@ final class PokerClientService {
 
     // MARK: Incoming
 
+    /// The host renumbers seats when it starts a game without AI fill (and
+    /// sends the new seats first). If our seat isn't ours any more, find
+    /// ours again by our peer id.
+    private func adoptSeat(from seats: [LobbySeatPayload]) {
+        let me = transport.localPeerId
+        guard seats.first(where: { $0.seatId == seatId })?.peerId != me,
+              let mine = seats.first(where: { $0.peerId == me })?.seatId else { return }
+        seatId = mine
+        if let host = hostPeerId, let table = tableId, let token = reconnectToken {
+            ReconnectTokenStore.save(hostPeerId: host, tableId: table, token: token, seatId: mine)
+        }
+    }
+
     private func handleIncoming(data: Data, fromPeer peerId: String) {
         let decoded: DecodedPokerMessage
         do { decoded = try PokerWireCodec.decode(data) }
@@ -294,6 +307,7 @@ final class PokerClientService {
                     hostPeerId: hostPeerId ?? ""
                 )
                 lastLobby = snap
+                adoptSeat(from: p.seats)
                 observer?.client(self, didReceiveLobby: snap)
             }
 

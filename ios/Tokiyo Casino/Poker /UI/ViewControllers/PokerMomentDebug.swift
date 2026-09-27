@@ -22,7 +22,7 @@ enum PokerMomentSample: CaseIterable {
         case .straightFlush:  return "Straight flush"
         case .fourOfAKind:    return "Four of a kind"
         case .runnerRunner:   return "Runner-runner (A♥5♥ vs set)"
-        case .riverMiracle:   return "River miracle (8 outs vs aces)"
+        case .riverMiracle:   return "River miracle (gutshot vs aces)"
         case .heroCall:       return "Hero call (ace-high)"
         case .hammer:         return "The Hammer (7-2)"
         case .knockout:       return "Knockout"
@@ -51,8 +51,8 @@ enum PokerMomentSample: CaseIterable {
             return PokerHandRecord(hole: Self.cards("AH 5H"), board: Self.cards("QC 7H 2S 9H 3H"), won: true,
                                    shownDown: [shown(a, "7S 7C")])
         case .riverMiracle:
-            // Open-ended against aces: eight outs, and the river's a nine.
-            return PokerHandRecord(hole: Self.cards("8H 7H"), board: Self.cards("5H 6C KD 2S 9D"), won: true,
+            // A gutshot against aces: four outs, and the river's a seven.
+            return PokerHandRecord(hole: Self.cards("9H 8H"), board: Self.cards("5H 6C KD 2S 7D"), won: true,
                                    shownDown: [shown(a, "AS AC")])
         case .heroCall:
             // Ace-high calls the river; the missed flush draw shows up.

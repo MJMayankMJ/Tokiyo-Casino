@@ -14,11 +14,12 @@
 //  • Runner-runner — behind on the flop and on the turn to a hand that was
 //    shown down, 15% or less to win, and it took both the turn and the
 //    river to win it.
-//  • River miracle — behind on the turn with 22% or less to win, and the
-//    river won it.
+//  • River miracle — behind on the turn with 10% or less to win (about
+//    four outs), and the river won it.
 //  • Hero call — you called a river bet holding one pair or less and won
-//    the showdown: you caught the bluff.
-//  • Knockout — your win took a player's last chip.
+//    the showdown. It was a bluff you caught only if every hand you beat
+//    added nothing to the board.
+//  • Knockout — you won the pot that took a player's last chip.
 //
 //  One headline per hand — the rarest — and a knockout after it.
 //
@@ -77,8 +78,8 @@ struct PokerHandRecord {
 enum PokerMoments {
 
     /// The most a river miracle could have been to win on the turn — about
-    /// a flush draw.
-    static let riverMiracleOdds = 0.22
+    /// four outs. A flush draw hitting (~20%) is just a draw coming in.
+    static let riverMiracleOdds = 0.10
     static let runnerRunnerOdds = 0.15
 
     /// On a friends' table the cards are turned over as the result
@@ -195,6 +196,48 @@ enum PokerMoments {
         let mine = FastHandEvaluator.score(hole + board)
         return others.contains { FastHandEvaluator.score($0 + board) > mine }
     }
+
+    /// Every hand you beat at showdown added nothing to the board: the bet
+    /// you called was a bluff, or a draw that missed. Anything else — a
+    /// weaker pair, say — may have been a thin value bet.
+    static func caughtBluff(_ hand: PokerHandRecord) -> Bool {
+        guard hand.board.count == 5, !hand.shownDown.isEmpty else { return false }
+        let board = HandEvaluator.evaluateBestHand(from: hand.board).rank
+        return hand.shownDown.allSatisfy { HandEvaluator.evaluateBestHand(from: $0.cards + hand.board).rank == board }
+    }
+
+    /// Whether `action` called a bet: a call, or an all-in that didn't
+    /// raise the table's bet.
+    static func calls(_ action: PlayerAction, betBefore: Int, betAfter: Int) -> Bool {
+        switch action {
+        case .call:  return true
+        case .allIn: return betAfter <= betBefore
+        default:     return false
+        }
+    }
+
+    /// Who took each player's last chip at showdown: the winners of the
+    /// last pot that player paid into. Pots are split the way the table
+    /// splits them (`GameManager.determineWinnersWithDelay`): the best hand
+    /// left takes, from everyone, as much as its own stake, until the chips
+    /// run out. `invested` is every player's stake this hand, folded or not;
+    /// `hands` holds the showdown hands' `HandEvaluation.value`.
+    static func lastChipTakers(invested: [Int: Int], hands: [Int: Int]) -> [Int: Set<Int>] {
+        var stakes = invested
+        var contenders = hands
+        var takers: [Int: Set<Int>] = [:]
+        while let best = contenders.values.max() {
+            let winners = Set(contenders.filter { $0.value == best }.keys)
+            let cap = winners.map { stakes[$0] ?? 0 }.min() ?? 0
+            guard cap > 0 else { break }
+            for (seat, stake) in stakes where stake > 0 {
+                stakes[seat] = stake - min(stake, cap)
+                if !winners.contains(seat) { takers[seat] = winners }
+            }
+            contenders = contenders.filter { (stakes[$0.key] ?? 0) > 0 }
+        }
+        return takers
+    }
 }
 
 // MARK: - From the table
@@ -207,12 +250,20 @@ extension PokerHandRecord {
         let inHand = table.players.filter { !$0.isFolded && $0.holeCards.count == 2 }
         let opponents = inHand.filter { $0.id != player.id }
         let won = player.winnings > 0
+        // Out of chips and paid nothing back — and the pot that took their
+        // last chip was yours.
+        let takers = PokerMoments.lastChipTakers(
+            invested: Dictionary(uniqueKeysWithValues: table.players.map { ($0.id, $0.totalInvested) }),
+            hands: Dictionary(uniqueKeysWithValues: inHand.map {
+                ($0.id, HandEvaluator.evaluateBestHand(from: $0.holeCards + table.communityCards).value)
+            }))
+        let out = opponents.filter { $0.chips == 0 && $0.winnings == 0 && takers[$0.id]?.contains(player.id) == true }
         self.init(hole: player.holeCards,
                   board: table.communityCards,
                   won: won,
                   shownDown: inHand.count > 1 ? opponents.map { PokerShownHand(seat: $0.id, cards: $0.holeCards) } : [],
                   calledRiver: table.handHistory.lastAction(of: player.id, on: .river) == .call,
-                  knockedOut: won ? opponents.filter { $0.chips == 0 && $0.winnings == 0 }.map(\.id) : [])
+                  knockedOut: won ? out.map(\.id) : [])
     }
 }
 

@@ -208,9 +208,13 @@ final class NetworkGameViewController: UIViewController {
     /// Rebuilds the synthesized roster from the snapshot, rotates so the
     /// local seat is at index 0, and feeds it into PokerTableView.
     private func render(snapshot: TableSnapshotPayload) {
-        // New-hand transition — clear the felt before re-rendering.
+        // The host renumbers seats when it starts a game without AI fill.
+        if case .client(let client) = role, let seat = client.seatId { localSeatId = seat }
+        // New-hand transition — clear the felt before re-rendering. A moment
+        // still playing from the last hand stops, and its cards come back.
         if let prev = lastSnapshot, prev.handNumber != snapshot.handNumber {
             localHoleCards = []
+            momentEffects.cancel()
             tableView.clearTable()
         }
         playFeedback(from: lastSnapshot, to: snapshot)
@@ -356,12 +360,7 @@ final class NetworkGameViewController: UIViewController {
                   let action = SnapshotBuilder.decodeAction(name: name, raiseAmount: player.lastActionAmount) else { continue }
             PokerFeel.action(action, byYou: player.seatId == localSeatId)
             if player.seatId == localSeatId, SnapshotBuilder.decodePhase(prev.phase) == .river {
-                // An all-in that doesn't raise the bet is a call too.
-                switch action {
-                case .call:  calledRiver = true
-                case .allIn: calledRiver = next.currentBet <= prev.currentBet
-                default:     calledRiver = false
-                }
+                calledRiver = PokerMoments.calls(action, betBefore: prev.currentBet, betAfter: next.currentBet)
             }
         }
         PokerFeel.communityCards(new: next.communityCards.count - prev.communityCards.count)
@@ -519,18 +518,28 @@ final class NetworkGameViewController: UIViewController {
                                            isHuman: isHuman)
         }
 
-        // Pot animation to the largest winner.
-        if let main = payload.winners.max(by: { $0.amount < $1.amount }),
-           let renderedIdx = renderedSeatBySeatId[main.seatId],
-           renderedIdx < renderedPlayers.count {
-            tableView.animatePotTo(playerId: renderedPlayers[renderedIdx].id)
-            if moments.isEmpty { tableView.showWinner(renderedPlayers[renderedIdx]) }
-            PokerFeel.potWon(byYou: payload.winners.contains { $0.seatId == localSeatId })
+        // Pot animation to the largest winner — after your moment, if there
+        // is one, which has already been felt.
+        let youWon = payload.winners.contains { $0.seatId == localSeatId }
+        let payOut: () -> Void = { [weak self] in
+            guard let self, let main = payload.winners.max(by: { $0.amount < $1.amount }),
+                  let renderedIdx = self.renderedSeatBySeatId[main.seatId],
+                  renderedIdx < self.renderedPlayers.count else { return }
+            self.tableView.animatePotTo(playerId: self.renderedPlayers[renderedIdx].id)
+            self.tableView.showWinner(self.renderedPlayers[renderedIdx])
+            PokerFeel.potWon(byYou: youWon, felt: moments.isEmpty)
         }
 
         let duration: TimeInterval = multi ? 3.5 : 2.8
+        // Only while this hand is still on the table: if the next one arrives
+        // early, the moment is cancelled and its banner dropped.
+        let stillThisHand: () -> Bool = { [weak self] in
+            self?.lastSnapshot.map { $0.handNumber == payload.handNumber } ?? true
+        }
         let showBanner: () -> Void = { [weak self] in
-            self?.tableView.showRoundResultBanner(entries: entries, duration: duration) { [weak self] in
+            guard let self, stillThisHand() else { return }
+            payOut()
+            self.tableView.showRoundResultBanner(entries: entries, duration: duration) { [weak self] in
                 self?.tableView.clearWinningHighlights()
                 // Host kicks off the next hand from its own service. Clients
                 // wait for the next `tableSnapshot` to arrive.
@@ -539,7 +548,7 @@ final class NetworkGameViewController: UIViewController {
         guard !moments.isEmpty else { showBanner(); return }
         // The host holds the next deal for this (`PokerMoments.hold`).
         DispatchQueue.main.asyncAfter(deadline: .now() + PokerMoments.showdownLeadIn) { [weak self] in
-            guard let self else { return }
+            guard let self, stillThisHand() else { return }
             self.momentEffects.play(moments, hand: record, seat: self.localSeatId, completion: showBanner)
         }
     }
@@ -553,15 +562,24 @@ final class NetworkGameViewController: UIViewController {
         }
         // Only yours is turned over when everyone else folded.
         let shownDown = revealed.count > 1 ? revealed.filter { $0.seat != localSeatId } : []
-        // Chips as the hand ended, before the pots were paid: an all-in
-        // player who won nothing has none left.
-        let broke = Set(lastSnapshot?.players.filter { $0.chips == 0 }.map(\.seatId) ?? [])
+        // Stakes and chips as the hand ended, before the pots were paid: an
+        // all-in player who won nothing is out — your knockout if the pot
+        // that took their last chip was yours.
+        let board = payload.communityCards.compactMap { Card(dto: $0) }
+        let players = lastSnapshot?.players ?? []
+        let broke = Set(players.filter { $0.chips == 0 }.map(\.seatId))
+        let takers = PokerMoments.lastChipTakers(
+            invested: Dictionary(players.map { ($0.seatId, $0.totalInvested) }, uniquingKeysWith: max),
+            hands: Dictionary(revealed.map { ($0.seat, HandEvaluator.evaluateBestHand(from: $0.cards + board).value) },
+                              uniquingKeysWith: max))
         return PokerHandRecord(hole: localHoleCards,
-                               board: payload.communityCards.compactMap { Card(dto: $0) },
+                               board: board,
                                won: winners.contains(localSeatId),
                                shownDown: shownDown,
                                calledRiver: calledRiver,
-                               knockedOut: shownDown.map(\.seat).filter { broke.contains($0) && !winners.contains($0) })
+                               knockedOut: shownDown.map(\.seat).filter {
+                                   broke.contains($0) && !winners.contains($0) && takers[$0]?.contains(localSeatId) == true
+                               })
     }
 
     fileprivate func handleSessionResult(_ payload: SessionResultPayload) {

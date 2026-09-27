@@ -59,10 +59,11 @@ enum PokerFeel {
         GameHaptics.shared.play(.yourTurn)
     }
 
-    /// The chips slide to the winner; if that's you, you feel it too.
-    static func potWon(byYou: Bool) {
+    /// The chips slide to the winner; if that's you, you feel it too —
+    /// unless a moment of yours was already felt (`felt: false`).
+    static func potWon(byYou: Bool, felt: Bool = true) {
         GameAudio.shared.play(.pot, volume: byYou ? 1 : 0.7)
-        if byYou { GameHaptics.shared.play(.win) }
+        if byYou, felt { GameHaptics.shared.play(.win) }
     }
 
     static func showdownFlip() {
