@@ -207,7 +207,6 @@ struct TDPClientView: Codable {
 
     // Session
     let roundHistory: [TDPRoundScore]
-    let canEndSession: Bool
     let isHost: Bool
     let message: String
 
@@ -217,6 +216,22 @@ struct TDPClientView: Codable {
     var myArrangement: [Card]?
     /// Debts settled in tricks this round; public.
     var concessions: [TDPConcession] = []
+    /// The vote on three more rounds, once the last one is played.
+    var extendVote: TDPExtendVoteView?
+}
+
+/// Where the "three more rounds?" vote stands. Public — everyone sees who
+/// has voted and how.
+struct TDPExtendVoteView: Codable, Equatable {
+    struct Ballot: Codable, Equatable {
+        let seat: TDPSeat
+        /// nil until they vote.
+        let yes: Bool?
+    }
+    /// Every person at the table, in seat order. Bots don't vote.
+    let ballots: [Ballot]
+    let needed: Int
+    let declined: Bool
 }
 
 // MARK: - Intents (client → host)
@@ -237,8 +252,7 @@ struct TDPIntent: Codable {
         case khichaiReturn
         case playCard
         case beginNextRound
-        case extendSession
-        case endSession
+        case voteExtend
     }
 
     let kind: Kind
@@ -252,6 +266,8 @@ struct TDPIntent: Codable {
     /// The debtor's own card ids in their chosen face-down order.
     var order: [String]?
     var done: Bool?
+    /// Yes or no to three more rounds.
+    var accept: Bool?
 
     init(kind: Kind,
          ready: Bool? = nil,
@@ -261,7 +277,8 @@ struct TDPIntent: Codable {
          cardID: String? = nil,
          settlements: [TDPSettleChoice]? = nil,
          order: [String]? = nil,
-         done: Bool? = nil) {
+         done: Bool? = nil,
+         accept: Bool? = nil) {
         self.kind = kind
         self.ready = ready
         self.rounds = rounds
@@ -271,6 +288,7 @@ struct TDPIntent: Codable {
         self.settlements = settlements
         self.order = order
         self.done = done
+        self.accept = accept
     }
 
     /// Maps to an engine action for `seat`. The host always supplies the
@@ -296,8 +314,7 @@ struct TDPIntent: Codable {
         case .khichaiReturn:       return cardID.map { .khichaiReturn(seat: seat, cardID: $0) }
         case .playCard:            return cardID.map { .playCard(seat: seat, cardID: $0) }
         case .beginNextRound:      return .beginNextRound
-        case .extendSession:       return .extendSession(seat: seat)
-        case .endSession:          return .endSession(seat: seat)
+        case .voteExtend:          return accept.map { .voteExtend(seat: seat, yes: $0) }
         }
     }
 }

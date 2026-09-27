@@ -12,25 +12,18 @@
 
 import UIKit
 
-/// Shared player-name store. All multiplayer screens read/write through
-/// here so name updates apply uniformly to create + join flows.
+/// Poker's view of the app-wide `PlayerProfile`, so a name changed here,
+/// in Profile or in another game is the same name everywhere.
 enum MultiplayerProfile {
-    private static let defaultsKey = "tokiyo.poker.mp.displayName"
 
-    /// Currently saved name, or nil if the user has never entered one.
-    static var savedName: String? {
-        let raw = UserDefaults.standard.string(forKey: defaultsKey) ?? ""
-        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? nil : trimmed
-    }
+    /// The profile name. Never nil since onboarding; kept optional for the
+    /// callers written before profiles existed.
+    static var savedName: String? { PlayerProfile.name }
 
     /// Persist a new name. Empty/whitespace input is rejected (the
     /// caller is expected to keep prompting).
     static func save(_ name: String) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return false }
-        UserDefaults.standard.set(trimmed, forKey: defaultsKey)
-        return true
+        PlayerProfile.setName(name)
     }
 }
 
@@ -186,82 +179,42 @@ final class MultiplayerEntryViewController: UIViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         MPNavigationChrome.hideSystemBackBar(for: self, animated: animated)
-
-        if let saved = MultiplayerProfile.savedName {
-            currentName = saved
-            identityChip.name = saved
-        } else {
-            // First-time user: prompt now so the name is set before
-            // they pick create/join.
-            promptForName(initialValue: nil, isFirstTime: true)
-        }
+        refreshName()
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshName),
+                                               name: PlayerProfile.didChange, object: nil)
     }
 
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        NotificationCenter.default.removeObserver(self, name: PlayerProfile.didChange, object: nil)
         MPNavigationChrome.restoreSystemBackBarIfLeaving(self, animated: animated)
     }
 
-    // MARK: - Name prompt
+    @objc private func refreshName() {
+        currentName = PlayerProfile.name
+        identityChip.name = currentName
+    }
+
+    // MARK: - Profile
 
     @objc private func backTapped() {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
         leaveScreen()
     }
 
+    /// The same Profile sheet every game uses — name, photo and cards.
     @objc private func changeNameTapped() {
-        promptForName(initialValue: currentName, isFirstTime: false)
-    }
-
-    /// Shows the one-time / change-name alert. The "Cancel" path is
-    /// only enabled when the user already has a saved name —
-    /// first-time users must enter something to proceed.
-    private func promptForName(initialValue: String?, isFirstTime: Bool) {
-        let alert = UIAlertController(
-            title: isFirstTime ? "What should we call you?" : "Change your name",
-            message: "Other players see this on the felt. You can change it any time from this screen.",
-            preferredStyle: .alert
-        )
-        alert.addTextField { field in
-            field.placeholder = "Your name"
-            field.text = initialValue
-            field.autocapitalizationType = .words
-            field.autocorrectionType = .no
-            field.clearButtonMode = .whileEditing
-            field.returnKeyType = .done
-        }
-        alert.addAction(UIAlertAction(title: "Save", style: .default) { [weak self, weak alert] _ in
-            guard let self else { return }
-            let entered = alert?.textFields?.first?.text ?? ""
-            if MultiplayerProfile.save(entered),
-               let saved = MultiplayerProfile.savedName {
-                self.currentName = saved
-                self.identityChip.name = saved
-            } else {
-                // Empty input: reprompt.
-                self.promptForName(initialValue: nil, isFirstTime: isFirstTime)
-            }
-        })
-        if !isFirstTime {
-            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel))
-        }
-        present(alert, animated: true)
+        present(ProfileViewController.sheet(), animated: true)
     }
 
     // MARK: - Flow
 
     @objc private func createTapped() {
-        guard !currentName.isEmpty else {
-            promptForName(initialValue: nil, isFirstTime: true); return
-        }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         pushOrPresent(HostLobbyViewController(displayName: currentName))
     }
 
     @objc private func joinTapped() {
-        guard !currentName.isEmpty else {
-            promptForName(initialValue: nil, isFirstTime: true); return
-        }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         pushOrPresent(JoinLobbyViewController(displayName: currentName))
     }

@@ -12,7 +12,8 @@ import UIKit
 final class TDPLobbyViewController: UIViewController {
 
     enum Role {
-        case host(name: String)
+        /// `rounds` is fixed here, before anyone joins.
+        case host(name: String, rounds: Int)
         case guest(name: String)
     }
 
@@ -41,13 +42,13 @@ final class TDPLobbyViewController: UIViewController {
         build()
 
         switch role {
-        case .host(let name):
+        case .host(let name, let rounds):
             title = "Your table"
-            let service = TDPHostService(mode: .friends, hostName: name)
+            let service = TDPHostService(mode: .friends, hostName: name, targetRounds: rounds)
             service.delegate = self
             service.startHosting(displayName: name)
             hostService = service
-            statusLabel.text = "Visible to nearby players. Friends can join, or start now and let AI fill in."
+            statusLabel.text = "\(rounds) rounds. Friends nearby can join — or start now and bots fill in."
         case .guest(let name):
             title = "Nearby tables"
             startButton.isHidden = true
@@ -122,7 +123,7 @@ final class TDPLobbyViewController: UIViewController {
             return
         }
         for (index, table) in discovered.enumerated() {
-            let title = "\(table.advert.hostName)'s table  ·  \(table.advert.humansJoined)/3"
+            let title = "\(table.advert.hostName)  ·  \(table.advert.humansJoined)/3  ·  \(table.advert.targetRounds) rounds"
             let button = TDPDesign.button(table.advert.isStarted ? "\(title) (started)" : title,
                                           filled: !table.advert.isStarted)
             button.isEnabled = !table.advert.isStarted

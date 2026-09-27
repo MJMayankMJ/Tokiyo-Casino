@@ -63,7 +63,7 @@ final class TDPKhichaiUITests: XCTestCase {
             revealedTrumpCard: nil, currentTrick: [], leadSuit: nil,
             currentTurnSeat: nil, leaderSeat: nil, lastTrick: [], lastTrickWinnerSeat: nil,
             debts: [TDPDebt(from: 1, to: 0, amount: 1)],
-            khichai: khichai, roundHistory: [], canEndSession: false, isHost: true,
+            khichai: khichai, roundHistory: [], isHost: true,
             message: "Pulling."
         )
     }

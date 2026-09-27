@@ -16,8 +16,17 @@ import UIKit
 final class TDPAvatarView: UIView {
 
     private let initialLabel = UILabel()
+    private let photoView = UIImageView()
     private let ringLayer = CALayer()
     private let side: CGFloat
+
+    /// The player's own profile photo, in place of the initial.
+    var photo: UIImage? {
+        didSet {
+            photoView.image = photo
+            photoView.isHidden = photo == nil
+        }
+    }
 
     var tint: TDPTheme.Tint = .green { didSet { applyTheme() } }
     var isActive = false { didSet { if oldValue != isActive { updateGlow() } } }
@@ -34,6 +43,14 @@ final class TDPAvatarView: UIView {
         initialLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(initialLabel)
 
+        photoView.contentMode = .scaleAspectFill
+        photoView.clipsToBounds = true
+        photoView.layer.cornerRadius = radius * TDPTheme.scale
+        photoView.layer.cornerCurve = .continuous
+        photoView.isHidden = true
+        photoView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(photoView)
+
         ringLayer.borderWidth = 2
         ringLayer.cornerCurve = .continuous
         ringLayer.shadowOffset = .zero
@@ -45,7 +62,11 @@ final class TDPAvatarView: UIView {
             widthAnchor.constraint(equalToConstant: self.side),
             heightAnchor.constraint(equalToConstant: self.side),
             initialLabel.centerXAnchor.constraint(equalTo: centerXAnchor),
-            initialLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
+            initialLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
+            photoView.topAnchor.constraint(equalTo: topAnchor),
+            photoView.bottomAnchor.constraint(equalTo: bottomAnchor),
+            photoView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            photoView.trailingAnchor.constraint(equalTo: trailingAnchor)
         ])
         applyTheme()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (avatar: TDPAvatarView, _: UITraitCollection) in
@@ -212,7 +233,8 @@ final class TDPSelfBadge: UIView {
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func configure(name: String, tally: String, quotaMet: Bool, status: String,
-                   statusIsAction: Bool, isActive: Bool, chip: String? = nil) {
+                   statusIsAction: Bool, isActive: Bool, chip: String? = nil, photo: UIImage? = nil) {
+        avatar.photo = photo
         nameLabel.text = name
         tallyLabel.text = tally
         chipLabel.text = chip
@@ -389,11 +411,11 @@ final class TDPHeaderView: UIView {
     @objc private func didTapScores() { onScoresTap?() }
 
     /// `points` is the classic score: one per trick taken this session.
-    func configure(round: Int, points: Int, trump: Suit?, trumpDetail: String?) {
-        scoreBlock?.accessibilityLabel = "Round \(round), score \(points)"
+    func configure(round: Int, of total: Int, points: Int, trump: Suit?, trumpDetail: String?) {
+        scoreBlock?.accessibilityLabel = "Round \(round) of \(total), score \(points)"
         let size = 11 * TDPTheme.scale
         roundLabel.attributedText = NSAttributedString(
-            string: "ROUND \(round)",
+            string: "ROUND \(round) / \(total)",
             attributes: [.font: UIFont.systemFont(ofSize: size, weight: .medium),
                          .kern: 0.08 * size,                       // ref letter-spacing .08em
                          .foregroundColor: TDPTheme.muted]

@@ -25,6 +25,17 @@ protocol TDPGameDriver: AnyObject {
     func send(_ intent: TDPIntent)
     func start()
     func stop()
+
+    /// Seats played on this device.
+    var localSeats: [TDPSeat] { get }
+    /// Acts for one particular seat on this device — for the public choices
+    /// every person sharing a phone makes, like the vote on more rounds.
+    func send(_ intent: TDPIntent, as seat: TDPSeat)
+}
+
+extension TDPGameDriver {
+    var localSeats: [TDPSeat] { [activeSeat] }
+    func send(_ intent: TDPIntent, as seat: TDPSeat) { send(intent) }
 }
 
 // MARK: - Host-backed (practice, pass & play, and the host's own seat)
@@ -86,6 +97,12 @@ final class TDPHostDriver: TDPGameDriver, TDPHostServiceDelegate {
 
     func send(_ intent: TDPIntent) {
         service.submit(intent, from: activeSeat)
+    }
+
+    var localSeats: [TDPSeat] { service.localSeats.sorted() }
+
+    func send(_ intent: TDPIntent, as seat: TDPSeat) {
+        service.submit(intent, from: seat)
     }
 
     // MARK: TDPHostServiceDelegate

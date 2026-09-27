@@ -203,6 +203,7 @@ final class TDPGameViewController: UIViewController {
         let acting = actingSeats(view)
 
         header.configure(round: max(view.roundNumber, 1),
+                         of: view.targetRounds,
                          points: seats[me]?.score ?? 0,
                          trump: view.trump,
                          trumpDetail: view.revealedTrumpCard.map { "\($0.description) shown" })
@@ -218,7 +219,9 @@ final class TDPGameViewController: UIViewController {
                             status: status,
                             statusIsAction: isAction,
                             isActive: acting.contains(me),
-                            chip: targetChip(myInfo))
+                            chip: targetChip(myInfo),
+                            // A shared phone has several "you"s; only the owner has a photo.
+                            photo: driver.isSharedDevice ? nil : PlayerProfile.photo)
 
         renderTable(view, previous: previous)
         renderHand(view, animated: previous != nil)
@@ -744,7 +747,7 @@ final class TDPGameViewController: UIViewController {
             let verdict = leaders.count > 1
                 ? "\(leaders.joined(separator: " and ")) tie"
                 : (leaders.first == "You" ? "You win" : "\(leaders.first ?? "—") wins")
-            prompt.reset(title: verdict, subtitle: "Final scores")
+            prompt.reset(title: verdict, subtitle: "Final scores · \(view.roundHistory.count) rounds")
         } else {
             prompt.reset(title: "Round \(view.roundHistory.count) done", subtitle: nil)
         }
@@ -757,26 +760,13 @@ final class TDPGameViewController: UIViewController {
         })
 
         if final {
-            let done = TDPButton(title: "Done", style: .primary)
-            done.addTarget(self, action: #selector(didTapLeaveConfirmed), for: .touchUpInside)
-            prompt.primaryRow.addArrangedSubview(done)
-            let all = TDPButton(title: "All rounds", style: .secondary)
-            all.addTarget(self, action: #selector(didTapScores), for: .touchUpInside)
-            prompt.secondaryRow.addArrangedSubview(all)
-            if view.isHost {
-                let more = TDPButton(title: "Play 3 more", style: .secondary)
-                more.addTarget(self, action: #selector(didTapExtend), for: .touchUpInside)
-                prompt.secondaryRow.addArrangedSubview(more)
-            }
+            buildExtendVote(view)
         } else if view.isHost {
+            // The length was agreed before the deal, so there is no ending
+            // early — only the next round.
             let next = TDPButton(title: "Next round", style: .primary)
             next.addTarget(self, action: #selector(didTapNextRound), for: .touchUpInside)
             prompt.primaryRow.addArrangedSubview(next)
-            if view.canEndSession {
-                let end = TDPButton(title: "End session", style: .secondary)
-                end.addTarget(self, action: #selector(didTapEndSession), for: .touchUpInside)
-                prompt.secondaryRow.addArrangedSubview(end)
-            }
         } else {
             let waiting = UILabel()
             waiting.text = "Waiting for the host…"
@@ -785,6 +775,115 @@ final class TDPGameViewController: UIViewController {
             waiting.textAlignment = .center
             prompt.bodyStack.addArrangedSubview(waiting)
         }
+    }
+
+    // MARK: Three more rounds?
+
+    /// After the last round. Alone with bots it's your call; with people,
+    /// a majority of them decides (both of two, two of three).
+    private func buildExtendVote(_ view: TDPClientView) {
+        let all = TDPButton(title: "All rounds", style: .quiet)
+        all.addTarget(self, action: #selector(didTapScores), for: .touchUpInside)
+        let done = TDPButton(title: "Done", style: .secondary)
+        done.addTarget(self, action: #selector(didTapLeaveConfirmed), for: .touchUpInside)
+
+        guard let vote = view.extendVote, !vote.ballots.isEmpty else {
+            prompt.primaryRow.addArrangedSubview(done)
+            return
+        }
+
+        if vote.ballots.count == 1, let solo = vote.ballots.first {
+            let more = TDPButton(title: "Play 3 more", style: .primary)
+            more.tag = solo.seat * 2 + 1
+            more.addTarget(self, action: #selector(didTapVote(_:)), for: .touchUpInside)
+            prompt.primaryRow.addArrangedSubview(done)
+            prompt.primaryRow.addArrangedSubview(more)
+            prompt.secondaryRow.addArrangedSubview(all)
+            return
+        }
+
+        prompt.bodyStack.addArrangedSubview(voteSummary(view, vote: vote))
+
+        // Buttons for whoever on this phone hasn't voted yet. On a shared
+        // phone that can be everyone, one row each.
+        let mine = vote.ballots.filter { driver.localSeats.contains($0.seat) && $0.yes == nil }
+        if !vote.declined {
+            for ballot in mine {
+                let shared = mine.count > 1
+                let no = TDPButton(title: "No", style: .secondary)
+                no.tag = ballot.seat * 2
+                let yes = TDPButton(title: shared ? "Yes" : "Play 3 more", style: .primary)
+                yes.tag = ballot.seat * 2 + 1
+                [no, yes].forEach { $0.addTarget(self, action: #selector(didTapVote(_:)), for: .touchUpInside) }
+                let buttons = UIStackView(arrangedSubviews: [no, yes])
+                buttons.spacing = 8
+                buttons.distribution = .fillEqually
+                guard shared else {
+                    prompt.bodyStack.addArrangedSubview(buttons)
+                    continue
+                }
+                // One row per person sharing the phone, their name first.
+                let who = UILabel()
+                who.text = name(ballot.seat, in: view)
+                who.font = TDPTheme.font(14, .semibold)
+                who.textColor = TDPTheme.ink
+                who.setContentHuggingPriority(.defaultLow, for: .horizontal)
+                buttons.widthAnchor.constraint(equalToConstant: 200 * TDPTheme.scale).isActive = true
+                let row = UIStackView(arrangedSubviews: [who, buttons])
+                row.spacing = 10
+                row.alignment = .center
+                prompt.bodyStack.addArrangedSubview(row)
+            }
+        }
+        if mine.isEmpty || vote.declined {
+            prompt.primaryRow.addArrangedSubview(done)
+        }
+        prompt.secondaryRow.addArrangedSubview(all)
+    }
+
+    /// "Play 3 more?" · who has said what · how many it takes.
+    private func voteSummary(_ view: TDPClientView, vote: TDPExtendVoteView) -> UIView {
+        let question = UILabel()
+        let yeses = vote.ballots.filter { $0.yes == true }.count
+        if vote.declined {
+            question.text = "Not playing on"
+        } else {
+            question.text = "Play 3 more?  \(yeses) of \(vote.needed) yes"
+        }
+        question.font = TDPTheme.font(15, .semibold)
+        question.textColor = TDPTheme.ink
+
+        let rule = UILabel()
+        rule.text = vote.ballots.count == 2 ? "Both players must agree" : "\(vote.needed) of \(vote.ballots.count) must agree"
+        rule.font = TDPTheme.font(12)
+        rule.textColor = TDPTheme.muted
+
+        let ballots = UIStackView()
+        ballots.spacing = 6
+        for ballot in vote.ballots {
+            let chip = TDPChipLabel()
+            let mark = ballot.yes.map { $0 ? "\u{2713}" : "\u{2715}" } ?? "\u{2026}"
+            chip.text = "\(name(ballot.seat, in: view)) \(mark)"
+            chip.isAccent = ballot.yes == true
+            if ballot.yes == false { chip.textColor = TDPTheme.warn }
+            chip.accessibilityLabel = "\(name(ballot.seat, in: view)): "
+                + (ballot.yes.map { $0 ? "yes" : "no" } ?? "hasn't voted")
+            ballots.addArrangedSubview(chip)
+        }
+        let chips = UIStackView(arrangedSubviews: [UIView(), ballots, UIView()])
+        chips.distribution = .equalCentering
+
+        let stack = UIStackView(arrangedSubviews: [question, rule, chips])
+        stack.axis = .vertical
+        stack.alignment = .center
+        stack.spacing = 4
+        stack.setCustomSpacing(10, after: rule)
+        return stack
+    }
+
+    @objc private func didTapVote(_ sender: UIButton) {
+        let seat = sender.tag / 2
+        driver.send(TDPIntent(kind: .voteExtend, accept: sender.tag % 2 == 1), as: seat)
     }
 
     // MARK: Pass & play
@@ -811,8 +910,6 @@ final class TDPGameViewController: UIViewController {
     @objc private func didTapTrumpHighest() { driver.send(TDPIntent(kind: .trumpHighestOfThree)) }
     @objc private func didTapRandomPull() { driver.send(TDPIntent(kind: .khichaiDraw)) }
     @objc private func didTapNextRound() { driver.send(TDPIntent(kind: .beginNextRound)) }
-    @objc private func didTapEndSession() { driver.send(TDPIntent(kind: .endSession)) }
-    @objc private func didTapExtend() { driver.send(TDPIntent(kind: .extendSession)) }
 
     @objc private func didTapConfirmReturn() { commitReturn() }
 

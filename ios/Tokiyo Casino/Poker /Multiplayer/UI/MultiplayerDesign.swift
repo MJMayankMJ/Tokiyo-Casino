@@ -826,7 +826,8 @@ final class MPSecondaryButton: UIButton {
 // MARK: - Identity chip ("Playing as X | Change")
 
 final class MPIdentityChip: UIButton {
-    private let chip = MPChipView(size: 28, color: .clear)
+    /// The player's profile avatar — the same one Home and 5-3-2 show.
+    private let chip = ProfileAvatarView(diameter: 28)
     private let nameLabel = UILabel()
     private let separator = UIView()
     private let changeLabel = UILabel()
@@ -845,6 +846,8 @@ final class MPIdentityChip: UIButton {
         layer.shadowRadius = 2
 
         chip.translatesAutoresizingMaskIntoConstraints = false
+        chip.isUserInteractionEnabled = false
+        chip.followsProfile = true
         nameLabel.translatesAutoresizingMaskIntoConstraints = false
         separator.translatesAutoresizingMaskIntoConstraints = false
         changeLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -890,7 +893,6 @@ final class MPIdentityChip: UIButton {
         backgroundColor = MPTheme.glassWeak
         layer.borderColor = MPTheme.border.cgColor
         separator.backgroundColor = MPTheme.glassDivider
-        chip.setColor(MPTheme.amber)
     }
 
     private func rebuildText() {
@@ -907,7 +909,7 @@ final class MPIdentityChip: UIButton {
         ]))
         nameLabel.attributedText = attr
 
-        changeLabel.attributedText = NSAttributedString(string: "Change name", attributes: [
+        changeLabel.attributedText = NSAttributedString(string: "Edit profile", attributes: [
             .font: MPFont.ui(13.5, weight: .heavy),
             .foregroundColor: MPTheme.tint,
         ])

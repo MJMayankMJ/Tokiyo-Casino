@@ -1159,9 +1159,8 @@ final class TDPTutorialEntryTile: UIControl {
         super.init(frame: frame)
         translatesAutoresizingMaskIntoConstraints = false
         backgroundColor = TDPTheme.raised
-        layer.cornerRadius = 18 * TDPTheme.scale
+        layer.cornerRadius = 22 * TDPTheme.scale
         layer.cornerCurve = .continuous
-        layer.borderWidth = 1
         accessibilityTraits = .button
         accessibilityLabel = "How to play. Eight short scenes."
 

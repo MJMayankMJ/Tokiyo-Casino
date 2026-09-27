@@ -76,18 +76,28 @@ enum TDPViewBuilder {
             debts: state.debts,
             khichai: khichaiView(state: state, seat: seat, hand: hand, arrangeSecondsLeft: arrangeSecondsLeft),
             roundHistory: state.roundHistory,
-            canEndSession: state.canEndSession,
             isHost: isHost,
             message: state.message
         )
         view.settlement = settleView(state: state, seat: seat)
         view.concessions = state.concessions
+        view.extendVote = extendVoteView(state: state)
         // A debtor's face-down order is their own hand, so only they get it.
         if let step = state.khichaiCurrent, step.debtorSeat == seat,
            let order = state.arrangements[String(seat)] {
             view.myArrangement = order.compactMap { id in hand.first { $0.tdpID == id } }
         }
         return view
+    }
+
+    private static func extendVoteView(state: TDPGameState) -> TDPExtendVoteView? {
+        guard state.phase == .sessionEnd else { return nil }
+        let ballots = TDPEngine.extendVoters(state).map {
+            TDPExtendVoteView.Ballot(seat: $0, yes: state.extendVotes[String($0)])
+        }
+        return TDPExtendVoteView(ballots: ballots,
+                                 needed: TDPEngine.extendVotesNeeded(state),
+                                 declined: TDPEngine.isExtendDeclined(state))
     }
 
     private static func settleView(state: TDPGameState, seat: TDPSeat) -> TDPSettleView? {

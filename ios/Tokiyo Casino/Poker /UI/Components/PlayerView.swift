@@ -168,7 +168,8 @@ class PlayerView: UIView {
         avatar?.removeFromSuperview()
         let av: AvatarView
         avatarSize = (isHumanPlayer ? 36 : 44) * contentScale
-        av = AvatarView(name: player.name, hue: hueFor(player: player), size: avatarSize)
+        av = AvatarView(name: player.name, hue: hueFor(player: player), size: avatarSize,
+                        photo: isHumanPlayer ? PlayerProfile.photo : nil)
         avatar = av
         addSubview(av)
 

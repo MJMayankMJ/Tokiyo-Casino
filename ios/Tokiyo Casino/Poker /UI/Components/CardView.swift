@@ -23,6 +23,10 @@ class CardView: UIView {
     /// When set, the next setCard call will render with hero styling.
     var style: Style = .face { didSet { rebuild() } }
 
+    /// The deck the player picked for Poker in Profile. Classic is Poker's
+    /// original look; Minimal is 5-3-2's.
+    var design: CardDesign = PlayerProfile.cardDesign(for: .poker) { didSet { rebuild() } }
+
     var highlightState: HighlightState = .none {
         didSet {
             guard oldValue != highlightState else { return }
@@ -33,6 +37,8 @@ class CardView: UIView {
     // Layers / subviews
     private let cardBack = CALayer()
     private let cardBackPattern = CALayer()
+    /// The Minimal design's back; Classic keeps the checker layers above.
+    private let minimalBack = CardBackView(design: .minimal) { max(4, $0 * 0.18) }
     private let suitCenter = SuitView()
     private let suitCorner = SuitView()
     private let rankLabel = UILabel()
@@ -56,6 +62,8 @@ class CardView: UIView {
         cardBackPattern.backgroundColor = UIColor.clear.cgColor
         layer.addSublayer(cardBack)
         cardBack.addSublayer(cardBackPattern)
+        minimalBack.isHidden = true
+        addSubview(minimalBack)
 
         // Center suit / rank
         suitCenter.translatesAutoresizingMaskIntoConstraints = false
@@ -99,6 +107,7 @@ class CardView: UIView {
         cardBackPattern.frame = bounds.insetBy(dx: 2, dy: 2)
         cardBackPattern.cornerRadius = max(2, radius - 2)
         cardBackPattern.masksToBounds = true
+        minimalBack.frame = bounds
 
         // Refresh checker pattern image at current size
         if isFaceUp == false {
@@ -106,6 +115,10 @@ class CardView: UIView {
         }
 
         // Layout face contents
+        if design == .minimal {
+            layoutMinimalFace()
+            return
+        }
         switch style {
         case .face:
             // suit on top, rank below
@@ -150,6 +163,23 @@ class CardView: UIView {
                 height: rankFontSize + 2 * designScale
             )
         }
+    }
+
+    /// 5-3-2's face: rank and a small suit stacked in the corner, one big
+    /// suit bottom-right. Same at every size, so `style` doesn't change it.
+    private func layoutMinimalFace() {
+        let w = bounds.width
+        let h = bounds.height
+        let rankSize = w * 0.275
+        rankLabel.font = .systemFont(ofSize: rankSize, weight: .semibold)
+        let small = w * 0.215
+        let column = max(rankLabel.intrinsicContentSize.width, small)
+        let left = w * 0.105
+        rankLabel.frame = CGRect(x: left, y: w * 0.06, width: column, height: rankSize * 1.2)
+        suitCorner.frame = CGRect(x: left + (column - small) / 2, y: rankLabel.frame.maxY - w * 0.04,
+                                  width: small, height: small)
+        let big = w * 0.42
+        suitCenter.frame = CGRect(x: w - big - w * 0.1, y: h - big - w * 0.08, width: big, height: big)
     }
 
     // MARK: - Public API
@@ -204,8 +234,15 @@ class CardView: UIView {
         rankLabel.text = card.rank.shortString
         rankLabel.textColor = color
         rankLabel.isHidden = false
+        minimalBack.isHidden = true
 
-        if style == .hero {
+        if design == .minimal {
+            // The rank label is the corner index; the corner suit sits under it.
+            cornerRankLabel.isHidden = true
+            suitCorner.glyph = SuitView.glyph(for: card.suit)
+            suitCorner.color = color
+            suitCorner.isHidden = false
+        } else if style == .hero {
             cornerRankLabel.text = card.rank.shortString
             cornerRankLabel.textColor = color
             cornerRankLabel.isHidden = false
@@ -227,7 +264,9 @@ class CardView: UIView {
         backgroundColor = .clear
         layer.borderWidth = 0
 
-        cardBack.isHidden = false
+        cardBack.isHidden = design == .minimal
+        minimalBack.isHidden = design != .minimal
+        minimalBack.design = .minimal
         suitCenter.isHidden = true
         rankLabel.isHidden = true
         cornerRankLabel.isHidden = true

@@ -351,7 +351,9 @@ final class AvatarView: UIView {
     private let label = UILabel()
     private var hue: CGFloat = 210
 
-    init(name: String, hue: CGFloat, size: CGFloat) {
+    private var photoView: UIImageView?
+
+    init(name: String, hue: CGFloat, size: CGFloat, photo: UIImage? = nil) {
         super.init(frame: CGRect(x: 0, y: 0, width: size, height: size))
         self.hue = hue
         backgroundColor = .clear
@@ -376,6 +378,15 @@ final class AvatarView: UIView {
         layer.shadowOffset = CGSize(width: 0, height: 2)
         layer.shadowRadius = 6
 
+        // The player's own profile photo, when they've added one.
+        if let photo {
+            let imageView = UIImageView(image: photo)
+            imageView.contentMode = .scaleAspectFill
+            imageView.clipsToBounds = true
+            addSubview(imageView)
+            photoView = imageView
+        }
+
         applyColors()
     }
     required init?(coder: NSCoder) { fatalError() }
@@ -390,6 +401,8 @@ final class AvatarView: UIView {
         gradient.frame = bounds
         gradient.cornerRadius = bounds.width / 2
         layer.cornerRadius = bounds.width / 2
+        photoView?.frame = bounds
+        photoView?.layer.cornerRadius = bounds.width / 2
         // Inner white ring (border)
         layer.borderColor = UIColor.white.cgColor
         layer.borderWidth = 2

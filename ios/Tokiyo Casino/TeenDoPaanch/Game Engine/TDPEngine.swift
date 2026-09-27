@@ -35,8 +35,8 @@ enum TDPAction: Equatable {
     case playCard(seat: TDPSeat, cardID: String)
     case ackTrick
     case beginNextRound
-    case extendSession(seat: TDPSeat)
-    case endSession(seat: TDPSeat)
+    /// After the last round: yes or no to three more.
+    case voteExtend(seat: TDPSeat, yes: Bool)
 }
 
 // MARK: - Engine
@@ -117,8 +117,7 @@ final class TDPEngine {
         case .playCard(let seat, let cardID):           error = playCard(&draft, seat, cardID)
         case .ackTrick:                                 error = ackTrick(&draft)
         case .beginNextRound:                           error = beginNextRound(&draft)
-        case .extendSession(let seat):                  error = extendSession(&draft, seat)
-        case .endSession(let seat):                     error = endSession(&draft, seat)
+        case .voteExtend(let seat, let yes):            error = voteExtend(&draft, seat, yes)
         }
         if error == nil { state = draft }
         return error
@@ -707,27 +706,38 @@ final class TDPEngine {
         return nil
     }
 
-    private func extendSession(_ s: inout TDPGameState, _ seat: TDPSeat) -> TDPError? {
-        guard seat == s.hostSeat else { return TDPError("Only the host can add rounds.") }
-        guard s.phase == .roundEnd || s.phase == .sessionEnd else {
-            return TDPError("Add rounds between games.")
-        }
-        s.targetRounds += 3
-        s.phase = .roundEnd
-        s.message = "Playing through \(s.targetRounds) rounds."
-        return nil
+    // MARK: Playing on
+
+
+    static func extendVoters(_ s: TDPGameState) -> [TDPSeat] {
+        s.players.filter { !$0.isAI }.map(\.seat).sorted()
     }
 
-    private func endSession(_ s: inout TDPGameState, _ seat: TDPSeat) -> TDPError? {
-        guard seat == s.hostSeat else { return TDPError("Only the host can end the session.") }
-        guard s.phase == .roundEnd || s.phase == .sessionEnd else {
-            return TDPError("Finish the current round first.")
+    static func extendVotesNeeded(_ s: TDPGameState) -> Int {
+        extendVoters(s).count / 2 + 1
+    }
+
+    /// Enough people said no that the yes side can no longer win.
+    static func isExtendDeclined(_ s: TDPGameState) -> Bool {
+        let noes = s.extendVotes.values.filter { !$0 }.count
+        return noes > extendVoters(s).count - extendVotesNeeded(s)
+    }
+
+    private func voteExtend(_ s: inout TDPGameState, _ seat: TDPSeat, _ yes: Bool) -> TDPError? {
+        guard s.phase == .sessionEnd else { return TDPError("Vote once the last round is played.") }
+        guard let player = s.player(at: seat), !player.isAI else {
+            return TDPError("Only the people at the table vote.")
         }
-        guard s.canEndSession else {
-            return TDPError("A session must end on a multiple of three rounds.")
+        guard !Self.isExtendDeclined(s) else { return TDPError("The table has already decided to stop.") }
+        s.extendVotes[String(seat)] = yes
+
+        let yeses = s.extendVotes.values.filter { $0 }.count
+        if yeses >= Self.extendVotesNeeded(s) {
+            s.targetRounds += 3
+            s.phase = .roundEnd
+            return beginNextRound(&s)
         }
-        s.phase = .sessionEnd
-        s.message = "Session complete."
+        s.message = Self.isExtendDeclined(s) ? "Session complete." : "\(player.name) voted."
         return nil
     }
 }

@@ -120,6 +120,8 @@ struct TDPGameState: Codable {
     var scores: [String: Int]
     var roundHistory: [TDPRoundScore]
     var targetRounds: Int
+    /// Seat → yes/no on three more rounds, once the last one is played.
+    var extendVotes: [String: Bool] = [:]
     var minRounds: Int
 
     // Settlement
@@ -202,6 +204,7 @@ struct TDPGameState: Codable {
 
     /// Clears everything round-scoped, keeping seating and running scores.
     mutating func resetForNewRound() {
+        extendVotes = [:]
         deck = TDPDeck.build()
         trump = nil
         trumpMethod = nil

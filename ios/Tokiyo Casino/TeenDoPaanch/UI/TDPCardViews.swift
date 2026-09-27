@@ -58,11 +58,15 @@ final class TDPCardButton: UIButton {
     private(set) var card: Card?
     let isFaceDown: Bool
     private let elevation: Elevation
+    /// The player's pick for 5-3-2 in Profile, unless a preview asks for one.
+    let design: CardDesign
 
     private let rankLabel = UILabel()
+    /// Classic only: the big rank under the centre suit.
+    private let centerRank = UILabel()
     private var smallSuit: TDPSuitGlyph?
     private var bigSuit: TDPSuitGlyph?
-    private var backArt: TDPCardBackArt?
+    private var backArt: CardBackView?
     private let dimView = UIView()
     private let ringLayer = CALayer()
 
@@ -70,17 +74,18 @@ final class TDPCardButton: UIButton {
     var ringColor: UIColor? { didSet { applyTheme() } }
     private(set) var isPlayable = true
 
-    init(card: Card?, faceDown: Bool = false, elevation: Elevation = .hand) {
+    init(card: Card?, faceDown: Bool = false, elevation: Elevation = .hand, design: CardDesign? = nil) {
         self.card = card
         self.isFaceDown = faceDown || card == nil
         self.elevation = elevation
+        self.design = design ?? PlayerProfile.cardDesign(for: .teenDoPaanch)
         let size = elevation == .hand ? TDPTheme.handCard : TDPTheme.tableCard
         super.init(frame: CGRect(origin: .zero, size: size))
         layer.cornerCurve = .continuous
 
         if isFaceDown {
-            backgroundColor = TDPTheme.cardBack
-            let art = TDPCardBackArt()
+            backgroundColor = .clear          // the back draws its own ground
+            let art = CardBackView(design: self.design) { $0 * 0.145 }
             addSubview(art)
             backArt = art
             accessibilityLabel = "Face-down card"
@@ -97,6 +102,13 @@ final class TDPCardButton: UIButton {
             addSubview(big)
             smallSuit = small
             bigSuit = big
+            if self.design == .classic {
+                centerRank.text = card.rank.shortString
+                centerRank.textColor = ink
+                centerRank.textAlignment = .center
+                centerRank.isUserInteractionEnabled = false
+                addSubview(centerRank)
+            }
             accessibilityLabel = "\(card.rank.shortString) of \(TDPTheme.suitName(card.suit))"
         }
 
@@ -145,6 +157,10 @@ final class TDPCardButton: UIButton {
             backArt?.frame = bounds
             return
         }
+        if design == .classic {
+            layoutClassicFace()
+            return
+        }
 
         // Rank and small suit share a column, centred on each other.
         rankLabel.attributedText = NSAttributedString(
@@ -167,6 +183,31 @@ final class TDPCardButton: UIButton {
                                 width: bigSide, height: bigSide)
     }
 
+    /// Poker's face: a small index in the corner, and a big suit over a big
+    /// rank in the middle — the same proportions as Poker's own cards.
+    private func layoutClassicFace() {
+        let w = bounds.width
+        let unit = w / 64
+        let indexFont = UIFont.systemFont(ofSize: 14 * unit, weight: .heavy)
+        rankLabel.attributedText = NSAttributedString(
+            string: rankLabel.text ?? "",
+            attributes: [.font: indexFont, .foregroundColor: rankLabel.textColor as Any])
+        rankLabel.sizeToFit()
+        let indexWidth = max(rankLabel.bounds.width, 10 * unit)
+        rankLabel.frame.origin = CGPoint(x: 7 * unit + (indexWidth - rankLabel.bounds.width) / 2, y: 5 * unit)
+        let smallSide = 10 * unit
+        smallSuit?.frame = CGRect(x: 7 * unit + (indexWidth - smallSide) / 2, y: rankLabel.frame.maxY + unit,
+                                  width: smallSide, height: smallSide)
+
+        let suitSide = (w * 0.30).rounded()
+        let rankSize = (w * 0.42).rounded()
+        let gap = 4 * unit
+        let top = (bounds.height - (suitSide + gap + rankSize)) / 2 + 4 * unit
+        bigSuit?.frame = CGRect(x: (w - suitSide) / 2, y: top, width: suitSide, height: suitSide)
+        centerRank.font = .systemFont(ofSize: rankSize, weight: .heavy)
+        centerRank.frame = CGRect(x: 0, y: top + suitSide + gap - unit, width: w, height: rankSize + 2 * unit)
+    }
+
     private func applyTheme() {
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOpacity = TDPTheme.shadowOpacity(for: traitCollection)
@@ -180,60 +221,6 @@ final class TDPCardButton: UIButton {
         }
         ringLayer.isHidden = ringColor == nil
         ringLayer.borderColor = ringColor?.resolvedColor(with: traitCollection).cgColor
-    }
-}
-
-// MARK: - Card back
-
-/// Flat, like the rest of the table: one colour, an inset hairline, and the
-/// Tokiyo sparkle in the middle. Colours come from `TDPTheme`, so the back
-/// follows light and dark with the chrome around it.
-final class TDPCardBackArt: UIView {
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        isOpaque = false
-        backgroundColor = .clear
-        contentMode = .redraw
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (art: TDPCardBackArt, _: UITraitCollection) in
-            art.setNeedsDisplay()
-        }
-    }
-
-    required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
-
-    override func draw(_ rect: CGRect) {
-        guard bounds.width > 0 else { return }
-        let traits = traitCollection
-        let w = bounds.width
-        let radius = w * 0.145
-
-        TDPTheme.cardBack.resolvedColor(with: traits).setFill()
-        UIBezierPath(roundedRect: bounds, cornerRadius: radius).fill()
-
-        let inset = w * 0.09
-        let frame = UIBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
-                                 cornerRadius: max(2, radius - inset * 0.7))
-        frame.lineWidth = max(1, w * 0.016)
-        TDPTheme.cardBackLine.resolvedColor(with: traits).setStroke()
-        frame.stroke()
-
-        TDPTheme.cardBackMark.resolvedColor(with: traits).setFill()
-        Self.sparkle(at: CGPoint(x: bounds.midX, y: bounds.midY), size: w * 0.14).fill()
-    }
-
-    /// The four-point sparkle from the Tokiyo logo, with softly pinched sides.
-    static func sparkle(at c: CGPoint, size s: CGFloat) -> UIBezierPath {
-        let k = s * 0.14
-        let path = UIBezierPath()
-        path.move(to: CGPoint(x: c.x, y: c.y - s))
-        path.addQuadCurve(to: CGPoint(x: c.x + s, y: c.y), controlPoint: CGPoint(x: c.x + k, y: c.y - k))
-        path.addQuadCurve(to: CGPoint(x: c.x, y: c.y + s), controlPoint: CGPoint(x: c.x + k, y: c.y + k))
-        path.addQuadCurve(to: CGPoint(x: c.x - s, y: c.y), controlPoint: CGPoint(x: c.x - k, y: c.y + k))
-        path.addQuadCurve(to: CGPoint(x: c.x, y: c.y - s), controlPoint: CGPoint(x: c.x - k, y: c.y - k))
-        path.close()
-        return path
     }
 }
 

@@ -56,6 +56,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         // imageView (SF Symbol placeholder) with the same MPChipView used in the
         // poker chips slider thumb so the chip indicator on Home matches that style.
         installMPChipInHeader()
+        installProfileButton()
 
         NotificationCenter.default.addObserver(
             self,
@@ -102,6 +103,44 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         chipView.widthAnchor.constraint(equalToConstant: chipSize).isActive = true
         chipView.heightAnchor.constraint(equalToConstant: chipSize).isActive = true
         stack.insertArrangedSubview(chipView, at: index)
+    }
+
+    /// Top-left, level with the chip count: the player's avatar, opening
+    /// Profile. Shared by every game.
+    private func installProfileButton() {
+        let avatar = ProfileAvatarView(diameter: 40)
+        avatar.followsProfile = true
+        avatar.accessibilityHint = "Opens your profile"
+        avatar.addTarget(self, action: #selector(didTapProfile), for: .touchUpInside)
+        view.addSubview(avatar)
+
+        // The chip count was pinned 36pt from the top edge, which puts it
+        // under the status bar on notched phones. Hang it (and so the
+        // avatar level with it) just below the safe area instead.
+        if let chips = labelTotalCoins.superview, let holder = chips.superview {
+            holder.constraints
+                .filter { ($0.firstItem === chips && $0.firstAttribute == .top)
+                    || ($0.secondItem === chips && $0.secondAttribute == .top) }
+                .forEach { $0.isActive = false }
+            chips.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6).isActive = true
+        }
+
+        NSLayoutConstraint.activate([
+            avatar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            avatar.centerYAnchor.constraint(equalTo: labelTotalCoins.centerYAnchor)
+        ])
+    }
+
+    @objc private func didTapProfile() {
+        present(ProfileViewController.sheet(), animated: true)
+    }
+
+    /// First launch: ask for a name before anything else.
+    private func showOnboardingIfNeeded() {
+        guard !PlayerProfile.hasOnboarded, presentedViewController == nil else { return }
+        let onboarding = OnboardingViewController()
+        onboarding.modalPresentationStyle = .fullScreen
+        present(onboarding, animated: false)
     }
 
     private weak var disclaimerPill: UIView?
@@ -225,6 +264,7 @@ class HomeViewController: UIViewController, UIAdaptivePresentationControllerDele
         // }
 
         startIdleAnimations()
+        showOnboardingIfNeeded()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
