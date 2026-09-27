@@ -59,6 +59,33 @@ extension GameManager {
     func processAITurn() {
         guard let current = currentPlayer, !current.isHuman else { return }
 
+        let (profile, gameState) = aiDecisionInputs(for: current)
+
+        // The decision includes a multi-thousand-iteration Monte Carlo rollout,
+        // which must NOT run on the main thread (it would freeze the UI). Run it
+        // on a background queue, then hop back to main to apply the action.
+        // Capture the acting seat id so a mid-think seat replacement cannot act
+        // for the wrong player (same guard pattern as processNextTurn).
+        let scheduledPlayerId = current.id
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let decision = AIEngine.makeDecision(
+                for: current,
+                gameState: gameState,
+                profile: profile
+            )
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.currentPlayer?.id == scheduledPlayerId else { return }
+                self.processPlayerAction(decision, for: current)
+            }
+        }
+    }
+
+    /// Everything `AIEngine` needs for `current`'s decision, read on the main
+    /// thread: the seat's profile (tilted by the exploit layer on Hard/Expert)
+    /// and a snapshot of the table, including the tracker's read on whoever
+    /// made the bet being faced.
+    func aiDecisionInputs(for current: Player) -> (profile: AIProfile, gameState: GameState) {
         // Phase 2: behaviour is driven by the resolved AIProfile (difficulty +
         // style), not the personality directly. Personality remains only the
         // visible label/avatar.
@@ -94,29 +121,35 @@ extension GameManager {
             communityCards: communityCards,
             activePlayers: activePlayers,
             dealerIndex: dealerIndex,
-            wasRaisedPreflop: handWasRaisedPreflop
+            wasRaisedPreflop: handWasRaisedPreflop,
+            position: preflopPosition(of: current),
+            bettor: bettorRead(facing: current)
         )
-
-        // The decision includes a multi-thousand-iteration Monte Carlo rollout,
-        // which must NOT run on the main thread (it would freeze the UI). Run it
-        // on a background queue, then hop back to main to apply the action.
-        // Capture the acting seat id so a mid-think seat replacement cannot act
-        // for the wrong player (same guard pattern as processNextTurn).
-        let scheduledPlayerId = current.id
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let decision = AIEngine.makeDecision(
-                for: current,
-                gameState: gameState,
-                profile: profile
-            )
-            DispatchQueue.main.async {
-                guard let self else { return }
-                guard self.currentPlayer?.id == scheduledPlayerId else { return }
-                self.processPlayerAction(decision, for: current)
-            }
-        }
+        return (profile, gameState)
     }
-    
+
+    /// Where `player` sits among the seats dealt into this hand, counted
+    /// clockwise from the button (which acts last after the flop).
+    func preflopPosition(of player: Player) -> Position {
+        let seatCount = players.count
+        guard let seat = players.firstIndex(where: { $0.id == player.id }) else { return .middle }
+        let stepsAfterButton = { (index: Int) in (index - self.dealerIndex - 1 + seatCount) % seatCount }
+        let dealtIn = players.indices.filter { players[$0].holeCards.count == 2 }
+        let order = dealtIn.sorted { stepsAfterButton($0) < stepsAfterButton($1) }
+        guard let place = order.firstIndex(of: seat) else { return .middle }
+        return AIEngine.position(placeAfterButton: place, seatsDealtIn: order.count)
+    }
+
+    /// What this session has shown about the seat whose bet `player` faces,
+    /// or nil when nothing has been bet into them this street.
+    func bettorRead(facing player: Player) -> BettorRead? {
+        guard currentBet > player.currentBet,
+              let seat = handHistory.currentAggressorSeat,
+              seat != player.id else { return nil }
+        let model = handHistory.model(for: seat)
+        return BettorRead(seat: seat, shoveRange: model.shoveRange, raiseRange: model.pfr)
+    }
+
     func moveToNextPlayer() {
         moveToNextPlayer(after: currentPlayer)
     }

@@ -25,6 +25,7 @@ struct OpponentStats: Equatable {
     var handsDealt = 0
     var vpipCount = 0          // hands where money went in voluntarily preflop
     var pfrCount = 0           // hands raised preflop
+    var preflopShoves = 0      // hands with a preflop all-in or stack-committing raise
 
     // Postflop aggression factor: (bets + raises) / calls.
     var postflopBets = 0       // postflop bets + raises
@@ -83,6 +84,23 @@ struct OpponentModel {
 
     private static let afCap = 10.0
 
+    /// Share of starting hands this seat shoves with preflop (all-ins and
+    /// stack-committing raises per hand dealt), read as the width of its
+    /// shoving range: 1.0 = any two cards. AIEngine calls a shove against
+    /// this range.
+    ///
+    /// Blended by pseudo-count rather than the linear ramp above: the prior
+    /// counts as `shovePriorHands` hands already seen. A shove is loud
+    /// evidence, so a seat shoving every hand reads as wide within a handful of
+    /// hands (~0.6 by hand 10) instead of the ~30 the ramp needs — reading it
+    /// slowly is how the table ended up folding to every shove.
+    var shoveRange: Double {
+        let seen = Double(stats.handsDealt)
+        return (Double(stats.preflopShoves) + Self.shovePriorHands * priorShove) / (seen + Self.shovePriorHands)
+    }
+
+    static let shovePriorHands = 8.0
+
     // MARK: Priors derived from the notional baseline profile
 
     private var priorVPIP: Double { clamp01(0.15 + prior.looseness * 0.45) }
@@ -91,6 +109,8 @@ struct OpponentModel {
     private var priorFoldToCbet: Double { clamp01(0.30 + (1.0 - prior.callStation) * 0.40) }
     private var priorFoldTo3bet: Double { clamp01(0.40 + (1.0 - prior.looseness) * 0.40) }
     private var priorWTSD: Double { clamp01(0.18 + prior.callStation * 0.32) }
+    /// Loose and aggressive together → wide shoving range (baseline: 0.2).
+    private var priorShove: Double { clamp01(prior.looseness * prior.aggression) }
 
     // MARK: Blend helpers
 

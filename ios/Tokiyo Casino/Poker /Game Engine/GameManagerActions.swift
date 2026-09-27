@@ -170,9 +170,12 @@ extension GameManager {
         // `raisedBet` distinguishes a bet/raise from a call/check/fold — including
         // an all-in that raises vs. an all-in that only calls.
         let raisedBet = currentBet > preCurrentBet
+        // A raise that leaves the player all-in, or puts a third of their stack
+        // in, is a shove — it feeds the table's read on how wide this seat shoves.
+        let isShove = raisedBet && player.hasShoved
         handHistory.recordAction(
             seat: player.id, action: executedAction,
-            callAmount: preCallAmount, raisedBet: raisedBet
+            callAmount: preCallAmount, raisedBet: raisedBet, isShove: isShove
         )
 
         delegate?.playerDidAct(player, action: executedAction)

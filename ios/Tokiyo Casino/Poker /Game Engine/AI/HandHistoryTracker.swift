@@ -99,6 +99,7 @@ final class HandHistoryTracker {
     private var pfrCounted: Set<Int> = []
     private var faced3betCounted: Set<Int> = []
     private var facedCbetCounted: Set<Int> = []
+    private var shoveCounted: Set<Int> = []
 
     // MARK: Lifecycle
 
@@ -118,6 +119,7 @@ final class HandHistoryTracker {
         pfrCounted = []
         faced3betCounted = []
         facedCbetCounted = []
+        shoveCounted = []
 
         for seat in seats {
             statsBySeat[seat, default: .init()].handsDealt += 1
@@ -141,13 +143,17 @@ final class HandHistoryTracker {
     }
 
     /// Record a resolved action. `callAmount` is the pre-action amount-to-call;
-    /// `raisedBet` is true iff the action increased the table's current bet.
-    func recordAction(seat: Int, action: PlayerAction, callAmount: Int, raisedBet: Bool) {
+    /// `raisedBet` is true iff the action increased the table's current bet;
+    /// `isShove` marks a bet/raise that committed a third or more of the
+    /// player's stack (an `.allIn` that raised always counts).
+    func recordAction(seat: Int, action: PlayerAction, callAmount: Int, raisedBet: Bool, isShove: Bool = false) {
         let cls = classify(action, raisedBet: raisedBet)
         let facingBet = callAmount > 0
+        var shoved = isShove
+        if case .allIn = action { shoved = true }
 
         if currentStreet == .preflop {
-            recordPreflop(seat: seat, cls: cls, facingBet: facingBet)
+            recordPreflop(seat: seat, cls: cls, facingBet: facingBet, shoved: shoved)
         } else {
             recordPostflop(seat: seat, cls: cls, facingBet: facingBet)
         }
@@ -194,7 +200,7 @@ final class HandHistoryTracker {
 
     // MARK: Derivation helpers
 
-    private func recordPreflop(seat: Int, cls: ActionClass, facingBet: Bool) {
+    private func recordPreflop(seat: Int, cls: ActionClass, facingBet: Bool, shoved: Bool) {
         // Fold to 3-bet: the seat is responding when ≥2 preflop raises already
         // happened (open + reraise). Count the opportunity once per hand.
         if preflopRaiseCount >= 2 && facingBet && !faced3betCounted.contains(seat) {
@@ -207,6 +213,7 @@ final class HandHistoryTracker {
         case .aggressive:
             countOnce(seat, in: &pfrCounted) { $0.pfrCount += 1 }
             countOnce(seat, in: &vpipCounted) { $0.vpipCount += 1 }
+            if shoved { countOnce(seat, in: &shoveCounted) { $0.preflopShoves += 1 } }
         case .call where facingBet:
             countOnce(seat, in: &vpipCounted) { $0.vpipCount += 1 }
         default:

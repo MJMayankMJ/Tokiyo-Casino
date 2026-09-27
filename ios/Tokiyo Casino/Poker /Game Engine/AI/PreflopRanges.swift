@@ -66,14 +66,32 @@ enum PreflopRanges {
         return min(score, 0.95)
     }
 
+    /// Hands that never fold preflop: TT+, AK and AQs. `handScore` on its own
+    /// rates AKo below pocket threes, which had it folding to a single raise.
+    static func isPremium(_ c1: Card, _ c2: Card) -> Bool {
+        let hi = max(c1.rank.rawValue, c2.rank.rawValue)
+        let lo = min(c1.rank.rawValue, c2.rank.rawValue)
+        if hi == lo { return hi >= Rank.ten.rawValue }
+        guard hi == Rank.ace.rawValue else { return false }
+        return lo == Rank.king.rawValue || (lo == Rank.queen.rawValue && c1.suit == c2.suit)
+    }
+
+    /// Share of hands a typical seat raises preflop — the tracker's prior PFR.
+    /// The facing-raise lines below are tuned against a raiser like this.
+    static let typicalRaiseRange = 0.2
+
     /// Recommended action distribution for an opening / facing-raise decision.
     /// `profile.looseness` widens (lowers thresholds) or tightens the range;
     /// `profile.aggression` shifts marginal hands from call toward raise.
+    /// `raiserRange` is how wide the raiser has been raising (their PFR);
+    /// against someone raising far more than `typicalRaiseRange` we defend
+    /// closer to our normal opening range.
     static func recommendedAction(
         hand: (Card, Card),
         position: Position,
         facingRaise: Bool,
-        profile: AIProfile
+        profile: AIProfile,
+        raiserRange: Double = typicalRaiseRange
     ) -> ActionRange {
 
         let score = handScore(hand.0, hand.1)
@@ -86,10 +104,12 @@ enum PreflopRanges {
         case .late:   raiseLine = 0.46; callLine = 0.38
         }
 
-        // Facing a raise tightens both lines (need a better hand to continue).
+        // Facing a raise tightens both lines (need a better hand to continue)
+        // — less so against a seat that raises much wider than most.
         if facingRaise {
-            raiseLine += 0.15
-            callLine  += 0.10
+            let wide = min(1.0, max(0.0, (raiserRange - typicalRaiseRange) / 0.5))
+            raiseLine += 0.15 * (1.0 - 0.5 * wide)
+            callLine  += 0.10 * (1.0 - wide)
         }
 
         // Looseness lowers thresholds (loose players play more hands).
@@ -97,8 +117,8 @@ enum PreflopRanges {
         raiseLine -= loosen
         callLine  -= loosen
 
-        if score >= raiseLine {
-            return ActionRange(raise: 0.82, call: 0.13, fold: 0.05)
+        if isPremium(hand.0, hand.1) || score >= raiseLine {
+            return ActionRange(raise: 0.85, call: 0.15, fold: 0.0)
         } else if score >= callLine {
             // Marginal: aggressive profiles convert more of these into raises.
             let raise = 0.15 + profile.aggression * 0.25
