@@ -333,7 +333,7 @@ final class TDPArrangeView: UIView, UICollectionViewDataSource, UICollectionView
         subtitleLabel.textColor = TDPTheme.muted
         subtitleLabel.textAlignment = .center
         subtitleLabel.numberOfLines = 0
-        hintLabel.text = "Hold and drag to reorder, or shuffle. Locks at 0."
+        hintLabel.text = "Hold and drag to move a card"
         hintLabel.font = TDPTheme.font(12)
         hintLabel.textColor = TDPTheme.muted
         hintLabel.textAlignment = .center
@@ -395,7 +395,7 @@ final class TDPArrangeView: UIView, UICollectionViewDataSource, UICollectionView
     // MARK: Updates
 
     func configure(cards incoming: [Card], puller: String, count: Int, seconds: Int?) {
-        subtitleLabel.text = "\(puller) will pick \(count) of them blind — in this order."
+        subtitleLabel.text = "\(puller) picks \(count), blind"
         if let seconds { countdown.set(seconds: seconds, of: 10) }
 
         let incomingIDs = incoming.map(\.tdpID)
@@ -496,7 +496,7 @@ private final class TDPArrangeCell: UICollectionViewCell {
 
 // MARK: - Banner
 
-/// "Meera gave up 2 tricks — you need 3, she needs 5." Shown over the circle
+/// "Meera gave up 2 tricks · You need 5 · Meera needs 1". Shown over the circle
 /// at the start of play when targets changed while settling up.
 final class TDPBannerView: UIView {
 
@@ -538,9 +538,10 @@ final class TDPBannerView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    func configure(title: String, subtitle: String) {
+    func configure(title: String, subtitle: String?) {
         titleLabel.text = title
         subtitleLabel.text = subtitle
+        subtitleLabel.isHidden = subtitle?.isEmpty ?? true
     }
 
     private func applyTheme() {

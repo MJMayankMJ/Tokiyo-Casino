@@ -347,6 +347,8 @@ final class TDPHeaderView: UIView {
     private let scoreLabel = UILabel()
     let trumpPill = TDPTrumpPill()
     let menuButton = TDPMenuButton()
+    /// The round and score block opens the score sheet.
+    var onScoresTap: (() -> Void)?
 
     init() {
         super.init(frame: .zero)
@@ -358,6 +360,11 @@ final class TDPHeaderView: UIView {
         left.axis = .vertical
         left.spacing = 3
         left.translatesAutoresizingMaskIntoConstraints = false
+        left.isAccessibilityElement = true
+        left.accessibilityTraits = .button
+        left.accessibilityHint = "Shows the scores"
+        left.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(didTapScores)))
+        scoreBlock = left
         addSubview(left)
         addSubview(trumpPill)
         addSubview(menuButton)
@@ -377,8 +384,13 @@ final class TDPHeaderView: UIView {
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    private weak var scoreBlock: UIView?
+
+    @objc private func didTapScores() { onScoresTap?() }
+
     /// `points` is the classic score: one per trick taken this session.
     func configure(round: Int, points: Int, trump: Suit?, trumpDetail: String?) {
+        scoreBlock?.accessibilityLabel = "Round \(round), score \(points)"
         let size = 11 * TDPTheme.scale
         roundLabel.attributedText = NSAttributedString(
             string: "ROUND \(round)",
@@ -798,52 +810,6 @@ final class TDPPromptCard: UIView {
         layer.shadowOpacity = traitCollection.userInterfaceStyle == .dark ? 0.45 : 0.14
         layer.shadowOffset = CGSize(width: 0, height: 10)
         layer.shadowRadius = 22
-    }
-
-    /// One line of the round summary: who, tricks against quota, the swing
-    /// that decides next deal's khichai, and total points.
-    static func scoreRow(name: String, tint: TDPTheme.Tint, tricks: Int, quota: Int,
-                         delta: Int, total: Int) -> UIView {
-        let dot = UIView()
-        dot.backgroundColor = tint.ink
-        dot.layer.cornerRadius = 4
-        dot.translatesAutoresizingMaskIntoConstraints = false
-
-        let nameLabel = UILabel()
-        nameLabel.text = name
-        nameLabel.font = TDPTheme.font(14, .medium)
-        nameLabel.textColor = TDPTheme.ink
-
-        let tally = UILabel()
-        tally.text = "\(tricks) / \(quota)"
-        tally.font = TDPTheme.mono(13)
-        tally.textColor = TDPTheme.inkSoft
-
-        let swing = UILabel()
-        swing.text = TDPFormat.signed(delta)
-        swing.font = TDPTheme.mono(13, .semibold)
-        swing.textColor = delta >= 0 ? TDPTheme.accent : TDPTheme.warn
-        swing.textAlignment = .right
-
-        let totalLabel = UILabel()
-        totalLabel.text = "\(total) pts"
-        totalLabel.font = TDPTheme.mono(12)
-        totalLabel.textColor = TDPTheme.muted
-        totalLabel.textAlignment = .right
-
-        let row = UIStackView(arrangedSubviews: [dot, nameLabel, tally, swing, totalLabel])
-        row.axis = .horizontal
-        row.spacing = 10
-        row.alignment = .center
-        nameLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        [tally, swing, totalLabel].forEach { $0.setContentHuggingPriority(.required, for: .horizontal) }
-        NSLayoutConstraint.activate([
-            dot.widthAnchor.constraint(equalToConstant: 8),
-            dot.heightAnchor.constraint(equalToConstant: 8),
-            swing.widthAnchor.constraint(greaterThanOrEqualToConstant: 30 * TDPTheme.scale),
-            totalLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 34 * TDPTheme.scale)
-        ])
-        return row
     }
 }
 

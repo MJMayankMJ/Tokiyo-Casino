@@ -79,7 +79,7 @@ final class TDPCardButton: UIButton {
         layer.cornerCurve = .continuous
 
         if isFaceDown {
-            backgroundColor = TDPCardBackArt.brownDeep
+            backgroundColor = TDPTheme.cardBack
             let art = TDPCardBackArt()
             addSubview(art)
             backArt = art
@@ -185,17 +185,10 @@ final class TDPCardButton: UIButton {
 
 // MARK: - Card back
 
-/// The Tokiyo Cards back: chocolate brown from the logo's outline, a faint
-/// lattice of suits like the app icon's ground, a thin orange frame, the
-/// logo on a cream medallion, and two sparkles. Drawn, so it stays crisp
-/// at every card size; the same in light and dark, like a real deck.
+/// Flat, like the rest of the table: one colour, an inset hairline, and the
+/// Tokiyo sparkle in the middle. Colours come from `TDPTheme`, so the back
+/// follows light and dark with the chrome around it.
 final class TDPCardBackArt: UIView {
-
-    static let brownDeep = UIColor(red: 0x2E / 255, green: 0x1B / 255, blue: 0x12 / 255, alpha: 1)
-    private static let brownLift = UIColor(red: 0x5A / 255, green: 0x36 / 255, blue: 0x22 / 255, alpha: 1)
-    private static let orange = UIColor(red: 0xF4 / 255, green: 0xA2 / 255, blue: 0x23 / 255, alpha: 1)
-    private static let cream = UIColor(red: 0xF8 / 255, green: 0xEB / 255, blue: 0xCF / 255, alpha: 1)
-    private static let logo = UIImage(named: "TokiyoCards")
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -203,90 +196,42 @@ final class TDPCardBackArt: UIView {
         isOpaque = false
         backgroundColor = .clear
         contentMode = .redraw
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (art: TDPCardBackArt, _: UITraitCollection) in
+            art.setNeedsDisplay()
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func draw(_ rect: CGRect) {
-        guard let ctx = UIGraphicsGetCurrentContext(), bounds.width > 0 else { return }
+        guard bounds.width > 0 else { return }
+        let traits = traitCollection
         let w = bounds.width
-        let h = bounds.height
         let radius = w * 0.145
 
-        ctx.saveGState()
-        UIBezierPath(roundedRect: bounds, cornerRadius: radius).addClip()
+        TDPTheme.cardBack.resolvedColor(with: traits).setFill()
+        UIBezierPath(roundedRect: bounds, cornerRadius: radius).fill()
 
-        // Ground: a soft diagonal lift from the top-left.
-        let colors = [Self.brownLift.cgColor, Self.brownDeep.cgColor] as CFArray
-        if let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors, locations: [0, 1]) {
-            ctx.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: w, y: h), options: [])
-        }
-
-        // Faint suit lattice, offset every other row.
-        let glyphs = ["\u{2660}\u{FE0E}", "\u{2665}\u{FE0E}", "\u{2666}\u{FE0E}", "\u{2663}\u{FE0E}"]
-        let attrs: [NSAttributedString.Key: Any] = [
-            .font: UIFont.systemFont(ofSize: w * 0.15, weight: .bold),
-            .foregroundColor: Self.cream.withAlphaComponent(0.1)
-        ]
-        let step = w * 0.25
-        var row = 0
-        var y = -step * 0.3
-        while y < h {
-            var x = (row % 2 == 0 ? 0 : step / 2) - step * 0.3
-            var column = 0
-            while x < w {
-                (glyphs[(row + column) % 4] as NSString).draw(at: CGPoint(x: x, y: y), withAttributes: attrs)
-                x += step
-                column += 1
-            }
-            y += step * 0.9
-            row += 1
-        }
-
-        // Thin orange frame.
-        let inset = w * 0.075
-        let frame = UIBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset), cornerRadius: radius * 0.6)
-        frame.lineWidth = max(1, w * 0.02)
-        Self.orange.withAlphaComponent(0.85).setStroke()
+        let inset = w * 0.09
+        let frame = UIBezierPath(roundedRect: bounds.insetBy(dx: inset, dy: inset),
+                                 cornerRadius: max(2, radius - inset * 0.7))
+        frame.lineWidth = max(1, w * 0.016)
+        TDPTheme.cardBackLine.resolvedColor(with: traits).setStroke()
         frame.stroke()
 
-        // The logo on a cream medallion, as on the app icon.
-        if let logo = Self.logo {
-            let logoWidth = w * 0.72
-            let logoHeight = logoWidth * logo.size.height / max(logo.size.width, 1)
-            let medallion = CGRect(x: (w - logoWidth) / 2 - w * 0.05,
-                                   y: (h - logoHeight) / 2 - w * 0.05,
-                                   width: logoWidth + w * 0.1,
-                                   height: logoHeight + w * 0.1)
-            Self.cream.setFill()
-            UIBezierPath(roundedRect: medallion, cornerRadius: medallion.height * 0.32).fill()
-            logo.draw(in: CGRect(x: (w - logoWidth) / 2, y: (h - logoHeight) / 2,
-                                 width: logoWidth, height: logoHeight))
-        }
-
-        // The logo's sparkle diamonds, in two corners.
-        Self.orange.setFill()
-        sparkle(at: CGPoint(x: w * 0.25, y: h * 0.2), size: w * 0.07).fill()
-        sparkle(at: CGPoint(x: w * 0.75, y: h * 0.8), size: w * 0.07).fill()
-        Self.cream.withAlphaComponent(0.7).setFill()
-        sparkle(at: CGPoint(x: w * 0.74, y: h * 0.19), size: w * 0.04).fill()
-        sparkle(at: CGPoint(x: w * 0.26, y: h * 0.81), size: w * 0.04).fill()
-
-        ctx.restoreGState()
+        TDPTheme.cardBackMark.resolvedColor(with: traits).setFill()
+        Self.sparkle(at: CGPoint(x: bounds.midX, y: bounds.midY), size: w * 0.14).fill()
     }
 
-    /// Four-point star.
-    private func sparkle(at c: CGPoint, size s: CGFloat) -> UIBezierPath {
+    /// The four-point sparkle from the Tokiyo logo, with softly pinched sides.
+    static func sparkle(at c: CGPoint, size s: CGFloat) -> UIBezierPath {
+        let k = s * 0.14
         let path = UIBezierPath()
-        let pinch = s * 0.28
         path.move(to: CGPoint(x: c.x, y: c.y - s))
-        path.addLine(to: CGPoint(x: c.x + pinch, y: c.y - pinch))
-        path.addLine(to: CGPoint(x: c.x + s, y: c.y))
-        path.addLine(to: CGPoint(x: c.x + pinch, y: c.y + pinch))
-        path.addLine(to: CGPoint(x: c.x, y: c.y + s))
-        path.addLine(to: CGPoint(x: c.x - pinch, y: c.y + pinch))
-        path.addLine(to: CGPoint(x: c.x - s, y: c.y))
-        path.addLine(to: CGPoint(x: c.x - pinch, y: c.y - pinch))
+        path.addQuadCurve(to: CGPoint(x: c.x + s, y: c.y), controlPoint: CGPoint(x: c.x + k, y: c.y - k))
+        path.addQuadCurve(to: CGPoint(x: c.x, y: c.y + s), controlPoint: CGPoint(x: c.x + k, y: c.y + k))
+        path.addQuadCurve(to: CGPoint(x: c.x - s, y: c.y), controlPoint: CGPoint(x: c.x - k, y: c.y + k))
+        path.addQuadCurve(to: CGPoint(x: c.x, y: c.y - s), controlPoint: CGPoint(x: c.x - k, y: c.y - k))
         path.close()
         return path
     }

@@ -55,6 +55,12 @@ enum TDPTheme {
     /// better than black.
     static let cardDim = UIColor.dyn(lightRGBA: (241, 232, 210, 0.66),
                                      darkRGBA: (8, 9, 10, 0.60))
+    /// Card back: one flat colour, an inset hairline and the Tokiyo
+    /// sparkle — forest on parchment, deep green on graphite.
+    static let cardBack     = UIColor.dyn(light: 0x4B7B53, dark: 0x1D3A29)
+    static let cardBackLine = UIColor.dyn(lightRGBA: (247, 239, 217, 0.40),
+                                          darkRGBA: (121, 221, 159, 0.26))
+    static let cardBackMark = UIColor.dyn(light: 0xF7EFD9, dark: 0x79DD9F)
 
     static func shadowOpacity(for traits: UITraitCollection) -> Float {
         traits.userInterfaceStyle == .dark ? 0.35 : 0.16

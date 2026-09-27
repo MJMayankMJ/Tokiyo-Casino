@@ -46,47 +46,61 @@ final class TDPEntryViewController: UIViewController {
         nameField.returnKeyType = .done
         nameField.addTarget(self, action: #selector(dismissKeyboard), for: .editingDidEndOnExit)
 
-        let practice = TDPDesign.button("Practice  ·  you vs 2 AI")
+        let practice = TDPDesign.button("Play vs bots")
         practice.addTarget(self, action: #selector(didTapPractice), for: .touchUpInside)
 
-        let pass = TDPDesign.button("Pass & play  ·  share this device", filled: false)
+        let pass = TDPDesign.button("Pass & play", filled: false)
         pass.addTarget(self, action: #selector(didTapPassAndPlay), for: .touchUpInside)
 
-        let host = TDPDesign.button("Host a table  ·  nearby friends", filled: false)
+        let host = TDPDesign.button("Host a table", filled: false)
         host.addTarget(self, action: #selector(didTapHost), for: .touchUpInside)
 
         let join = TDPDesign.button("Join a table", filled: false)
         join.addTarget(self, action: #selector(didTapJoin), for: .touchUpInside)
 
-        let rules = TDPDesign.button("How to play", filled: false)
+        let rules = TDPTutorialEntryTile()
         rules.addTarget(self, action: #selector(didTapRules), for: .touchUpInside)
 
-        let note = TDPDesign.label(
-            "Friends play is peer-to-peer over local Wi-Fi or Bluetooth.\nNo internet, no account, no server.",
-            size: 12, weight: .regular, color: TDPDesign.dim
-        )
-        note.numberOfLines = 0
-        note.textAlignment = .center
-
-        var items: [UIView] = [heading, subtitle, nameField, practice, pass, host, join, rules]
+        var items: [UIView] = [heading, subtitle, nameField, practice, pass, host, join]
         #if DEBUG
         let debug = TDPDesign.button("Debug · khichai", filled: false)
         debug.addTarget(self, action: #selector(didTapDebugKhichai), for: .touchUpInside)
         items.append(debug)
         #endif
-        items.append(note)
+        items.append(rules)
         let stack = UIStackView(arrangedSubviews: items)
         stack.axis = .vertical
         stack.spacing = 12
         stack.setCustomSpacing(4, after: heading)
         stack.setCustomSpacing(24, after: subtitle)
         stack.setCustomSpacing(24, after: nameField)
-        stack.setCustomSpacing(24, after: items[items.count - 2])
+        stack.setCustomSpacing(28, after: items[items.count - 2])
         stack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(stack)
 
+        // Centred when it fits; scrolls on a small phone instead of running
+        // up under the navigation bar.
+        let scroll = UIScrollView()
+        scroll.contentInsetAdjustmentBehavior = .never
+        scroll.keyboardDismissMode = .interactive
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(stack)
+        view.addSubview(scroll)
+
+        let content = scroll.contentLayoutGuide
+        let frame = scroll.frameLayoutGuide
+        let snug = content.heightAnchor.constraint(equalTo: frame.heightAnchor)
+        snug.priority = .defaultLow
         NSLayoutConstraint.activate([
-            stack.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            content.widthAnchor.constraint(equalTo: frame.widthAnchor),
+            content.heightAnchor.constraint(greaterThanOrEqualTo: frame.heightAnchor),
+            snug,
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 16),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
             stack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 28),
             stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -28),
             nameField.heightAnchor.constraint(equalToConstant: 44)
@@ -103,9 +117,7 @@ final class TDPEntryViewController: UIViewController {
     }
 
     @objc private func didTapPassAndPlay() {
-        let sheet = UIAlertController(title: "Pass & play",
-                                      message: "How many people are sharing this device?",
-                                      preferredStyle: .actionSheet)
+        let sheet = UIAlertController(title: "Players on this phone", message: nil, preferredStyle: .actionSheet)
         for count in 2...3 {
             sheet.addAction(UIAlertAction(title: "\(count) players", style: .default) { [weak self] _ in
                 guard let self else { return }
@@ -131,7 +143,7 @@ final class TDPEntryViewController: UIViewController {
     @objc private func didTapDebugKhichai() {
         let sheet = UIAlertController(
             title: "Debug · khichai",
-            message: "Starts at settle-up with the cards dealt. You and Player 2 share this phone; Meera is a bot.",
+            message: "You and Player 2 share this phone; Meera is a bot.",
             preferredStyle: .actionSheet)
         for scenario in TDPDebugScenario.allCases {
             sheet.addAction(UIAlertAction(title: scenario.title, style: .default) { [weak self] _ in
@@ -152,7 +164,7 @@ final class TDPEntryViewController: UIViewController {
     #endif
 
     @objc private func didTapRules() {
-        push(TDPRulesViewController())
+        push(TDPTutorialViewController())
     }
 
     private func push(_ controller: UIViewController) {
@@ -162,89 +174,5 @@ final class TDPEntryViewController: UIViewController {
             controller.modalPresentationStyle = .fullScreen
             present(controller, animated: true)
         }
-    }
-}
-
-// MARK: - Rules
-
-final class TDPRulesViewController: UIViewController {
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        view.backgroundColor = TDPDesign.felt
-        title = "How to play"
-
-        let text = """
-        THE PACK
-        30 cards — 8 to Ace in every suit, plus only the 7♥ and 7♠.
-        Ace is high, 7 is low.
-
-        SEATS AND QUOTAS
-        Three players. Each seat owes a fixed number of tricks:
-          • Trump selector (dealer's left) — 5
-          • Third player (dealer's right) — 3
-          • Dealer — 2
-        That's 10 tricks between them, which is exactly how many there are.
-        So every trick you take is one somebody else doesn't.
-
-        THE DEAL
-        Five cards each, then trump is chosen, then three, then two —
-        which is where "5-3-2" comes from. The trump call is made on
-        partial information, and that's the point.
-
-        CHOOSING TRUMP
-        Looking at your first five, you may:
-          • name a suit outright, or
-          • open your 7th card (the middle of the next three) and take
-            its suit, or
-          • take the suit of the highest of your next three, face down.
-        The last two leak less about your hand, but you give up the choice.
-
-        PLAY
-        The trump selector leads and may lead any card. Follow suit if you can.
-        If you can't, trump it or throw anything away. Highest trump wins,
-        otherwise the highest card of the suit led. Winner leads next.
-
-        SCORING
-        Every trick you win scores one point. Your tricks-minus-quota result
-        determines next round's card pulls, but does not change your points.
-
-        KHICHAI — THE PULL
-        This is what the game is remembered for. If you finished a round
-        under quota, whoever finished over it may pull cards out of your
-        hand — one for each trick they were owed.
-
-        Before any card moves you choose, for each player you owe: give up the
-        tricks — no cards move, but this round your target rises by what you
-        owe and theirs falls by the same (never to the same player two rounds
-        running) — or give cards.
-
-        Giving cards: if a person is pulling, you get 10 seconds to arrange
-        your cards face down. They pull blind, then hand you back any card —
-        even the one they drew — which lands at a random spot in your cards.
-
-        A session runs three rounds, or any multiple of three, so everyone
-        deals, selects trump and sits third the same number of times.
-        """
-
-        let label = TDPDesign.label(text, size: 13, weight: .regular)
-        label.numberOfLines = 0
-
-        let scroll = UIScrollView()
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(label)
-        view.addSubview(scroll)
-
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
-            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            label.topAnchor.constraint(equalTo: scroll.topAnchor, constant: 20),
-            label.leadingAnchor.constraint(equalTo: scroll.leadingAnchor, constant: 22),
-            label.trailingAnchor.constraint(equalTo: scroll.trailingAnchor, constant: -22),
-            label.bottomAnchor.constraint(equalTo: scroll.bottomAnchor, constant: -40),
-            label.widthAnchor.constraint(equalTo: view.widthAnchor, constant: -44)
-        ])
     }
 }

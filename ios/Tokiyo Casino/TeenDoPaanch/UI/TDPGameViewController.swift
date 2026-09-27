@@ -35,7 +35,6 @@ final class TDPGameViewController: UIViewController {
     /// each round.
     private var settleSelection: [TDPSeat: TDPSettleMethod] = [:]
     private var settleRound: Int?
-    private var showWhy = false
 
     private var lastView: TDPClientView?
     /// First tap picks a card, second tap commits it — the reference's guard
@@ -63,6 +62,7 @@ final class TDPGameViewController: UIViewController {
         buildLayout()
 
         header.menuButton.addTarget(self, action: #selector(didTapMenu), for: .touchUpInside)
+        header.onScoresTap = { [weak self] in self?.showScores() }
         fan.onTap = { [weak self] card in self?.didTapCard(card) }
         curtain.onReveal = { [weak self] in
             guard let self, let view = self.lastView else { return }
@@ -290,21 +290,19 @@ final class TDPGameViewController: UIViewController {
         case .playCard:
             if selectedCardID != nil { return ("Tap again to play", true) }
             guard let lead = view.leadSuit else { return ("Your lead", true) }
-            let suit = TDPTheme.suitName(lead)
             let canFollow = view.myHand.contains { $0.suit == lead }
-            return (canFollow ? "Your turn · follow \(suit)" : "Your turn · no \(suit) — trump or throw", true)
+            return (canFollow ? "Your turn · follow \(TDPFormat.symbol(lead))" : "Your turn · play any card", true)
         case .chooseTrump:
-            return ("Call trump from your first five", true)
+            return ("Call trump", true)
         case .settleUp:
-            let owed = (view.settlement?.mine ?? []).map { name($0.creditorSeat, in: view) }
-            return ("Settle up with \(owed.joined(separator: " and "))", true)
+            return ("Settle up", true)
         case .arrangeCards:
             return ("Arrange your cards", true)
         case .khichaiDraw:
             guard let pull = view.khichai, pull.pullTotal > 1 else { return ("Pull a card", true) }
-            return ("Pull a card — \(pull.pullNumber) of \(pull.pullTotal)", true)
+            return ("Pull a card · \(pull.pullNumber) of \(pull.pullTotal)", true)
         case .khichaiReturn:
-            return (selectedCardID == nil ? "Give a card back — any card" : "Tap again to give it back", true)
+            return (selectedCardID == nil ? "Give one card back" : "Tap again to give it", true)
         default:
             break
         }
@@ -324,14 +322,14 @@ final class TDPGameViewController: UIViewController {
         case .settle:
             let waiting = (view.settlement?.waitingOn ?? []).map { name($0, in: view) }
             guard !waiting.isEmpty else { return ("Settling up", false) }
-            return ("\(waiting.joined(separator: " and ")) \(waiting.count == 1 ? "is" : "are") deciding how to settle up", false)
+            return ("Waiting for \(waiting.joined(separator: " and "))", false)
         case .khichai:
             guard let pull = view.khichai else { return ("Settling up", false) }
             if pull.isArranging {
-                if pull.iAmCreditor { return ("Then you pull \(pull.pullTotal), blind", false) }
-                return ("\(name(pull.debtorSeat, in: view)) is arranging for \(name(pull.creditorSeat, in: view))", false)
+                if pull.iAmCreditor { return ("You pull next", false) }
+                return ("\(name(pull.debtorSeat, in: view)) is arranging", false)
             }
-            if pull.iAmDebtor { return ("\(name(pull.creditorSeat, in: view)) is pulling a card from you", false) }
+            if pull.iAmDebtor { return ("\(name(pull.creditorSeat, in: view)) is pulling from you", false) }
             return ("\(name(pull.creditorSeat, in: view)) is pulling from \(name(pull.debtorSeat, in: view))", false)
         case .roundEnd:
             return ("Round over", false)
@@ -380,11 +378,9 @@ final class TDPGameViewController: UIViewController {
         case .trumpSelect:                        return "Calling trump"
         case .settle:                             return "Settling up"
         case .khichai:
-            guard let pull = view.khichai else { return "Khichai" }
-            if pull.isArranging {
-                return "\(name(pull.debtorSeat, in: view)) \(pull.iAmDebtor ? "are" : "is") arranging their cards"
-            }
-            return pull.pullTotal > 1 ? "Khichai · \(pull.pullNumber) of \(pull.pullTotal)" : "Khichai"
+            guard let pull = view.khichai else { return "Pulling" }
+            if pull.isArranging { return "Arranging" }
+            return pull.pullTotal > 1 ? "Pull \(pull.pullNumber) of \(pull.pullTotal)" : "Pulling"
         case .roundEnd:                           return "Round \(view.roundHistory.count) complete"
         case .sessionEnd:                         return "Session complete"
         case .lobby:                              return "Waiting for players"
@@ -510,8 +506,7 @@ final class TDPGameViewController: UIViewController {
     }
 
     private func buildTrumpPrompt(_ view: TDPClientView) {
-        prompt.reset(title: "Call trump",
-                     subtitle: "You need 5 tricks. Pick from your first five — or leave it to the cards.")
+        prompt.reset(title: "Call trump", subtitle: nil)
         // Your first five, large enough to read, right where you choose.
         let five = UIStackView()
         five.spacing = 7
@@ -543,15 +538,9 @@ final class TDPGameViewController: UIViewController {
 
     private func buildDrawPrompt(_ view: TDPClientView) {
         let debtor = name(view.khichai?.debtorSeat, in: view)
-        let owed = view.debts.filter { $0.to == view.mySeat && $0.from == view.khichai?.debtorSeat }
-            .reduce(0) { $0 + $1.amount }
-        let reason = owed > 0
-            ? "\(debtor) came up \(owed) short of quota last round. "
-            : ""
         let pull = view.khichai
         let count = (pull?.pullTotal ?? 1) > 1 ? " · \(pull!.pullNumber) of \(pull!.pullTotal)" : ""
-        prompt.reset(title: "Pull a card from \(debtor)\(count)",
-                     subtitle: reason + "Tap any face-down card — you'll see it, they won't know which.")
+        prompt.reset(title: "Pull a card from \(debtor)\(count)", subtitle: "Tap any card below")
         let random = TDPButton(title: "Pick for me", style: .secondary)
         random.addTarget(self, action: #selector(didTapRandomPull), for: .touchUpInside)
         prompt.primaryRow.addArrangedSubview(random)
@@ -564,7 +553,6 @@ final class TDPGameViewController: UIViewController {
         guard !mine.isEmpty else { return }
         if settleRound != view.roundNumber || Set(settleSelection.keys) != Set(mine.map(\.creditorSeat)) {
             settleRound = view.roundNumber
-            showWhy = false
             settleSelection = Dictionary(uniqueKeysWithValues: mine.map {
                 ($0.creditorSeat, $0.giveTricksLocked ? TDPSettleMethod.giveCards : .giveTricks)
             })
@@ -576,11 +564,9 @@ final class TDPGameViewController: UIViewController {
         if mine.count == 1, let debt = mine.first {
             buildSingleSettle(view, debt: debt, myBase: myBase, seats: seats)
         } else {
-            prompt.reset(title: "You owe \(total) tricks",
-                         subtitle: mine.map { "\(name($0.creditorSeat, in: view)) is owed \($0.amount)" }
-                            .joined(separator: ", ") + ". Settle each one.")
+            prompt.reset(title: "You owe \(total) tricks", subtitle: nil)
             for debt in mine { prompt.bodyStack.addArrangedSubview(settleRow(view, debt: debt)) }
-            prompt.bodyStack.addArrangedSubview(settleSummary(view, mine: mine, myBase: myBase, seats: seats))
+            prompt.bodyStack.addArrangedSubview(settleSummary(mine: mine, myBase: myBase))
             let confirm = TDPButton(title: "Confirm", style: .primary)
             confirm.addTarget(self, action: #selector(didTapConfirmSettle), for: .touchUpInside)
             prompt.primaryRow.addArrangedSubview(confirm)
@@ -593,17 +579,15 @@ final class TDPGameViewController: UIViewController {
         let n = debt.amount
         let tricks = "\(n) trick\(n == 1 ? "" : "s")"
         let cards = "\(n) card\(n == 1 ? "" : "s")"
-        let theirBase = seats[debt.creditorSeat]?.baseQuota ?? 0
-        let isPerson = seats[debt.creditorSeat]?.kind != "ai"
-        prompt.reset(title: "You owe \(creditor) \(tricks)",
-                     subtitle: "\(creditor) won \(n) more than their target last round.")
+        prompt.reset(title: "You owe \(creditor) \(tricks)", subtitle: nil)
 
+        // One short line each: what happens to you.
         let giveUp = TDPOptionCard(
             title: "Give up \(tricks)",
-            chip: debt.giveTricksLocked ? nil : "\(myBase) \u{2192} \(myBase + n)",
+            chip: nil,
             body: debt.giveTricksLocked
-                ? "Not this round."
-                : "No cards move. This round you need \(myBase + n) (instead of \(myBase)) and \(creditor) needs \(max(0, theirBase - n)) (instead of \(theirBase)).")
+                ? "Not allowed twice in a row"
+                : "Your target \(myBase) \u{2192} \(myBase + n)")
         giveUp.tag = debt.creditorSeat * 10
         giveUp.isEnabled = !debt.giveTricksLocked
         giveUp.isSelected = settleSelection[debt.creditorSeat] == .giveTricks
@@ -611,63 +595,18 @@ final class TDPGameViewController: UIViewController {
 
         let giveCards = TDPOptionCard(
             title: "Give \(cards)",
-            chip: "blind",
-            body: "\(creditor) pulls \(cards) from your hand, blind."
-                + (isPerson ? " You get 10 seconds to arrange them first." : " A bot picks at random."))
+            chip: nil,
+            body: "\(creditor) pulls blind")
         giveCards.tag = debt.creditorSeat * 10 + 1
         giveCards.isSelected = settleSelection[debt.creditorSeat] == .giveCards
         giveCards.addTarget(self, action: #selector(didTapSettleOption(_:)), for: .touchUpInside)
 
         prompt.bodyStack.addArrangedSubview(giveUp)
         prompt.bodyStack.addArrangedSubview(giveCards)
-        if debt.giveTricksLocked { prompt.bodyStack.addArrangedSubview(lockedNote(creditor)) }
 
-        let method = settleSelection[debt.creditorSeat] ?? .giveCards
-        let confirm = TDPButton(title: method == .giveTricks ? "Give up \(tricks)" : "Give \(cards)", style: .primary)
+        let confirm = TDPButton(title: "Confirm", style: .primary)
         confirm.addTarget(self, action: #selector(didTapConfirmSettle), for: .touchUpInside)
         prompt.primaryRow.addArrangedSubview(confirm)
-    }
-
-    /// Explains the "not twice in a row" rule — the part players won't expect.
-    private func lockedNote(_ creditor: String) -> UIView {
-        let lock = UIImageView(image: UIImage(systemName: "lock.fill"))
-        lock.tintColor = TDPTheme.inkSoft
-        lock.setContentHuggingPriority(.required, for: .horizontal)
-        let text = UILabel()
-        text.text = "You gave \(creditor) tricks last round — two in a row isn't allowed, so this time they pull cards."
-        text.font = TDPTheme.font(13)
-        text.textColor = TDPTheme.inkSoft
-        text.numberOfLines = 0
-        let line = UIStackView(arrangedSubviews: [lock, text])
-        line.spacing = 10
-        line.alignment = .top
-
-        let why = UIButton(type: .system)
-        why.setTitle(showWhy ? "Hide" : "Why?", for: .normal)
-        why.titleLabel?.font = TDPTheme.font(13, .semibold)
-        why.tintColor = TDPTheme.accent
-        why.contentHorizontalAlignment = .leading
-        why.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        why.addTarget(self, action: #selector(didTapWhy), for: .touchUpInside)
-
-        let stack = UIStackView(arrangedSubviews: [line])
-        stack.axis = .vertical
-        stack.spacing = 4
-        if showWhy {
-            let detail = UILabel()
-            detail.text = "Giving up tricks moves a debt into this round. If it could be done every round the debt would never be paid — so the next time you owe the same player, it's settled in cards. Owing someone else is a fresh start."
-            detail.font = TDPTheme.font(12)
-            detail.textColor = TDPTheme.muted
-            detail.numberOfLines = 0
-            stack.addArrangedSubview(detail)
-        }
-        stack.addArrangedSubview(why)
-        stack.isLayoutMarginsRelativeArrangement = true
-        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 2, trailing: 14)
-        stack.backgroundColor = TDPTheme.raisedAlt
-        stack.layer.cornerRadius = 14
-        stack.layer.cornerCurve = .continuous
-        return stack
     }
 
     private func settleRow(_ view: TDPClientView, debt: TDPSettleDebt) -> UIView {
@@ -701,43 +640,15 @@ final class TDPGameViewController: UIViewController {
         return row
     }
 
-    private func settleSummary(_ view: TDPClientView, mine: [TDPSettleDebt],
-                               myBase: Int, seats: [TDPSeat: TDPSeatView]) -> UIView {
-        var targets: [TDPSeat: Int] = [view.mySeat: myBase]
-        var pulls: [String] = []
-        for debt in mine {
-            let theirBase = seats[debt.creditorSeat]?.baseQuota ?? 0
-            if settleSelection[debt.creditorSeat] == .giveTricks {
-                targets[view.mySeat, default: myBase] += debt.amount
-                targets[debt.creditorSeat] = theirBase - debt.amount
-            } else {
-                targets[debt.creditorSeat] = theirBase
-                pulls.append("\(name(debt.creditorSeat, in: view)) pulls \(debt.amount)")
-            }
-        }
-        let order = [view.mySeat] + mine.map(\.creditorSeat)
-        let line = order.map { seat -> String in
-            let who = seat == view.mySeat ? "you" : name(seat, in: view)
-            return "\(who) \(max(0, targets[seat] ?? 0))"
-        }.joined(separator: " · ")
+    /// "Your target 3 → 5" — the one consequence worth spelling out.
+    private func settleSummary(mine: [TDPSettleDebt], myBase: Int) -> UIView {
+        let added = mine.filter { settleSelection[$0.creditorSeat] == .giveTricks }.reduce(0) { $0 + $1.amount }
         let summary = UILabel()
-        summary.text = "This round: " + line
+        summary.text = added == 0 ? "Your target stays \(myBase)" : "Your target \(myBase) \u{2192} \(myBase + added)"
         summary.font = TDPTheme.mono(13)
-        summary.textColor = TDPTheme.ink
-        summary.numberOfLines = 0
-        let pullLine = UILabel()
-        pullLine.text = pulls.isEmpty ? "No cards move." : pulls.joined(separator: " and ") + ", blind."
-        pullLine.font = TDPTheme.font(12)
-        pullLine.textColor = TDPTheme.muted
-        let stack = UIStackView(arrangedSubviews: [summary, pullLine])
-        stack.axis = .vertical
-        stack.spacing = 4
-        stack.isLayoutMarginsRelativeArrangement = true
-        stack.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 12, leading: 14, bottom: 12, trailing: 14)
-        stack.backgroundColor = TDPTheme.raisedAlt
-        stack.layer.cornerRadius = 14
-        stack.layer.cornerCurve = .continuous
-        return stack
+        summary.textColor = added == 0 ? TDPTheme.muted : TDPTheme.ink
+        summary.textAlignment = .center
+        return summary
     }
 
     @objc private func didTapSettleOption(_ sender: TDPOptionCard) {
@@ -750,11 +661,6 @@ final class TDPGameViewController: UIViewController {
         guard let view = lastView else { return }
         settleSelection[sender.tag] = sender.selectedIndex == 0 ? .giveTricks : .giveCards
         render(view)
-    }
-
-    @objc private func didTapWhy() {
-        showWhy.toggle()
-        if let view = lastView { render(view) }
     }
 
     @objc private func didTapConfirmSettle() {
@@ -811,7 +717,7 @@ final class TDPGameViewController: UIViewController {
                 ? "You need \(target(seat))" : "\(name(seat, in: view)) needs \(target(seat))"
         }
         banner.configure(title: titles.joined(separator: " · "),
-                         subtitle: needs.joined(separator: ", ") + " — this round only.")
+                         subtitle: needs.joined(separator: " · "))
         banner.isHidden = false
     }
 
@@ -819,56 +725,44 @@ final class TDPGameViewController: UIViewController {
         let drawn = view.khichai?.drawnCard?.description ?? "a card"
         let debtor = name(view.khichai?.debtorSeat, in: view)
         if let selected = selectedCardID, let card = Card(tdpID: selected) {
-            prompt.reset(title: "You drew \(drawn)", subtitle: "Give \(card.description) to \(debtor)?")
-            let confirm = TDPButton(title: "Confirm · return \(card.description)", style: .primary)
+            prompt.reset(title: "Give \(card.description) to \(debtor)?", subtitle: nil)
+            let confirm = TDPButton(title: "Confirm", style: .primary)
             confirm.addTarget(self, action: #selector(didTapConfirmReturn), for: .touchUpInside)
             prompt.primaryRow.addArrangedSubview(confirm)
         } else {
             // Any card may go back — the outlined one you just drew included.
-            prompt.reset(title: "You drew \(drawn)",
-                         subtitle: "Choose a card to give \(debtor) — keep it, or hand the same one back.")
+            prompt.reset(title: "You got \(drawn)", subtitle: "Give any one card back")
         }
     }
 
     private func buildRoundPrompt(_ view: TDPClientView) {
-        let me = view.mySeat
-        let tints: [TDPSeat: TDPTheme.Tint] = [
-            me: .green, TDPRoles.nextSeat(me): .amber, TDPRoles.prevSeat(me): .blue
-        ]
         let final = view.phase == .sessionEnd
-        let ordered = final
-            ? view.seats.sorted { $0.score > $1.score }
-            : [me, TDPRoles.nextSeat(me), TDPRoles.prevSeat(me)].compactMap { s in view.seats.first { $0.seat == s } }
 
         if final {
-            let top = ordered.first?.score ?? 0
-            let leaders = ordered.filter { $0.score == top }.map { name($0.seat, in: view) }
+            let top = view.seats.map(\.score).max() ?? 0
+            let leaders = view.seats.filter { $0.score == top }.map { name($0.seat, in: view) }
             let verdict = leaders.count > 1
                 ? "\(leaders.joined(separator: " and ")) tie"
                 : (leaders.first == "You" ? "You win" : "\(leaders.first ?? "—") wins")
-            prompt.reset(title: "Final scores", subtitle: "\(verdict) after \(view.roundHistory.count) rounds.")
+            prompt.reset(title: verdict, subtitle: "Final scores")
         } else {
-            prompt.reset(title: "Round \(view.roundHistory.count)",
-                         subtitle: "Over quota pulls from under quota next deal.")
+            prompt.reset(title: "Round \(view.roundHistory.count) done", subtitle: nil)
         }
 
-        let last = view.roundHistory.last
-        for seat in ordered {
-            let key = String(seat.seat)
-            prompt.bodyStack.addArrangedSubview(TDPPromptCard.scoreRow(
-                name: name(seat.seat, in: view),
-                tint: tints[seat.seat] ?? .green,
-                tricks: last?.tricks[key] ?? 0,
-                quota: last?.quotas[key] ?? 0,
-                delta: last?.delta[key] ?? 0,
-                total: seat.score
-            ))
-        }
+        // This round and the totals; at the end, just the totals — every
+        // round is one tap away in the score sheet.
+        let rounds = final ? [] : Array(view.roundHistory.suffix(1))
+        prompt.bodyStack.addArrangedSubview(TDPScoreGrid.make(from: view, rounds: rounds) { [unowned self] seat in
+            self.name(seat, in: view)
+        })
 
         if final {
             let done = TDPButton(title: "Done", style: .primary)
             done.addTarget(self, action: #selector(didTapLeaveConfirmed), for: .touchUpInside)
             prompt.primaryRow.addArrangedSubview(done)
+            let all = TDPButton(title: "All rounds", style: .secondary)
+            all.addTarget(self, action: #selector(didTapScores), for: .touchUpInside)
+            prompt.secondaryRow.addArrangedSubview(all)
             if view.isHost {
                 let more = TDPButton(title: "Play 3 more", style: .secondary)
                 more.addTarget(self, action: #selector(didTapExtend), for: .touchUpInside)
@@ -885,7 +779,7 @@ final class TDPGameViewController: UIViewController {
             }
         } else {
             let waiting = UILabel()
-            waiting.text = "Waiting for the host to deal…"
+            waiting.text = "Waiting for the host…"
             waiting.font = TDPTheme.font(13)
             waiting.textColor = TDPTheme.muted
             waiting.textAlignment = .center
@@ -933,7 +827,6 @@ final class TDPGameViewController: UIViewController {
     @objc private func didTapMenu() {
         let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         sheet.addAction(UIAlertAction(title: "Scores", style: .default) { [weak self] _ in self?.showScores() })
-        sheet.addAction(UIAlertAction(title: "How to play", style: .default) { [weak self] _ in self?.showRules() })
         sheet.addAction(UIAlertAction(title: "Leave table", style: .destructive) { [weak self] _ in self?.confirmLeave() })
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         sheet.popoverPresentationController?.sourceView = header.menuButton
@@ -941,34 +834,14 @@ final class TDPGameViewController: UIViewController {
         present(sheet, animated: true)
     }
 
-    private func showScores() {
-        guard let view = lastView else { return }
-        let order = [view.mySeat, TDPRoles.nextSeat(view.mySeat), TDPRoles.prevSeat(view.mySeat)]
-        var lines: [String] = []
-        for round in view.roundHistory {
-            let parts = order.map { seat in
-                "\(name(seat, in: view)) \(TDPFormat.signed(round.delta[String(seat)] ?? 0))"
-            }
-            lines.append("Round \(round.round):  " + parts.joined(separator: "   "))
-        }
-        let totals = order.map { seat in
-            "\(name(seat, in: view)) \(TDPFormat.signed(view.seats.first { $0.seat == seat }?.score ?? 0))"
-        }
-        lines.append("")
-        lines.append("Total:  " + totals.joined(separator: "   "))
-        let alert = UIAlertController(title: "Scores",
-                                      message: view.roundHistory.isEmpty ? "No rounds finished yet." : lines.joined(separator: "\n"),
-                                      preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "Close", style: .cancel))
-        present(alert, animated: true)
-    }
+    @objc private func didTapScores() { showScores() }
 
-    private func showRules() {
-        let rules = TDPRulesViewController()
-        rules.navigationItem.rightBarButtonItem = UIBarButtonItem(systemItem: .done, primaryAction: UIAction { [weak rules] _ in
-            rules?.dismiss(animated: true)
-        })
-        present(UINavigationController(rootViewController: rules), animated: true)
+    private func showScores() {
+        guard let view = lastView, presentedViewController == nil else { return }
+        let sheet = TDPScoresViewController(view: view) { [weak self] seat in
+            self?.name(seat, in: view) ?? "—"
+        }
+        sheet.presentAsSheet(from: self)
     }
 
     private func confirmLeave() {
