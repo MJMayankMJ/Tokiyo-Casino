@@ -197,7 +197,7 @@ class CardView: UIView {
         UIView.transition(with: self, duration: 0.5, options: .transitionFlipFromLeft) {
             self.rebuild()
         }
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        PokerFeel.showdownFlip()
     }
 
     /// Instant face-up.

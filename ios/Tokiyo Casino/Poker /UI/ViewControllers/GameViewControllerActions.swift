@@ -99,6 +99,12 @@ extension GameViewController {
             SoundManager.setMuted(!SoundManager.isMuted)
         })
         
+        #if DEBUG
+        alert.addAction(UIAlertAction(title: "Debug · moments", style: .default) { [weak self] _ in
+            self?.showMomentsDebug()
+        })
+        #endif
+
         alert.addAction(UIAlertAction(title: "Exit to Menu", style: .default) { [weak self] _ in
             // 💰 Settle coins when exiting the Poker screen
             self?.settleCoinsIfNeeded()

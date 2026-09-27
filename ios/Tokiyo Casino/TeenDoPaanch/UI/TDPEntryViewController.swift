@@ -71,7 +71,7 @@ final class TDPEntryViewController: UIViewController {
         var items: [UIView] = [hero, identity, bots, others, learn]
         #if DEBUG
         let debug = UIButton(type: .system)
-        debug.setTitle("Debug · khichai", for: .normal)
+        debug.setTitle("Debug · moments & khichai", for: .normal)
         debug.titleLabel?.font = TDPTheme.font(12, .medium)
         debug.tintColor = TDPTheme.muted
         debug.addTarget(self, action: #selector(didTapDebugKhichai), for: .touchUpInside)
@@ -162,12 +162,19 @@ final class TDPEntryViewController: UIViewController {
     }
 
     #if DEBUG
-    /// Debug builds: jump straight to settling up in round 2+.
+    /// Debug builds: jump straight to a moment worth testing — settling up
+    /// (you and Player 2 share the phone, Meera is a bot) or one of the big
+    /// moments (you and two bots, your play).
     @objc private func didTapDebugKhichai() {
         let sheet = UIAlertController(
-            title: "Debug · khichai",
-            message: "You and Player 2 share this phone; Meera is a bot.",
+            title: "Debug",
+            message: "Khichai: you and Player 2 share this phone. Moments: you and two bots — make the play.",
             preferredStyle: .actionSheet)
+        for scenario in TDPMomentScenario.allCases {
+            sheet.addAction(UIAlertAction(title: scenario.title, style: .default) { [weak self] _ in
+                self?.launchMoment(scenario)
+            })
+        }
         for scenario in TDPDebugScenario.allCases {
             sheet.addAction(UIAlertAction(title: scenario.title, style: .default) { [weak self] _ in
                 self?.launchDebug(scenario)
@@ -176,6 +183,13 @@ final class TDPEntryViewController: UIViewController {
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         sheet.popoverPresentationController?.sourceView = view
         present(sheet, animated: true)
+    }
+
+    private func launchMoment(_ scenario: TDPMomentScenario) {
+        let service = TDPHostService(mode: .practice, hostName: PlayerProfile.name)
+        let driver = TDPHostDriver(service: service)
+        service.debugStart(with: scenario.makeState(playerName: PlayerProfile.name))
+        push(TDPGameViewController(driver: driver))
     }
 
     private func launchDebug(_ scenario: TDPDebugScenario) {

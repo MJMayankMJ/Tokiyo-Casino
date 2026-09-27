@@ -218,6 +218,8 @@ struct TDPClientView: Codable {
     var concessions: [TDPConcession] = []
     /// The vote on three more rounds, once the last one is played.
     var extendVote: TDPExtendVoteView?
+    /// This round's finished tricks, in order — public, like the cards.
+    var roundTricks: [[TDPTrickPlay]] = []
 }
 
 /// Where the "three more rounds?" vote stands. Public — everyone sees who

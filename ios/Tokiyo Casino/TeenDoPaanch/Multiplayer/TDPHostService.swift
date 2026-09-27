@@ -55,6 +55,12 @@ final class TDPHostService {
     var aiThinkTime: TimeInterval = 0.7
     var dealPace: TimeInterval = 0.35
     var trickHold: TimeInterval = 1.1
+    /// Extra time on the table for a first cut, so its burst plays out
+    /// before the trick is swept. (A steal celebrates as the trick is taken,
+    /// so it needs none.) Zero when the delays above are zero (tests).
+    var momentHold: TimeInterval = 1.6
+    /// A beat after a person's first cut lands, before the next card.
+    var momentBeat: TimeInterval = 0.6
     /// How long a debtor gets to arrange their cards for a person pulling.
     var arrangeWindow: TimeInterval = 10
 
@@ -236,8 +242,10 @@ final class TDPHostService {
             return
 
         case .trickResolve:
-            // Hold the completed trick on screen before collecting it.
-            schedule(after: trickHold) { [weak self] in
+            // Hold the completed trick on screen before collecting it —
+            // longer when a person won it with a moment worth watching.
+            let moment = trickHold > 0 && TDPMoments.pendingMoment(engine.state) == .firstCut
+            schedule(after: trickHold + (moment ? momentHold : 0)) { [weak self] in
                 guard let self else { return }
                 self.engine.apply(.ackTrick)
                 self.pump()
@@ -257,7 +265,8 @@ final class TDPHostService {
             guard let action = TDPAIEngine.nextAction(state: engine.state,
                                                       seat: seat,
                                                       difficulty: difficulty) else { continue }
-            schedule(after: aiThinkTime) { [weak self] in
+            let beat = aiThinkTime > 0 && TDPMoments.justCut(engine.state) ? momentBeat : 0
+            schedule(after: aiThinkTime + beat) { [weak self] in
                 guard let self else { return }
                 if let error = self.engine.apply(action) {
                     dprint("TDP AI produced an illegal action: \(error.message)")

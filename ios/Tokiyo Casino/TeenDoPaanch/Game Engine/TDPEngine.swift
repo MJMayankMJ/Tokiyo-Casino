@@ -633,6 +633,7 @@ final class TDPEngine {
 
     private func ackTrick(_ s: inout TDPGameState) -> TDPError? {
         guard s.phase == .trickResolve else { return TDPError("No trick is waiting.") }
+        s.roundTricks.append(s.currentTrick)
         let next = s.trickNumber + 1
         guard next < 10 else { return finishRound(&s) }
         s.phase = .play

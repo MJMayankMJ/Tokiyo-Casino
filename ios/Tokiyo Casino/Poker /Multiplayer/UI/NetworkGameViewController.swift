@@ -58,6 +58,12 @@ final class NetworkGameViewController: UIViewController {
     /// snapshot seat ids back and forth without confusing the table view.
     private var renderedSeatBySeatId: [Int: Int] = [:]
     private var renderedSeatIdByRenderedIndex: [Int: Int] = [:]
+    /// Above everything: where your special hands play (`PokerMomentEffects`).
+    private let momentsLayer = UIView()
+    private lazy var momentEffects = PokerMomentEffects(table: tableView, overlay: momentsLayer)
+    /// Your last move on this hand's river was calling a bet — a hero call
+    /// if it wins with a weak hand.
+    private var calledRiver = false
 
     init(role: NetworkGameRole) {
         self.role = role
@@ -77,6 +83,7 @@ final class NetworkGameViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        PokerFeel.prepare()
         view.backgroundColor = PokerTheme.pageBg
         setupUI()
     }
@@ -188,6 +195,12 @@ final class NetworkGameViewController: UIViewController {
             joinRequestReviewButton.centerYAnchor.constraint(equalTo: joinRequestBanner.centerYAnchor),
             joinRequestReviewButton.heightAnchor.constraint(equalToConstant: 32),
         ])
+
+        // Moments play over everything and never take a touch.
+        momentsLayer.frame = view.bounds
+        momentsLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        momentsLayer.isUserInteractionEnabled = false
+        view.addSubview(momentsLayer)
     }
 
     // MARK: Snapshot rendering
@@ -200,6 +213,7 @@ final class NetworkGameViewController: UIViewController {
             localHoleCards = []
             tableView.clearTable()
         }
+        playFeedback(from: lastSnapshot, to: snapshot)
         // Surface "X left" / "X is back" toasts when away flags flip.
         // The lone-human alert handles the alone-with-no-AI case; this
         // toast is the small ambient notice for the other transitions.
@@ -322,6 +336,37 @@ final class NetworkGameViewController: UIViewController {
         }
     }
 
+    /// Sounds for what changed between two snapshots: a new hand, each
+    /// player's move, cards hitting the felt. The host and every guest hear
+    /// the same table.
+    private func playFeedback(from prev: TableSnapshotPayload?, to next: TableSnapshotPayload) {
+        guard let prev else { return }
+        if prev.handNumber != next.handNumber {
+            calledRiver = false
+            PokerFeel.newHand()
+            PokerFeel.holeCardsDealt(seats: next.players.count)
+            return
+        }
+        for player in next.players {
+            guard let before = prev.players.first(where: { $0.seatId == player.seatId }) else { continue }
+            let moved = player.lastAction != before.lastAction
+                || player.totalInvested != before.totalInvested
+                || player.isFolded != before.isFolded
+            guard moved, let name = player.lastAction,
+                  let action = SnapshotBuilder.decodeAction(name: name, raiseAmount: player.lastActionAmount) else { continue }
+            PokerFeel.action(action, byYou: player.seatId == localSeatId)
+            if player.seatId == localSeatId, SnapshotBuilder.decodePhase(prev.phase) == .river {
+                // An all-in that doesn't raise the bet is a call too.
+                switch action {
+                case .call:  calledRiver = true
+                case .allIn: calledRiver = next.currentBet <= prev.currentBet
+                default:     calledRiver = false
+                }
+            }
+        }
+        PokerFeel.communityCards(new: next.communityCards.count - prev.communityCards.count)
+    }
+
     /// Compare two snapshots and show a small toast for every away
     /// transition that changed. We only toast for humans other than
     /// the local seat — the local player already knows their own
@@ -362,6 +407,7 @@ final class NetworkGameViewController: UIViewController {
     private func presentActionRequest(_ request: ActionRequestPayload) {
         guard request.seatId == localSeatId else { return }
         pendingActionRequest = request
+        PokerFeel.yourTurn()
 
         // Map validActions strings → PlayerAction stubs for the view.
         let actions: [PlayerAction] = request.validActions.compactMap { name in
@@ -451,6 +497,11 @@ final class NetworkGameViewController: UIViewController {
         }
         tableView.revealAllCards()
 
+        // A special hand of yours (`PokerMoments`) is the win's celebration:
+        // it starts once the cards are face up, and the banner follows it.
+        let record = handRecord(from: payload)
+        let moments = PokerMoments.moments(for: record)
+
         // Build banner entries.
         let multi = payload.winners.count > 1
         let entries: [RoundResultBanner.Entry] = payload.winners.map { w in
@@ -473,15 +524,44 @@ final class NetworkGameViewController: UIViewController {
            let renderedIdx = renderedSeatBySeatId[main.seatId],
            renderedIdx < renderedPlayers.count {
             tableView.animatePotTo(playerId: renderedPlayers[renderedIdx].id)
-            tableView.showWinner(renderedPlayers[renderedIdx])
+            if moments.isEmpty { tableView.showWinner(renderedPlayers[renderedIdx]) }
+            PokerFeel.potWon(byYou: payload.winners.contains { $0.seatId == localSeatId })
         }
 
         let duration: TimeInterval = multi ? 3.5 : 2.8
-        tableView.showRoundResultBanner(entries: entries, duration: duration) { [weak self] in
-            self?.tableView.clearWinningHighlights()
-            // Host kicks off the next hand from its own service. Clients
-            // wait for the next `tableSnapshot` to arrive.
+        let showBanner: () -> Void = { [weak self] in
+            self?.tableView.showRoundResultBanner(entries: entries, duration: duration) { [weak self] in
+                self?.tableView.clearWinningHighlights()
+                // Host kicks off the next hand from its own service. Clients
+                // wait for the next `tableSnapshot` to arrive.
+            }
         }
+        guard !moments.isEmpty else { showBanner(); return }
+        // The host holds the next deal for this (`PokerMoments.hold`).
+        DispatchQueue.main.asyncAfter(deadline: .now() + PokerMoments.showdownLeadIn) { [weak self] in
+            guard let self else { return }
+            self.momentEffects.play(moments, hand: record, seat: self.localSeatId, completion: showBanner)
+        }
+    }
+
+    /// The hand as this phone saw it: your cards, the board, the hands
+    /// turned over, and who was left without a chip.
+    private func handRecord(from payload: RoundResultPayload) -> PokerHandRecord {
+        let winners = Set(payload.winners.map(\.seatId))
+        let revealed = payload.revealedHoleCards.map {
+            PokerShownHand(seat: $0.seatId, cards: $0.cards.compactMap { Card(dto: $0) })
+        }
+        // Only yours is turned over when everyone else folded.
+        let shownDown = revealed.count > 1 ? revealed.filter { $0.seat != localSeatId } : []
+        // Chips as the hand ended, before the pots were paid: an all-in
+        // player who won nothing has none left.
+        let broke = Set(lastSnapshot?.players.filter { $0.chips == 0 }.map(\.seatId) ?? [])
+        return PokerHandRecord(hole: localHoleCards,
+                               board: payload.communityCards.compactMap { Card(dto: $0) },
+                               won: winners.contains(localSeatId),
+                               shownDown: shownDown,
+                               calledRiver: calledRiver,
+                               knockedOut: shownDown.map(\.seat).filter { broke.contains($0) && !winners.contains($0) })
     }
 
     fileprivate func handleSessionResult(_ payload: SessionResultPayload) {

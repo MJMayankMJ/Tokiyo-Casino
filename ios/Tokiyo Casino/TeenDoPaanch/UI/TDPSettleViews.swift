@@ -425,7 +425,8 @@ final class TDPArrangeView: UIView, UICollectionViewDataSource, UICollectionView
     @objc private func didShuffle() {
         cards.shuffle()
         grid.performBatchUpdates({ grid.reloadSections(IndexSet(integer: 0)) })
-        UISelectionFeedbackGenerator().selectionChanged()
+        GameHaptics.shared.play(.select)
+        GameAudio.shared.play(.fan)
         sendOrder()
     }
 
@@ -440,7 +441,7 @@ final class TDPArrangeView: UIView, UICollectionViewDataSource, UICollectionView
         case .began:
             guard let path = grid.indexPathForItem(at: point) else { return }
             isDragging = grid.beginInteractiveMovementForItem(at: path)
-            if isDragging { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
+            if isDragging { GameHaptics.shared.play(.select) }
         case .changed:
             grid.updateInteractiveMovementTargetPosition(point)
         case .ended:

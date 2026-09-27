@@ -117,6 +117,20 @@ final class TDPAvatarView: UIView {
     }
 }
 
+
+/// A quick swell when a number goes up — a trick won shows on the tally.
+private func pulseIfIncreased(_ label: UILabel, from old: String?, to new: String) {
+    guard let old, old != new, label.window != nil,
+          let before = Int(old.split(separator: " ").first ?? ""),
+          let after = Int(new.split(separator: " ").first ?? ""), after > before else { return }
+    UIView.animate(withDuration: 0.12, animations: {
+        label.transform = CGAffineTransform(scaleX: 1.25, y: 1.25)
+    }) { _ in
+        UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.5,
+                       initialSpringVelocity: 0.4, options: []) { label.transform = .identity }
+    }
+}
+
 // MARK: - Opponent
 
 /// Avatar with name, "won / quota" and card count. The right-hand opponent
@@ -172,6 +186,7 @@ final class TDPOpponentBadge: UIView {
     func configure(name: String, tally: String, quotaMet: Bool, detail: String,
                    isActive: Bool, tint: TDPTheme.Tint, isOffline: Bool, chip: String? = nil) {
         nameLabel.text = name
+        pulseIfIncreased(tallyLabel, from: tallyLabel.text, to: tally)
         tallyLabel.text = tally
         chipLabel.text = chip
         chipLabel.isHidden = chip == nil
@@ -193,6 +208,8 @@ final class TDPSelfBadge: UIView {
     let avatar = TDPAvatarView(side: 44, radius: 16)
     private let nameLabel = UILabel()
     private let tallyLabel = UILabel()
+    /// Where a claimed trick lands.
+    var tallyView: UIView { tallyLabel }
     private let chipLabel = TDPChipLabel()
     private let statusLabel = UILabel()
 
@@ -236,6 +253,7 @@ final class TDPSelfBadge: UIView {
                    statusIsAction: Bool, isActive: Bool, chip: String? = nil, photo: UIImage? = nil) {
         avatar.photo = photo
         nameLabel.text = name
+        pulseIfIncreased(tallyLabel, from: tallyLabel.text, to: tally)
         tallyLabel.text = tally
         chipLabel.text = chip
         chipLabel.isHidden = chip == nil
@@ -254,6 +272,7 @@ final class TDPSelfBadge: UIView {
 final class TDPTrumpPill: UIView {
 
     private let glyph = TDPSuitGlyph(suit: .spades, tint: TDPTheme.ink)
+    private var shownTrump: Suit?
     private let unknownLabel = UILabel()
     private let titleLabel = UILabel()
 
@@ -310,6 +329,15 @@ final class TDPTrumpPill: UIView {
     }
 
     func configure(trump: Suit?, detail: String?) {
+        if let trump, trump != shownTrump, window != nil {
+            UIView.animate(withDuration: 0.14, animations: {
+                self.transform = CGAffineTransform(scaleX: 1.12, y: 1.12)
+            }) { _ in
+                UIView.animate(withDuration: 0.32, delay: 0, usingSpringWithDamping: 0.55,
+                               initialSpringVelocity: 0.4, options: []) { self.transform = .identity }
+            }
+        }
+        shownTrump = trump
         glyph.isHidden = trump == nil
         unknownLabel.isHidden = trump != nil
         if let trump {
@@ -460,6 +488,8 @@ final class TDPDashedSlotView: UIView {
     override func layoutSubviews() {
         super.layoutSubviews()
         dash.frame = bounds
+        // Not laid out yet: a zero-size rounded rect is NaN to CoreGraphics.
+        guard bounds.width > 2, bounds.height > 2 else { dash.path = nil; return }
         dash.path = UIBezierPath(roundedRect: bounds.insetBy(dx: 0.75, dy: 0.75),
                                  cornerRadius: bounds.width * 0.143).cgPath
     }
@@ -483,6 +513,8 @@ final class TDPTrickTableView: UIView {
     private var cards: [Spot: TDPCardButton] = [:]
     private var cardIDs: [Spot: String] = [:]
     private var laidOutSize: CGSize = .zero
+    /// The winner already given its lift, so a re-render doesn't repeat it.
+    private var poppedWinner: Spot?
 
     init() {
         super.init(frame: .zero)
@@ -576,12 +608,51 @@ final class TDPTrickTableView: UIView {
         // Latest card on top, like a real pile.
         for play in plays { if let view = cards[play.spot] { bringSubviewToFront(view) } }
         for (spot, view) in cards { view.ringColor = spot == winner ? TDPTheme.accent : nil }
+        if let winner, winner != poppedWinner, let view = cards[winner] {
+            poppedWinner = winner
+            let rest = view.transform
+            UIView.animate(withDuration: 0.16, delay: 0.05, options: [.curveEaseOut]) {
+                view.transform = rest.scaledBy(x: 1.08, y: 1.08)
+            } completion: { _ in
+                UIView.animate(withDuration: 0.3, delay: 0, usingSpringWithDamping: 0.6,
+                               initialSpringVelocity: 0.3, options: []) {
+                    view.transform = rest
+                }
+            }
+        }
+        if winner == nil { poppedWinner = nil }
 
         slotSpot = pending
         slot.isHidden = pending == nil
         if let pending, bounds.width > 0 { place(slot, at: pending, rotated: false) }
         bringSubviewToFront(captionLabel)
     }
+
+    /// The card on the table at `spot`, if one has been played there.
+    func cardView(at spot: Spot) -> TDPCardButton? {
+        cards[spot]
+    }
+
+    /// Hands the trick's cards over — still on screen, no longer tracked —
+    /// for an effect to carry off instead of the usual sweep.
+    func takeCards() -> [TDPCardButton] {
+        let views = Array(cards.values)
+        cards.removeAll()
+        cardIDs.removeAll()
+        return views
+    }
+
+    #if DEBUG
+    /// A loose card at `spot` that the trick doesn't track — for replaying
+    /// the big moments from the debug menu.
+    func debugPlace(_ card: Card, at spot: Spot) -> TDPCardButton {
+        let view = TDPCardButton(card: card, elevation: .table)
+        view.isUserInteractionEnabled = false
+        addSubview(view)
+        place(view, at: spot)
+        return view
+    }
+    #endif
 
     /// Sweeps the finished trick toward whoever won it.
     func collect(toward spot: Spot?) {
@@ -710,6 +781,7 @@ final class TDPHandFanView: UIView {
         let pivot = 700 * s - size.height / 2
 
         var targets: [(TDPCardButton, CGAffineTransform)] = []
+        var dealt: [(TDPCardButton, CGAffineTransform)] = []
         for (index, item) in items.enumerated() {
             guard let view = views[item.key] else { continue }
             let degrees = -total / 2 + Double(index) * step
@@ -726,12 +798,14 @@ final class TDPHandFanView: UIView {
                 .translatedBy(x: 0, y: lift - pivot)
             view.bounds = CGRect(origin: .zero, size: size)
             view.center = center
-            if appearing.contains(item.key) {
+            if appearing.contains(item.key) && animated {
                 // New cards drop in from above, as if just dealt.
-                view.transform = transform.translatedBy(x: 0, y: -70 * s)
+                view.transform = transform.translatedBy(x: 0, y: -70 * s).rotated(by: 0.08)
                 view.alpha = 0
+                dealt.append((view, transform))
+            } else {
+                targets.append((view, transform))
             }
-            targets.append((view, transform))
         }
 
         let apply = {
@@ -746,6 +820,15 @@ final class TDPHandFanView: UIView {
                            animations: apply)
         } else {
             apply()
+        }
+        // Dealt cards land one after another, left to right.
+        for (order, (view, transform)) in dealt.enumerated() {
+            UIView.animate(withDuration: 0.36, delay: Double(order) * 0.06,
+                           usingSpringWithDamping: 0.82, initialSpringVelocity: 0.4,
+                           options: [.allowUserInteraction, .beginFromCurrentState]) {
+                view.transform = transform
+                view.alpha = 1
+            }
         }
     }
 }

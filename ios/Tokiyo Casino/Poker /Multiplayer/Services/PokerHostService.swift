@@ -1167,16 +1167,18 @@ final class PokerHostService {
         broadcast(type: .roundResult, payload: payload)
         observer?.host(self, didCompleteRound: payload)
 
-        // Auto-advance to the next hand after the banner displays.
+        // Auto-advance to the next hand after the banner displays — and
+        // after anyone's special hand, which plays before it.
         let displayDuration: TimeInterval = entries.count > 1 ? 3.5 : 2.8
         let postBannerGap: TimeInterval = 0.8
+        let momentHold = PokerMoments.hold(at: gm)
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.isEnded else { return }
             self.beginNextHand()
         }
         nextHandWorkItem?.cancel()
         nextHandWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + displayDuration + postBannerGap, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + displayDuration + postBannerGap + momentHold, execute: work)
     }
 
     // MARK: Send helpers

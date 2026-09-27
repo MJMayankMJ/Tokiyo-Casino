@@ -27,6 +27,14 @@ final class TDPGameViewController: UIViewController {
     private let prompt = TDPPromptCard()
     private let toast = TDPToastView()
     private let curtain = TDPHandoffCurtain()
+    /// Everything on the table — shaken when a card is slammed down.
+    private let stage = UIView()
+    /// Above the table: the big moments' light, sparks and callouts.
+    private let effectsLayer = UIView()
+    private lazy var moments = TDPMomentEffects(stage: stage, overlay: effectsLayer)
+    /// A steal's point shows only when its trick lands in the pile; until
+    /// then this seat's count stays one short.
+    private var heldPointSeat: TDPSeat?
     private let arrangeView = TDPArrangeView()
     private let countdown = TDPCountdownView(diameter: 120 * TDPTheme.scale)
     private let banner = TDPBannerView()
@@ -69,8 +77,13 @@ final class TDPGameViewController: UIViewController {
             self.revealedSeat = view.mySeat
         }
 
+        GameAudio.shared.prepare()
+        GameHaptics.shared.prepare()
         driver.onViewChanged = { [weak self] view in self?.render(view) }
-        driver.onRejected = { [weak self] reason in self?.toast.show(reason) }
+        driver.onRejected = { [weak self] reason in
+            GameHaptics.shared.play(.invalid)
+            self?.toast.show(reason)
+        }
         driver.onEnded = { [weak self] reason in self?.showEnded(reason) }
         driver.start()
 
@@ -103,9 +116,19 @@ final class TDPGameViewController: UIViewController {
         let safe = view.safeAreaLayoutGuide
         let side: CGFloat = 24 * s
 
-        [header, leftBadge, rightBadge, trickTable, countdown, banner, selfBadge, fan,
-         arrangeView, prompt, toast, curtain]
-            .forEach { view.addSubview($0) }
+        [stage, effectsLayer, prompt, toast, curtain].forEach { view.addSubview($0) }
+        [header, leftBadge, rightBadge, trickTable, countdown, banner, selfBadge, fan, arrangeView]
+            .forEach { stage.addSubview($0) }
+        for layer in [stage, effectsLayer] {
+            layer.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                layer.topAnchor.constraint(equalTo: view.topAnchor),
+                layer.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                layer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                layer.trailingAnchor.constraint(equalTo: view.trailingAnchor)
+            ])
+        }
+        effectsLayer.isUserInteractionEnabled = false
         view.addLayoutGuide(tableArea)
         prompt.isHidden = true
         arrangeView.isHidden = true
@@ -195,6 +218,7 @@ final class TDPGameViewController: UIViewController {
         let previous = lastView
         lastView = view
         dropStaleSelection(view)
+        let stolen = updatePointHold(from: previous, to: view)
 
         let me = view.mySeat
         let leftSeat = TDPRoles.nextSeat(me)     // plays after you
@@ -213,9 +237,10 @@ final class TDPGameViewController: UIViewController {
 
         let myInfo = seats[me]
         let (status, isAction) = statusLine(view)
+        let held = heldPointSeat != nil && heldPointSeat == me ? 1 : 0
         selfBadge.configure(name: driver.isSharedDevice ? (myInfo?.name ?? "You") : "You",
-                            tally: tally(myInfo),
-                            quotaMet: quotaMet(myInfo),
+                            tally: tally(myInfo, held: held),
+                            quotaMet: quotaMet(myInfo, held: held),
                             status: status,
                             statusIsAction: isAction,
                             isActive: acting.contains(me),
@@ -223,12 +248,114 @@ final class TDPGameViewController: UIViewController {
                             // A shared phone has several "you"s; only the owner has a photo.
                             photo: driver.isSharedDevice ? nil : PlayerProfile.photo)
 
-        renderTable(view, previous: previous)
+        renderTable(view, previous: previous, claiming: stolen)
         renderHand(view, animated: previous != nil)
         renderPrompt(view)
         renderArrange(view)
         renderCountdownAndBanner(view)
         renderCurtain(view)
+        if let previous { playFeedback(from: previous, to: view) }
+    }
+
+    // MARK: Sound and feel
+
+    /// Sounds for what just happened at the table, and a haptic only when
+    /// it happened to you. Worked out from the change between two views, so
+    /// it is the same for a bot, a friend's phone or this one.
+    private func playFeedback(from old: TDPClientView, to new: TDPClientView) {
+        let audio = GameAudio.shared
+        let me = new.mySeat
+        // A shared phone swaps whose hand it shows; that is not a deal.
+        let sameSeat = old.mySeat == new.mySeat
+
+        if new.roundNumber != old.roundNumber, new.roundNumber > 0 {
+            audio.play(.shuffle)
+        }
+
+        // Cards arriving in your hand: the deal, or a card handed back.
+        let gained = new.myHand.count - old.myHand.count
+        if sameSeat, gained > 0, new.roundNumber == old.roundNumber || old.myHand.isEmpty {
+            audio.play(.deal, times: min(gained, 5), every: 0.07)
+        }
+
+        if old.trump == nil, new.trump != nil {
+            audio.play(.flip)
+        }
+
+        // A card lands on the table — yours a touch louder. Your first cut
+        // of a suit is thrown down hard.
+        if new.currentTrick.count > old.currentTrick.count, let landed = new.currentTrick.last {
+            if driver.localSeats.contains(landed.seat), let trump = new.trump,
+               TDPMoments.isFirstCut(play: landed, trick: new.currentTrick, trump: trump, earlier: new.roundTricks),
+               let card = trickTable.cardView(at: spot(landed.seat, me: me)) {
+                moments.slam(card, card: landed.card, trump: trump)
+            } else {
+                audio.play(.play, volume: landed.seat == me ? 1 : 0.75)
+            }
+        }
+
+        // The trick is decided. Yours: the burst for a first cut; nothing yet
+        // for a steal — that waits for the trick to be taken; a small tap
+        // otherwise.
+        if new.phase == .trickResolve, old.phase != .trickResolve,
+           let winner = new.lastTrickWinnerSeat, driver.localSeats.contains(winner) {
+            switch moment(in: new, winner: winner) {
+            case .firstCut?:
+                if let play = new.currentTrick.first(where: { $0.seat == winner }),
+                   let card = trickTable.cardView(at: spot(winner, me: me)) {
+                    moments.burst(card, card: play.card, callout: callout(for: .firstCut))
+                }
+            case .steal?:
+                break
+            case nil:
+                GameHaptics.shared.play(.trickWon)
+            }
+        }
+        if old.phase == .trickResolve, new.phase != .trickResolve {
+            audio.play(.sweep, volume: 0.8)
+        }
+
+        // The pull: a card leaves the fan, and later one comes back.
+        if let before = old.khichai, let after = new.khichai, before.debtorSeat == after.debtorSeat {
+            if after.fanCount < before.fanCount {
+                audio.play(.flip)
+                if after.iAmCreditor { GameHaptics.shared.play(.cardPlay) }
+            }
+        }
+
+        // It's your move — felt, not heard.
+        let asks: Set<TDPPrompt> = [.playCard, .chooseTrump, .settleUp, .khichaiDraw, .arrangeCards]
+        if asks.contains(new.prompt), new.prompt != old.prompt {
+            GameHaptics.shared.play(.yourTurn)
+        }
+
+        // Winning the game.
+        if new.phase == .sessionEnd, old.phase != .sessionEnd {
+            let top = new.seats.map(\.score).max() ?? 0
+            if new.seats.first(where: { $0.seat == me })?.score == top {
+                GameHaptics.shared.play(.win)
+            }
+        }
+    }
+
+    /// The moment in a trick a seat on this phone just won. A steal needs
+    /// that seat's hand, which this view only has for its own seat.
+    private func moment(in view: TDPClientView, winner: TDPSeat) -> TDPMoment? {
+        if winner == view.mySeat {
+            return TDPMoments.moment(trick: view.currentTrick, winner: winner, winnerHand: view.myHand,
+                                     trump: view.trump, earlier: view.roundTricks)
+        }
+        guard let play = view.currentTrick.first(where: { $0.seat == winner }),
+              TDPMoments.isFirstCut(play: play, trick: view.currentTrick, trump: view.trump,
+                                    earlier: view.roundTricks) else { return nil }
+        return .firstCut
+    }
+
+    private func callout(for moment: TDPMoment) -> String {
+        switch moment {
+        case .firstCut:        return "CUT!"
+        case .steal(let rank): return "\(rank.shortString) STEALS IT"
+        }
     }
 
     private func configure(_ badge: TDPOpponentBadge, with seat: TDPSeatView?, tint: TDPTheme.Tint, active: Bool) {
@@ -246,14 +373,38 @@ final class TDPGameViewController: UIViewController {
     /// (or below) when tricks were given up, so test the role quota.
     private func targetKnown(_ seat: TDPSeatView) -> Bool { seat.baseQuota > 0 || seat.quota > 0 }
 
-    private func tally(_ seat: TDPSeatView?) -> String {
+    /// `held` tricks are won but not yet shown — a steal still on its way
+    /// to the pile.
+    private func tally(_ seat: TDPSeatView?, held: Int = 0) -> String {
         guard let seat else { return "—" }
-        return targetKnown(seat) ? "\(seat.tricksWon) / \(max(0, seat.quota))" : "\(seat.tricksWon)"
+        let won = max(0, seat.tricksWon - held)
+        return targetKnown(seat) ? "\(won) / \(max(0, seat.quota))" : "\(won)"
     }
 
-    private func quotaMet(_ seat: TDPSeatView?) -> Bool {
+    private func quotaMet(_ seat: TDPSeatView?, held: Int = 0) -> Bool {
         guard let seat, targetKnown(seat) else { return false }
-        return seat.tricksWon >= seat.quota
+        return seat.tricksWon - held >= seat.quota
+    }
+
+    /// A steal is celebrated once the point is confirmed — as the trick is
+    /// taken — so its count waits until then. Returns the steal's rank when
+    /// this update takes that trick, which the table then claims instead of
+    /// sweeping; otherwise any hold is dropped once its trick is gone.
+    private func updatePointHold(from previous: TDPClientView?, to view: TDPClientView) -> Rank? {
+        if let previous, view.phase == .trickResolve, previous.phase != .trickResolve,
+           let winner = view.lastTrickWinnerSeat, winner == view.mySeat,
+           case .steal? = moment(in: view, winner: winner) {
+            heldPointSeat = winner
+            return nil
+        }
+        let taken = previous?.phase == .trickResolve && view.currentTrick.isEmpty && view.phase != .trickResolve
+        if taken, let previous, heldPointSeat == previous.mySeat, view.mySeat == previous.mySeat,
+           trickTable.cardView(at: .bottom) != nil,
+           case .steal(let rank)? = moment(in: previous, winner: previous.mySeat) {
+            return rank                     // the hold lifts when the claim lands
+        }
+        if taken || view.roundNumber != previous?.roundNumber { heldPointSeat = nil }
+        return nil
     }
 
     /// "5 → 3" when this round's target moved because tricks were given up.
@@ -350,12 +501,23 @@ final class TDPGameViewController: UIViewController {
         return seat == TDPRoles.nextSeat(me) ? .left : .right
     }
 
-    private func renderTable(_ view: TDPClientView, previous: TDPClientView?) {
+    /// `claiming` is the rank of a steal whose trick this update takes.
+    private func renderTable(_ view: TDPClientView, previous: TDPClientView?, claiming: Rank?) {
         let me = view.mySeat
 
-        // A trick was just collected — sweep it toward the winner.
+        // A trick was just collected — sweep it toward the winner, or, for a
+        // steal, fly it into your count.
         if previous?.phase == .trickResolve, view.currentTrick.isEmpty, view.phase != .trickResolve {
-            trickTable.collect(toward: previous?.lastTrickWinnerSeat.map { spot($0, me: me) })
+            if let rank = claiming, let winner = trickTable.cardView(at: .bottom) {
+                moments.claim(trickTable.takeCards(), winner: winner, into: selfBadge.tallyView,
+                              callout: callout(for: .steal(rank))) { [weak self] in
+                    guard let self else { return }
+                    self.heldPointSeat = nil
+                    if let latest = self.lastView { self.render(latest) }      // the point lands
+                }
+            } else {
+                trickTable.collect(toward: previous?.lastTrickWinnerSeat.map { spot($0, me: me) })
+            }
         }
 
         let plays = view.currentTrick.map { (spot: spot($0.seat, me: me), card: $0.card) }
@@ -466,10 +628,11 @@ final class TDPGameViewController: UIViewController {
         guard view.prompt == .playCard, let id = card.card?.tdpID else { return }
         if selectedCardID == id {
             selectedCardID = nil
+            GameHaptics.shared.play(.cardPlay)
             driver.send(TDPIntent(kind: .playCard, cardID: id))
         } else {
             selectedCardID = id
-            UISelectionFeedbackGenerator().selectionChanged()
+            GameHaptics.shared.play(.select)
             render(view)
         }
     }
@@ -916,6 +1079,7 @@ final class TDPGameViewController: UIViewController {
     private func commitReturn() {
         guard let cardID = selectedCardID else { return }
         selectedCardID = nil
+        GameHaptics.shared.play(.cardPlay)
         driver.send(TDPIntent(kind: .khichaiReturn, cardID: cardID))
     }
 
@@ -924,6 +1088,14 @@ final class TDPGameViewController: UIViewController {
     @objc private func didTapMenu() {
         let sheet = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         sheet.addAction(UIAlertAction(title: "Scores", style: .default) { [weak self] _ in self?.showScores() })
+        #if DEBUG
+        sheet.addAction(UIAlertAction(title: "Debug · replay first cut", style: .default) { [weak self] _ in
+            self?.replayMoment(.firstCut)
+        })
+        sheet.addAction(UIAlertAction(title: "Debug · replay steal", style: .default) { [weak self] _ in
+            self?.replayMoment(.steal(.queen))
+        })
+        #endif
         sheet.addAction(UIAlertAction(title: "Leave table", style: .destructive) { [weak self] _ in self?.confirmLeave() })
         sheet.addAction(UIAlertAction(title: "Cancel", style: .cancel))
         sheet.popoverPresentationController?.sourceView = header.menuButton
@@ -932,6 +1104,36 @@ final class TDPGameViewController: UIViewController {
     }
 
     @objc private func didTapScores() { showScores() }
+
+    #if DEBUG
+    /// Plays a moment on a stand-in card in your spot — for tuning the
+    /// effect without setting up the play.
+    private func replayMoment(_ moment: TDPMoment) {
+        let trump = lastView?.trump ?? .hearts
+        let face: Card
+        switch moment {
+        case .firstCut: face = Card(suit: trump, rank: .nine)
+        case .steal:    face = Card(suit: trump == .clubs ? .spades : .clubs, rank: .queen)
+        }
+        let card = trickTable.debugPlace(face, at: .bottom)
+        guard moment == .firstCut else {
+            // A steal: the trick is taken into your count.
+            let others = [Card(suit: face.suit, rank: .nine), Card(suit: face.suit, rank: .ten)]
+            let trick = [trickTable.debugPlace(others[0], at: .left), trickTable.debugPlace(others[1], at: .right), card]
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                guard let self else { return }
+                self.moments.claim(trick, winner: card, into: self.selfBadge.tallyView,
+                                   callout: self.callout(for: moment)) {}
+            }
+            return
+        }
+        moments.slam(card, card: face, trump: trump)
+        moments.burst(card, card: face, callout: callout(for: moment))
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.2) {
+            UIView.animate(withDuration: 0.25, animations: { card.alpha = 0 }) { _ in card.removeFromSuperview() }
+        }
+    }
+    #endif
 
     private func showScores() {
         guard let view = lastView, presentedViewController == nil else { return }

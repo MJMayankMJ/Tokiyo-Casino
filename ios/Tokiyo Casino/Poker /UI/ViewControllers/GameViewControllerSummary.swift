@@ -93,12 +93,18 @@ extension GameViewController {
         hasCompletedFirstHand = true
         refreshHandDetailsButton()
 
+        // A special hand of yours (`PokerMoments`) is the win's celebration;
+        // the banner follows it.
+        let human = gm.humanPlayer
+        let record = human.map { PokerHandRecord(finishedAt: gm, by: $0) }
+        let moments = record.map(PokerMoments.moments(for:)) ?? []
+
         // Highlight winning cards on the table for the main (largest) pot
         // winner — this is the hand the user is currently being shown.
         if let main = handWinners.max(by: { $0.amount < $1.amount }),
            let mainEval = evaluations[main.player.id] {
             tableView.highlightWinningCards(mainEval.cards, winnerPlayerId: main.player.id)
-            tableView.showWinner(main.player)
+            if moments.isEmpty { tableView.showWinner(main.player) }
             tableView.animatePotTo(playerId: main.player.id)
         }
 
@@ -130,8 +136,15 @@ extension GameViewController {
 
         isShowingRoundResult = true
         let displayDuration: TimeInterval = multi ? 3.5 : 2.8
-        tableView.showRoundResultBanner(entries: entries, duration: displayDuration) { [weak self] in
-            self?.finishRoundResultMoment()
+        let showBanner: () -> Void = { [weak self] in
+            self?.tableView.showRoundResultBanner(entries: entries, duration: displayDuration) { [weak self] in
+                self?.finishRoundResultMoment()
+            }
+        }
+        if let record, let human, !moments.isEmpty {
+            momentEffects.play(moments, hand: record, seat: human.id, completion: showBanner)
+        } else {
+            showBanner()
         }
     }
 
@@ -205,16 +218,8 @@ extension GameViewController {
 
     // MARK: - Sound
     private func playResultSound(humanWon: Bool) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
-            guard let self else { return }
-            if humanWon {
-                self.winSoundManager.setupPlayer(soundName: "sfx_win", soundType: .m4a)
-                self.winSoundManager.play()
-            } else {
-                self.loseSoundManager.setupPlayer(soundName: "sfx_lose", soundType: .m4a)
-                self.loseSoundManager.play()
-            }
-        }
+        // The chips already sounded as the pot moved; the summary is quiet.
+        _ = humanWon
     }
 
     // MARK: - Coins settlement (Poker $ ↔︎ Tokyo Coins 1:1)

@@ -16,7 +16,7 @@ enum TDPProtocol {
 
     /// Bump on any breaking change to a payload shape.
     /// 3: settle-up choice, arranging window, per-round target changes.
-    static let version: Int = 4
+    static let version: Int = 5
 
     /// Bonjour service type. 1–15 lowercase ASCII per Apple's MPC docs.
     static let mpcServiceType = "tokiyo-tdp"

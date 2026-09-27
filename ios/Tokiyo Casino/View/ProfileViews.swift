@@ -337,6 +337,13 @@ final class ProfileViewController: UIViewController, PHPickerViewControllerDeleg
         cardsBlock.spacing = 10
         cardsBlock.translatesAutoresizingMaskIntoConstraints = false
 
+        // Sound and haptics, for every game.
+        let feelEyebrow = MPSectionEyebrowLabel(text: "Settings")
+        let feelBlock = UIStackView(arrangedSubviews: [feelEyebrow, settingsRows()])
+        feelBlock.axis = .vertical
+        feelBlock.spacing = 10
+        feelBlock.translatesAutoresizingMaskIntoConstraints = false
+
         // Everything scrolls, so the sheet works at any height.
         let scroll = UIScrollView()
         scroll.alwaysBounceVertical = true
@@ -358,7 +365,7 @@ final class ProfileViewController: UIViewController, PHPickerViewControllerDeleg
             content.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor)
         ])
 
-        [avatar, camera, avatarHit, photoButton, nameBlock, cardsBlock].forEach { content.addSubview($0) }
+        [avatar, camera, avatarHit, photoButton, nameBlock, cardsBlock, feelBlock].forEach { content.addSubview($0) }
         let readable = content.readableContentGuide
         NSLayoutConstraint.activate([
             avatar.topAnchor.constraint(equalTo: content.topAnchor, constant: 28),
@@ -382,7 +389,10 @@ final class ProfileViewController: UIViewController, PHPickerViewControllerDeleg
             cardsBlock.topAnchor.constraint(equalTo: nameBlock.bottomAnchor, constant: 36),
             cardsBlock.leadingAnchor.constraint(equalTo: nameBlock.leadingAnchor),
             cardsBlock.trailingAnchor.constraint(equalTo: nameBlock.trailingAnchor),
-            cardsBlock.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -32)
+            feelBlock.topAnchor.constraint(equalTo: cardsBlock.bottomAnchor, constant: 32),
+            feelBlock.leadingAnchor.constraint(equalTo: nameBlock.leadingAnchor),
+            feelBlock.trailingAnchor.constraint(equalTo: nameBlock.trailingAnchor),
+            feelBlock.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -32)
         ])
 
         refreshPhotoMenu(targets: [avatarHit, photoButton])
@@ -394,6 +404,54 @@ final class ProfileViewController: UIViewController, PHPickerViewControllerDeleg
             camera.layer.borderColor = MPTheme.pageBg.resolvedColor(with: controller.traitCollection).cgColor
         }
         camera.layer.borderColor = MPTheme.pageBg.resolvedColor(with: traitCollection).cgColor
+    }
+
+    private func settingsRows() -> UIView {
+        let box = UIStackView()
+        box.axis = .vertical
+        box.backgroundColor = MPTheme.glassWeak
+        box.layer.cornerRadius = 16
+        box.layer.cornerCurve = .continuous
+        box.clipsToBounds = true
+        let rows: [(String, String, Bool, (Bool) -> Void)] = [
+            ("Sound", "speaker.wave.2.fill", GameAudio.isEnabled, { on in
+                GameAudio.isEnabled = on
+                if on { GameAudio.shared.play(.play) }
+            }),
+            ("Haptics", "iphone.radiowaves.left.and.right", GameHaptics.isEnabled, { on in
+                GameHaptics.isEnabled = on
+                if on { GameHaptics.shared.play(.cardPlay) }
+            })
+        ]
+        for (index, row) in rows.enumerated() {
+            if index > 0 {
+                let rule = UIView()
+                rule.backgroundColor = MPTheme.glassDivider
+                rule.heightAnchor.constraint(equalToConstant: 1).isActive = true
+                box.addArrangedSubview(rule)
+            }
+            let icon = UIImageView(image: UIImage(systemName: row.1,
+                                                  withConfiguration: UIImage.SymbolConfiguration(pointSize: 15, weight: .medium)))
+            icon.tintColor = MPTheme.muted
+            icon.contentMode = .center
+            icon.widthAnchor.constraint(equalToConstant: 22).isActive = true
+            let title = UILabel()
+            title.text = row.0
+            title.font = MPFont.ui(16, weight: .semibold)
+            title.textColor = MPTheme.ink
+            let toggle = UISwitch()
+            toggle.isOn = row.2
+            toggle.onTintColor = MPTheme.amber
+            let action = row.3
+            toggle.addAction(UIAction { [weak toggle] _ in action(toggle?.isOn ?? false) }, for: .valueChanged)
+            let line = UIStackView(arrangedSubviews: [icon, title, UIView(), toggle])
+            line.spacing = 12
+            line.alignment = .center
+            line.isLayoutMarginsRelativeArrangement = true
+            line.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 10, leading: 16, bottom: 10, trailing: 14)
+            box.addArrangedSubview(line)
+        }
+        return box
     }
 
     private func gameRows() -> UIView {

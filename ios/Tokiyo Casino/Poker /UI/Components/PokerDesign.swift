@@ -39,6 +39,9 @@ enum PokerTheme {
     static let primaryAction = UIColor.dyn(light: 0xC99540, dark: 0xD9A958)
     static let primaryActionText = UIColor.dyn(light: 0x2E220D, dark: 0x241A0A)
     static let warn = UIColor.dyn(light: 0xC24A4A, dark: 0xD86056)
+    /// The light of a special moment (`PokerMomentEffects`) — the same gold
+    /// as 5-3-2's, a touch brighter than `amber`.
+    static let momentGold = UIColor.dyn(light: 0xE0A43A, dark: 0xF2C766)
 
     // Card back
     static let cardBack = UIColor.dyn(light: 0xC9A674, dark: 0x3D462E)

@@ -190,8 +190,12 @@ class PlayerView: UIView {
         if !hasHole || player.isFolded {
             showsRevealedOpponentCards = false
         }
-        card1.isHidden = !hasHole || player.isFolded
-        card2.isHidden = !hasHole || player.isFolded
+        let hide = !hasHole || player.isFolded
+        if hide, player.isFolded, !card1.isHidden, window != nil {
+            foldAway([card1, card2])        // the moment of folding
+        }
+        card1.isHidden = hide
+        card2.isHidden = hide
         card1.style = isHumanPlayer ? .hero : .face
         card2.style = isHumanPlayer ? .hero : .face
         if hasHole {
@@ -203,6 +207,15 @@ class PlayerView: UIView {
         updateHeroBetPill()
         setNeedsLayout()
     }
+
+    // MARK: - Moments (`PokerMomentEffects`)
+
+    /// The seat's two cards.
+    var holeCardViews: [CardView] { [card1, card2] }
+    /// The seat's picture.
+    var portrait: UIView? { avatar }
+    /// The chip count — where won chips land.
+    var stackTarget: UIView { stackLabel }
 
     func updateChips() {
         guard let player else { return }
@@ -597,8 +610,28 @@ class PlayerView: UIView {
         }
     }
 
+    /// Folded cards slide toward the middle and fade — ghosts, so the real
+    /// cards can hide at once and layout stays simple.
+    private func foldAway(_ cards: [CardView]) {
+        for card in cards where !card.isHidden {
+            guard let ghost = card.snapshotView(afterScreenUpdates: false) else { continue }
+            ghost.bounds = card.bounds
+            ghost.center = card.center
+            ghost.transform = card.transform
+            ghost.isUserInteractionEnabled = false
+            addSubview(ghost)
+            let rest = card.transform
+            UIView.animate(withDuration: 0.32, delay: 0, options: [.curveEaseIn]) {
+                ghost.center.y -= 18 * self.contentScale
+                ghost.transform = rest.rotated(by: 0.14).scaledBy(x: 0.85, y: 0.85)
+                ghost.alpha = 0
+            } completion: { _ in
+                ghost.removeFromSuperview()
+            }
+        }
+    }
+
     func showWinAnimation() {
-        UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
         UIView.animate(withDuration: 0.5, animations: {
             self.transform = CGAffineTransform(scaleX: 1.10, y: 1.10)
             self.nameStackPill.backgroundColor = PokerTheme.amber.withAlphaComponent(0.85)

@@ -101,4 +101,95 @@ enum TDPDebugScenario: CaseIterable {
         return score
     }
 }
+// MARK: - Big moments
+
+/// Debug builds: sit down at the exact trick where a first cut or a steal
+/// is one tap away. You play with two bots, who have already played to the
+/// trick; you play last. Everything after runs through the real engine.
+enum TDPMomentScenario: CaseIterable {
+    /// Spades led for the first time this round; you have none. Play a heart.
+    case firstCut
+    /// Clubs led low; you hold A♣ and Q♣, Meera holds K♣. Play the Q♣.
+    case steal
+
+    var title: String {
+        switch self {
+        case .firstCut: return "First cut — trump the first spade"
+        case .steal:    return "Steal — win with Q♣ (K♣ is out)"
+        }
+    }
+
+    func makeState(playerName: String) -> TDPGameState {
+        let players = [
+            TDPPlayer(id: "s0", name: playerName, seat: 0),
+            TDPPlayer(id: "s1", name: "Ravi", seat: 1, isAI: true),
+            TDPPlayer(id: "s2", name: "Meera", seat: 2, isAI: true)
+        ]
+        var state = TDPGameState(tableID: "debug-moment",
+                                 seed: UInt32.random(in: 1...UInt32.max),
+                                 players: players)
+        for index in state.players.indices { state.players[index].isReady = true }
+
+        // Round 1: Meera deals, you called trump (hearts) and led the first
+        // three tricks; Ravi won the third and has led the fourth.
+        let (earlier, onTable, hands) = deal()
+        state.roundNumber = 1
+        state.targetRounds = 3
+        state.dealerSeat = 2
+        state.trump = .hearts
+        state.trumpMethod = .choose
+        state.deck = []
+        for seat in 0..<3 { state.players[seat].hand = TDPDeck.sortHand(hands[seat]) }
+        state.roundTricks = earlier
+        for trick in earlier {
+            if let lead = trick.first?.card.suit,
+               let winner = TDPLegalMoves.trickWinner(plays: trick, trump: .hearts, leadSuit: lead),
+               let index = state.players.firstIndex(where: { $0.seat == winner }) {
+                state.players[index].tricksWon += 1
+                state.lastTrickWinnerSeat = winner
+            }
+        }
+        state.lastTrick = earlier.last ?? []
+        state.trickNumber = earlier.count
+        state.currentTrick = onTable
+        state.leadSuit = onTable.first?.card.suit
+        state.leaderSeat = 1
+        state.currentTurnSeat = 0
+        state.phase = .play
+        state.message = "Debug: your play."
+        return state
+    }
+
+    private func cards(_ ids: String) -> [Card] {
+        ids.split(separator: " ").compactMap { Card(tdpID: String($0)) }
+    }
+
+    private func plays(_ ids: String, from seats: [TDPSeat]) -> [TDPTrickPlay] {
+        zip(seats, cards(ids)).map { TDPTrickPlay(seat: $0, card: $1) }
+    }
+
+    /// Earlier tricks, the two cards already on the table, and what's left
+    /// in each hand — all 30 cards accounted for.
+    private func deal() -> ([[TDPTrickPlay]], [TDPTrickPlay], [[Card]]) {
+        let youLead: [TDPSeat] = [0, 1, 2]
+        switch self {
+        case .firstCut:
+            let earlier = [plays("AD 8D 9D", from: youLead),       // you win
+                           plays("AC 8C 9C", from: youLead),       // you win
+                           plays("10C QC JC", from: youLead)]      // Ravi wins, leads next
+            let onTable = plays("KS 8S", from: [1, 2])             // spades, for the first time
+            return (earlier, onTable, [cards("9H JH KH KD QD KC 10D"),           // you: no spades
+                                       cards("AS QS JS 7H 10H JD"),              // Ravi
+                                       cards("7S 9S 10S 8H QH AH")])             // Meera
+        case .steal:
+            let earlier = [plays("AD 8D 9D", from: youLead),
+                           plays("KD 10D JD", from: youLead),
+                           plays("7H QH 8H", from: youLead)]       // Ravi wins, leads next
+            let onTable = plays("9C 10C", from: [1, 2])            // Meera keeps her K♣ back
+            return (earlier, onTable, [cards("AC QC QD AH KH 9S 10S"),           // you: A♣ Q♣, no K♣
+                                       cards("8C JC 7S 8S JS 9H"),               // Ravi
+                                       cards("KC QS KS AS 10H JH")])             // Meera
+        }
+    }
+}
 #endif

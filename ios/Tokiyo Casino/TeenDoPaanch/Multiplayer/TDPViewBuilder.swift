@@ -82,6 +82,7 @@ enum TDPViewBuilder {
         view.settlement = settleView(state: state, seat: seat)
         view.concessions = state.concessions
         view.extendVote = extendVoteView(state: state)
+        view.roundTricks = state.roundTricks
         // A debtor's face-down order is their own hand, so only they get it.
         if let step = state.khichaiCurrent, step.debtorSeat == seat,
            let order = state.arrangements[String(seat)] {

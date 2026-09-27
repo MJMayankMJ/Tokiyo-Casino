@@ -117,6 +117,12 @@ extension GameViewController {
             newHandButton.widthAnchor.constraint(equalToConstant: 160),
             newHandButton.heightAnchor.constraint(equalToConstant: 52)
         ])
+
+        // Moments play over everything and never take a touch.
+        momentsLayer.frame = view.bounds
+        momentsLayer.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        momentsLayer.isUserInteractionEnabled = false
+        view.addSubview(momentsLayer)
     }
 
     @objc func syncMuteIcon() {

@@ -54,6 +54,10 @@ class GameViewController: UIViewController {
     // Gates the top-right details button until at least one hand has finished.
     var hasCompletedFirstHand: Bool = false
 
+    // Above everything: where your special hands play (`PokerMomentEffects`).
+    let momentsLayer = UIView()
+    lazy var momentEffects = PokerMomentEffects(table: tableView, overlay: momentsLayer)
+
     struct LastHandSummary {
         let playerSummaries: [PlayerSummary]
         let totalPot: Int
@@ -77,6 +81,7 @@ class GameViewController: UIViewController {
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
+        PokerFeel.prepare()
         setupUI()
         setupGame()
         setupNotifications()

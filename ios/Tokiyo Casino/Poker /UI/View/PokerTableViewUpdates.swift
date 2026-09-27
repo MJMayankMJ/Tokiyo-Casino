@@ -21,9 +21,12 @@ extension PokerTableView {
     }
 
     func showCommunityCards(_ cards: [Card]) {
+        var fresh = 0
         for (index, card) in cards.enumerated() {
             if index < communityCardViews.count {
                 let cardView = communityCardViews[index]
+                // Already on the felt: leave it be — only new cards deal in.
+                if !cardView.isHidden, cardView.card == card, cardView.isFaceUp { continue }
                 cardView.style = .face
                 cardView.setCard(card, faceUp: true)
                 cardView.isHidden = false
@@ -36,7 +39,7 @@ extension PokerTableView {
 
                 UIView.animate(
                     withDuration: 0.48,
-                    delay: Double(index) * 0.08,
+                    delay: Double(fresh) * 0.08,
                     usingSpringWithDamping: 0.78,
                     initialSpringVelocity: 0.7,
                     options: [.curveEaseOut]
@@ -44,6 +47,7 @@ extension PokerTableView {
                     cardView.alpha = 1
                     cardView.transform = .identity
                 }
+                fresh += 1
             }
         }
     }
@@ -80,6 +84,12 @@ extension PokerTableView {
                 playerViews[index].setHighlighted(p.id == player.id)
             }
         }
+    }
+
+    /// The seat of the player with `id`.
+    func playerView(for id: Int) -> PlayerView? {
+        guard let index = players.firstIndex(where: { $0.id == id }), index < playerViews.count else { return nil }
+        return playerViews[index]
     }
 
     func showWinner(_ winner: Player) {

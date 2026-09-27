@@ -37,9 +37,6 @@ final class BettingControlsView: UIView {
     private var quickStack = UIStackView()
 
     // Sound managers (unchanged behavior)
-    private var raiseSoundManager = SoundManager()
-    private var allInSoundManager = SoundManager()
-    private var checkSoundManager = SoundManager()
 
     // Public
     var onAction: ((PlayerAction) -> Void)?
@@ -69,16 +66,9 @@ final class BettingControlsView: UIView {
     override init(frame: CGRect) {
         super.init(frame: frame)
         backgroundColor = .clear
-        setupSounds()
         setupView()
     }
     required init?(coder: NSCoder) { fatalError() }
-
-    private func setupSounds() {
-        raiseSoundManager.setupPlayer(soundName: "sfx_chip_bet", soundType: .m4a)
-        allInSoundManager.setupPlayer(soundName: "sfx_chip_stack", soundType: .m4a)
-        checkSoundManager.setupPlayer(soundName: "sfx_table_knock", soundType: .m4a)
-    }
 
     private func setupView() {
         // Raise panel
@@ -284,8 +274,6 @@ final class BettingControlsView: UIView {
 
     /// Called by GameViewController when it's the human's turn.
     func updateForActions(_ actions: [PlayerAction], callAmount: Int, minRaise: Int, maxRaise: Int, currentBet: Int = 0, allInTotal: Int? = nil) {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-
         self.callAmount = callAmount
         self.currentTableBet = currentBet
         self.maxRaise = max(0, maxRaise)
@@ -363,39 +351,34 @@ final class BettingControlsView: UIView {
 
     // MARK: - Action handlers
 
+    // Sound and haptics follow the action itself (`PokerFeel`), so a bot's
+    // check sounds the same as yours and nothing plays twice.
     private func foldTapped() {
-        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         onAction?(.fold)
         hideWithAnimation()
     }
 
     private func checkCallTapped() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         if checkCallButton.label.lowercased() == "check" {
-            checkSoundManager.play()
             onAction?(.check)
         } else {
-            raiseSoundManager.play()
             onAction?(.call)
         }
         hideWithAnimation()
     }
 
     private func raiseTapped() {
-        UIImpactFeedbackGenerator(style: .light).impactOccurred()
         if !hasRaiseAction {
-            allInSoundManager.play()
             onAction?(.allIn)
             hideWithAnimation()
         } else if !raisePanelExpanded {
+            GameHaptics.shared.play(.select)
             showRaisePanel()
         } else if raiseValue >= maxRaise && maxRaise > 0 {
             // All-in convenience: pushing slider to max
-            allInSoundManager.play()
             onAction?(.allIn)
             hideWithAnimation()
         } else {
-            raiseSoundManager.play()
             onAction?(.raise(raiseValue))
             hideWithAnimation()
         }

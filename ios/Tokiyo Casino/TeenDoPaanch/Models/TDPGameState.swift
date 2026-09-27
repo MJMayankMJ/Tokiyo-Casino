@@ -114,6 +114,9 @@ struct TDPGameState: Codable {
     var currentTurnSeat: TDPSeat?
     var lastTrick: [TDPTrickPlay]
     var lastTrickWinnerSeat: TDPSeat?
+    /// This round's finished tricks, in order. Public — every card played
+    /// was seen by everyone.
+    var roundTricks: [[TDPTrickPlay]] = []
 
     // Session
     var roundNumber: Int
@@ -205,6 +208,7 @@ struct TDPGameState: Codable {
     /// Clears everything round-scoped, keeping seating and running scores.
     mutating func resetForNewRound() {
         extendVotes = [:]
+        roundTricks = []
         deck = TDPDeck.build()
         trump = nil
         trumpMethod = nil

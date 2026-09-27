@@ -222,6 +222,14 @@ extension PokerTableView {
                 betPills[player.id] = pill
                 addSubview(pill)
                 setNeedsLayout()
+                // Chips go down: the pill pops in beside the seat.
+                pill.alpha = 0
+                pill.transform = CGAffineTransform(scaleX: 0.6, y: 0.6)
+                UIView.animate(withDuration: 0.34, delay: 0, usingSpringWithDamping: 0.62,
+                               initialSpringVelocity: 0.5, options: [.allowUserInteraction]) {
+                    pill.alpha = 1
+                    pill.transform = .identity
+                }
             }
         } else if let existing = betPills[player.id] {
             UIView.animate(withDuration: 0.2, animations: {

@@ -42,6 +42,8 @@ enum TDPTheme {
     static let primary    = UIColor.dyn(light: 0xC99540, dark: 0x79DD9F)
     static let primaryInk = UIColor.dyn(light: 0x2E220D, dark: 0x0C2416)
     static let warn       = UIColor.dyn(light: 0xC24A4A, dark: 0xF66C6D)
+    /// The big moments' light — rays, sparks, the callout.
+    static let momentGold = UIColor.dyn(light: 0xE0A43A, dark: 0xF2C766)
 
     // MARK: Cards
 

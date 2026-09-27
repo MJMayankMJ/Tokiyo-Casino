@@ -1,0 +1,9 @@
+Table sounds in this folder (tk_*.caf)
+
+Card, chip and knock sounds are trimmed, level-matched edits of recordings
+from Kenney's "Casino Audio" and "Impact Sounds" packs
+(https://kenney.nl), released under Creative Commons Zero (CC0 1.0):
+http://creativecommons.org/publicdomain/zero/1.0/
+
+tk_slam_* layer an "Impact Sounds" soft impact under a "Casino Audio"
+card placement.
