@@ -38,15 +38,48 @@ import UIKit
 final class TDPMomentEffects {
 
     private let kit: MomentKit
+    private let compact: Bool
+    private var generation = 0
+    private var hidden: [UIView] = []
 
     /// `stage` is everything that shakes; `overlay` sits above it and holds
     /// the effects.
-    init(stage: UIView, overlay: UIView) {
+    init(stage: UIView, overlay: UIView, compact: Bool = false) {
+        self.compact = compact
         kit = MomentKit(stage: stage, overlay: overlay,
                         style: .init(gold: TDPTheme.momentGold, hairline: TDPTheme.hairline,
-                                     typeScale: TDPTheme.scale))
+                                     typeScale: compact ? 1 : TDPTheme.scale))
     }
 
+
+    /// The home tile uses the real cut beats, with a shorter hold.
+    func previewCut(_ source: UIView, card: Card, trump: Suit, completion: @escaping () -> Void) {
+        slam(source, card: card, trump: trump)
+        burst(source, card: card, callout: "FIRST CUT")
+        kit.run { finish in
+            finish()
+            completion()
+        }
+    }
+
+    /// Invalidate delayed work before a home preview disappears or is reset.
+    func cancel() {
+        generation += 1
+        kit.cancelAll()
+        hidden.forEach { $0.alpha = 1 }
+        hidden.removeAll()
+        kit.stage?.layer.removeAllAnimations()
+        kit.overlay?.subviews.forEach { $0.removeFromSuperview() }
+        kit.overlay?.layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+    }
+
+    private func after(_ delay: TimeInterval, _ work: @escaping () -> Void) {
+        let token = generation
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.generation == token else { return }
+            work()
+        }
+    }
 
     // MARK: Slam
 
@@ -55,14 +88,16 @@ final class TDPMomentEffects {
         kit.run { [weak self] finish in
             guard let self, let overlay = self.kit.overlay,
                   let ghost = self.ghost(of: source, card: card, in: overlay) else { finish(); return }
+            let token = self.generation
             let rest = ghost.transform
             let spot = ghost.center
+            self.hidden.append(source)
             source.alpha = 0
             GameHaptics.shared.play(.slam)
 
             guard !self.kit.reduceMotion else {
                 GameAudio.shared.play(.slam, delay: 0.32)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.32) {
+                self.after(0.32) {
                     self.kit.glowPulse(at: spot, size: ghost.bounds.width * 2.6)
                 }
                 self.end(ghost, source: source, after: 0.8, finish: finish)
@@ -75,23 +110,25 @@ final class TDPMomentEffects {
             ghost.transform = rest.scaledBy(x: 0.9, y: 0.9)
             let shadow = (radius: ghost.layer.shadowRadius, offset: ghost.layer.shadowOffset,
                           opacity: ghost.layer.shadowOpacity)
-            UIView.animate(withDuration: 0.2, delay: 0, options: [.curveEaseOut]) {
+            UIView.animate(withDuration: self.compact ? 0.12 : 0.2, delay: 0, options: [.curveEaseOut]) {
                 ghost.center = CGPoint(x: spot.x, y: spot.y - 110)
                 ghost.transform = rest.rotated(by: -0.22).scaledBy(x: 1.55, y: 1.55)
                 ghost.layer.shadowRadius = 22
                 ghost.layer.shadowOffset = CGSize(width: 0, height: 28)
                 ghost.layer.shadowOpacity = 0.3
             } completion: { _ in
+                guard self.generation == token else { return }
                 // 2. Smashed down, accelerating into the felt.
-                UIView.animate(withDuration: 0.12, delay: 0, options: [.curveEaseIn]) {
+                UIView.animate(withDuration: self.compact ? 0.08 : 0.12, delay: 0, options: [.curveEaseIn]) {
                     ghost.center = spot
                     ghost.transform = rest
                     ghost.layer.shadowRadius = shadow.radius
                     ghost.layer.shadowOffset = shadow.offset
                     ghost.layer.shadowOpacity = shadow.opacity
                 } completion: { _ in
+                    guard self.generation == token else { return }
                     self.impact(ghost, rest: rest, trump: trump)
-                    self.end(ghost, source: source, after: 0.62, finish: finish)
+                    self.end(ghost, source: source, after: self.compact ? 0.12 : 0.62, finish: finish)
                 }
             }
         }
@@ -106,7 +143,7 @@ final class TDPMomentEffects {
         debris(at: CGPoint(x: ghost.center.x, y: ghost.center.y + ghost.bounds.height * 0.3),
                width: w, trump: trump)
         // Hit-stop: everything holds for a beat, then reacts.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.07) { [weak self] in
+        self.after(0.07) { [weak self] in
             self?.kit.squash(ghost, rest: rest)
             if let stage = self?.kit.stage { self?.kit.shake(stage, amplitude: 11, duration: 0.45) }
         }
@@ -124,6 +161,7 @@ final class TDPMomentEffects {
             let rest = ghost.transform
             let spot = ghost.center
             let w = ghost.bounds.width
+            self.hidden.append(source)
             source.alpha = 0
             GameHaptics.shared.play(.reveal)
 
@@ -139,10 +177,11 @@ final class TDPMomentEffects {
             overlay.layer.insertSublayer(rays, below: glow)
 
             let lifted = rest.translatedBy(x: 0, y: -12).scaledBy(x: 1.14, y: 1.14)
-            let buildUp: TimeInterval = kit.reduceMotion ? 0.2 : 0.42
+            let buildUp: TimeInterval = kit.reduceMotion ? 0.2 : (self.compact ? 0.14 : 0.42)
+            let rewardHold: TimeInterval = self.compact ? 0.32 : 0.85
 
             // 1. Build-up: lift, a wobble that grows, light leaking out.
-            UIView.animate(withDuration: 0.22, delay: 0, options: [.curveEaseOut]) {
+            UIView.animate(withDuration: self.compact ? 0.12 : 0.22, delay: 0, options: [.curveEaseOut]) {
                 ghost.transform = lifted
             }
             if !kit.reduceMotion {
@@ -156,11 +195,11 @@ final class TDPMomentEffects {
             kit.animate(glow, key: "opacity", from: 0, to: 0.7, duration: buildUp, timing: .easeIn)
 
             // 2. Release.
-            DispatchQueue.main.asyncAfter(deadline: .now() + buildUp) {
+            self.after(buildUp) {
                 GameAudio.shared.play(.sweep, volume: 0.9)
                 kit.animate(rays, key: "opacity", from: 0, to: 1, duration: 0.14, timing: .easeOut)
                 if !kit.reduceMotion {
-                    kit.screenFlash(peak: kit.isDark ? 0.45 : 0.6, duration: 0.3)
+                    kit.screenFlash(peak: self.compact ? 0.22 : (kit.isDark ? 0.45 : 0.6), duration: 0.3)
                     let grow = CASpringAnimation(keyPath: "transform.scale")
                     grow.fromValue = 0.3
                     grow.toValue = 1
@@ -176,30 +215,31 @@ final class TDPMomentEffects {
                     kit.sparks(at: spot, width: w, behind: ghost)
                     kit.shockwave(at: spot, from: w * 1.2, to: w * 3.0, lineWidth: 5, duration: 0.55)
                 }
-                UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.45,
+                UIView.animate(withDuration: self.compact ? 0.25 : 0.5, delay: 0, usingSpringWithDamping: 0.45,
                                initialSpringVelocity: 0.9, options: []) {
                     ghost.transform = lifted.scaledBy(x: 1.08, y: 1.08)
                 }
                 // Above the whole trick, clear of the other two cards.
                 kit.showCallout(callout, at: CGPoint(x: spot.x, y: spot.y - ghost.bounds.height * 1.6 - 18),
-                                size: 19, hold: 0.85)
+                                size: 19, hold: rewardHold)
             }
 
             // 3. Settle back into the trick.
-            let settleAt = buildUp + 0.85
-            DispatchQueue.main.asyncAfter(deadline: .now() + settleAt) {
+            let settleAt = buildUp + rewardHold
+            let settleDuration: TimeInterval = self.compact ? 0.2 : 0.38
+            self.after(settleAt) {
                 kit.animate(rays, key: "opacity", from: 1, to: 0, duration: 0.35, timing: .easeIn)
                 kit.animate(glow, key: "opacity", from: 0.7, to: 0, duration: 0.35, timing: .easeIn)
-                UIView.animate(withDuration: 0.35, delay: 0, usingSpringWithDamping: 0.8,
+                UIView.animate(withDuration: self.compact ? 0.18 : 0.35, delay: 0, usingSpringWithDamping: 0.8,
                                initialSpringVelocity: 0, options: []) {
                     ghost.transform = rest
                 }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + settleAt + 0.38) {
+            self.after(settleAt + settleDuration) {
                 rays.removeFromSuperlayer()
                 glow.removeFromSuperlayer()
             }
-            self.end(ghost, source: source, after: settleAt + 0.38, finish: finish)
+            self.end(ghost, source: source, after: settleAt + settleDuration, finish: finish)
         }
     }
 
@@ -239,7 +279,7 @@ final class TDPMomentEffects {
                     ghosts.forEach { $0.removeFromSuperview() }
                     landed()
                     self.scoreHit(at: destination, target: target, callout: callout)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { finish() }
+                    self.after(1.0) { finish() }
                 }
                 return
             }
@@ -260,7 +300,7 @@ final class TDPMomentEffects {
             // 2. Into your pile, along an arc, trailing sparks.
             let fly: TimeInterval = 0.42
             let bend = CGPoint(x: stack.x + (destination.x - stack.x) * 0.2 + 56, y: min(stack.y, destination.y) - 36)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            self.after(0.2) {
                 let arc = UIBezierPath()
                 arc.move(to: stack)
                 arc.addQuadCurve(to: destination, controlPoint: bend)
@@ -281,21 +321,21 @@ final class TDPMomentEffects {
                 for step in 1...7 {
                     let t = CGFloat(step) / 8
                     let point = kit.point(onQuad: stack, bend, destination, at: pow(t, 1.6))
-                    DispatchQueue.main.asyncAfter(deadline: .now() + fly * Double(pow(t, 1.6))) {
+                    self.after(fly * Double(pow(t, 1.6))) {
                         kit.trailSpark(at: point, size: 13 - CGFloat(step))
                     }
                 }
             }
 
             // 3. The point lands.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 + fly) {
+            self.after(0.2 + fly) {
                 ghosts.forEach { $0.removeFromSuperview() }
                 GameAudio.shared.play(.play, volume: 0.8)
                 landed()
                 self.scoreHit(at: destination, target: target, callout: callout)
                 if let stage = kit.stage { kit.shake(stage, amplitude: 3.5, duration: 0.22) }
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2 + fly + 1.0) { finish() }
+            self.after(0.2 + fly + 1.0) { finish() }
         }
     }
 
@@ -323,7 +363,7 @@ final class TDPMomentEffects {
     /// A stand-in for `source`, drawn in the overlay in exactly its pose.
     private func ghost(of source: UIView, card: Card, in overlay: UIView) -> TDPCardButton? {
         guard let parent = source.superview else { return nil }
-        let ghost = TDPCardButton(card: card, elevation: .table)
+        let ghost = TDPCardButton(card: card, elevation: .table, design: (source as? TDPCardButton)?.design)
         ghost.isUserInteractionEnabled = false
         ghost.bounds = source.bounds
         ghost.center = overlay.convert(source.center, from: parent)
@@ -336,7 +376,8 @@ final class TDPMomentEffects {
     /// Hands the card back to the table once the ghost is at rest; if the
     /// trick has already gone, the ghost fades with it.
     private func end(_ ghost: UIView, source: UIView, after delay: TimeInterval, finish: @escaping () -> Void) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+        self.after(delay) {
+            self.hidden.removeAll { $0 === source }
             if source.window != nil {
                 source.alpha = 1
                 ghost.removeFromSuperview()

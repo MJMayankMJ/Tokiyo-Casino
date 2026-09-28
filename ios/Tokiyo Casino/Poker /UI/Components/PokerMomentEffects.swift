@@ -51,6 +51,63 @@ final class PokerMomentEffects {
                                      typeScale: DeviceLayout.pick(1.0, pad: 1.3)))
     }
 
+    /// A small stage can reuse the royal's score, tremble, and burst without
+    /// manufacturing a game table or changing any hand state.
+    init(previewStage: UIView, overlay: UIView) {
+        kit = MomentKit(stage: previewStage, overlay: overlay,
+                        style: .init(gold: PokerTheme.momentGold, hairline: PokerTheme.borderStrong,
+                                     typeScale: 1))
+    }
+
+    func previewRoyalFlush(_ sources: [CardView], completion: @escaping () -> Void) {
+        kit.run { [weak self] finish in
+            guard let self, let overlay = self.kit.overlay, sources.count == 5 else { finish(); completion(); return }
+            let ghosts = sources.compactMap { source in source.card.flatMap { self.ghost(of: source, card: $0) } }
+            guard ghosts.count == 5 else {
+                ghosts.forEach { $0.removeFromSuperview() }
+                finish()
+                completion()
+                return
+            }
+            self.hide(sources)
+            let width: CGFloat = 52
+            let gap: CGFloat = 7
+            let rowWidth = width * 5 + gap * 4
+            let row = CGPoint(x: overlay.bounds.midX, y: overlay.bounds.maxY - 98)
+            let poses = ghosts.enumerated().map { index, card in
+                (center: CGPoint(x: row.x + CGFloat(index - 2) * (width + gap), y: row.y),
+                 transform: CGAffineTransform(scaleX: width / card.bounds.width, y: width / card.bounds.width))
+            }
+            GameHaptics.shared.play(.legendary)
+            GameAudio.shared.play(.sweep, volume: 0.6)
+            for (index, ghost) in ghosts.enumerated() {
+                UIView.animate(withDuration: 0.14, delay: Double(index) * 0.02, options: [.curveEaseOut]) {
+                    ghost.center = poses[index].center
+                    ghost.transform = poses[index].transform
+                }
+                self.after(0.12 + Double(index) * 0.07) {
+                    self.score(ghost, pose: poses[index].transform, index: index)
+                }
+            }
+            let glow = self.tremble(ghosts, around: row, width: rowWidth, from: 0.43, until: 0.58)
+            self.after(0.58) {
+                self.burst(.royalFlush, ghosts: ghosts, poses: poses.map(\.transform), at: row,
+                           width: rowWidth, top: row.y - 38, hold: 0.38, compact: true)
+                if let glow {
+                    self.kit.animate(glow, key: "opacity", from: 0.75, to: 0, duration: 0.35, timing: .easeIn) {
+                        glow.removeFromSuperlayer()
+                    }
+                }
+            }
+            self.after(1.0) {
+                ghosts.forEach { $0.removeFromSuperview() }
+                self.show(sources)
+                finish()
+                completion()
+            }
+        }
+    }
+
     /// Plays a won hand's `moments` one after another for the player in
     /// `seat`; `completion` runs once the last has finished.
     func play(_ moments: [PokerMoment], hand: PokerHandRecord, seat: Int,
@@ -224,13 +281,13 @@ final class PokerMomentEffects {
 
     /// The hand's name bursts in over the row.
     private func burst(_ moment: PokerMoment, ghosts: [CardView], poses: [CGAffineTransform],
-                       at point: CGPoint, width: CGFloat, top: CGFloat, hold: TimeInterval) {
+                       at point: CGPoint, width: CGFloat, top: CGFloat, hold: TimeInterval, compact: Bool = false) {
         let royal = moment == .royalFlush
         GameAudio.shared.play(.slam, volume: 0.7)
         GameAudio.shared.play(.pot, delay: 0.05)
         kit.rays(at: point, diameter: width * (royal ? 1.9 : 1.6), hold: hold - 0.2, below: ghosts.first?.layer)
         if !kit.reduceMotion {
-            kit.screenFlash(peak: kit.isDark ? 0.42 : 0.58, duration: royal ? 0.45 : 0.3)
+            kit.screenFlash(peak: compact ? 0.20 : (kit.isDark ? 0.42 : 0.58), duration: royal ? 0.45 : 0.3)
             kit.shockwave(at: point, from: width * 0.45, to: width * 1.35, lineWidth: 6, duration: 0.6)
             kit.sparks(at: point, width: width, behind: ghosts.first)
             for (ghost, pose) in zip(ghosts, poses) {
@@ -243,7 +300,7 @@ final class PokerMomentEffects {
             if royal, let traits = kit.overlay?.traitCollection {
                 let colors = [PokerTheme.momentGold, PokerTheme.coral, PokerTheme.Chip.blue,
                               PokerTheme.forest, PokerTheme.Chip.purple, .white]
-                kit.confetti(colors: colors.map { $0.resolvedColor(with: traits) }, count: 44, duration: 1.8...2.6)
+                kit.confetti(colors: colors.map { $0.resolvedColor(with: traits) }, count: compact ? 22 : 44, duration: compact ? 0.4...0.7 : 1.8...2.6)
             }
         }
         if moment != .fourOfAKind, !kit.reduceMotion {
@@ -255,7 +312,7 @@ final class PokerMomentEffects {
         }
         kit.shakeStage(amplitude: royal ? 10 : 6, duration: royal ? 0.5 : 0.4)
         let (title, odds) = Self.name(of: moment)
-        kit.showCallout(title, subtitle: odds, at: CGPoint(x: point.x, y: top - 38),
+        kit.showCallout(title, subtitle: compact ? nil : odds, at: CGPoint(x: point.x, y: top - 38),
                         size: royal ? 24 : 21, hold: hold - 0.25)
     }
 

@@ -1,672 +1,257 @@
-//
-//  HomeViewController.swift
-//  Tokiyo Casino
-//
-//  Created by Mayank Jangid on 5/28/25.
-//
-
 import UIKit
 
-class HomeViewController: UIViewController, UIAdaptivePresentationControllerDelegate {
-
-    // MARK: - Outlets
-    @IBOutlet weak var labelTotalCoins: UILabel!
-    @IBOutlet weak var treasureChestImage: UIImageView!
-
-    private enum HomeGame: Int {
-        case poker = 1
-        // Jackaroo is parked while Teen Do Paanch is built out; the tile
-        // slot is reused rather than adding a third card to the grid.
-        case teenDoPaanch = 2
-    }
-
-    private var viewModel = HomeViewModel()
-    private var gameCards: [UIView] = []
-
-    // Shared radial-gradient backdrop used on the Poker & Jackaroo screens.
-    // Replaces the template city art (ww / Buildings / Cloud) so Home matches
-    // the in-game look and scales cleanly on iPhone + iPad (and follows
-    // light/dark automatically).
-    private let pageBackdrop = MPPageBackgroundView()
-    // Daily-spin prompt path is quarantined — see REBRAND_PRD.md §3.1 / Phase A.
-    // private var hasShownDailySpinPrompt = false
-
-    // First-launch chip grant key. Idempotent — one-time 1000-chip bonus on fresh install.
+/// A quiet game shelf, using the same adaptive palette as the 5-3-2 table.
+final class HomeViewController: UIViewController {
+    private let viewModel = HomeViewModel()
+    private let coinsLabel = HomeDesign.label("0", size: 14, weight: .semibold, style: .subheadline)
+    private let games = UIStackView()
+    private let header = UIStackView()
+    private let headerSpacer = UIView()
+    private var gameButtons: [HomeGameButton] = []
+    private var isOpeningGame = false
+    private var launchGeneration = 0
+    private var gridColumns = 0
+    var catalog = HomeGameItem.catalog
     private static let initialChipGrantKey = "didGrantInitialChips.v1"
-    private static let initialChipGrantAmount: Int64 = 1000
 
-    // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
-
-        installPageBackground()
+        view.backgroundColor = TDPTheme.page
+        buildHome()
         grantInitialChipsIfNeeded()
-
-        // The coin count was a fixed dark brown tuned for the old yellow
-        // background; switch it to the theme ink so it stays legible on the
-        // new (light/dark) backdrop.
-        labelTotalCoins.textColor = MPTheme.ink
-
-        setupGameCards()
-        setupTapGestures()
-        setupInitialAnimations()
-        setupDisclaimerLabel()
-
-        // Outlet was originally the daily-spin treasure chest. Replace the storyboard
-        // imageView (SF Symbol placeholder) with the same MPChipView used in the
-        // poker chips slider thumb so the chip indicator on Home matches that style.
-        installMPChipInHeader()
-        installProfileButton()
-
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(coinsDidChange),
-            name: CoinsManager.coinsDidChangeNotification,
-            object: nil
-        )
-    }
-
-    private func grantInitialChipsIfNeeded() {
-        let defaults = UserDefaults.standard
-        guard !defaults.bool(forKey: Self.initialChipGrantKey) else { return }
-        CoinsManager.shared.addCoins(amount: Self.initialChipGrantAmount) { _ in
-            defaults.set(true, forKey: Self.initialChipGrantKey)
+        registerForTraitChanges([UITraitPreferredContentSizeCategory.self]) { (home: HomeViewController, _: UITraitCollection) in
+            home.view.setNeedsLayout()
         }
+        NotificationCenter.default.addObserver(self, selector: #selector(cancelGameLaunch),
+            name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(refreshCoins),
+            name: CoinsManager.coinsDidChangeNotification, object: nil)
     }
 
-    /// Inserts the shared gradient backdrop behind the (unchanged) game cards.
-    /// The storyboard's view background is set to clear and its template image
-    /// views (ww / Buildings / Cloud) are emptied so this shows through.
-    private func installPageBackground() {
-        view.backgroundColor = MPTheme.pageBg
-        pageBackdrop.translatesAutoresizingMaskIntoConstraints = false
-        view.insertSubview(pageBackdrop, at: 0)
-        NSLayoutConstraint.activate([
-            pageBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
-            pageBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            pageBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            pageBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-        ])
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.setNavigationBarHidden(true, animated: animated)
+        cancelGameLaunch()
+        refreshCoins()
     }
 
-    private func installMPChipInHeader() {
-        guard let chip = treasureChestImage,
-              let stack = chip.superview as? UIStackView else { return }
-
-        let index = stack.arrangedSubviews.firstIndex(of: chip) ?? 0
-        stack.removeArrangedSubview(chip)
-        chip.removeFromSuperview()
-
-        let chipSize: CGFloat = 28
-        let chipView = MPChipView(size: chipSize, color: MPTheme.amber)
-        chipView.translatesAutoresizingMaskIntoConstraints = false
-        chipView.widthAnchor.constraint(equalToConstant: chipSize).isActive = true
-        chipView.heightAnchor.constraint(equalToConstant: chipSize).isActive = true
-        stack.insertArrangedSubview(chipView, at: index)
-    }
-
-    /// Top-left, level with the chip count: the player's avatar, opening
-    /// Profile. Shared by every game.
-    private func installProfileButton() {
-        let avatar = ProfileAvatarView(diameter: 40)
-        avatar.followsProfile = true
-        avatar.accessibilityHint = "Opens your profile"
-        avatar.addTarget(self, action: #selector(didTapProfile), for: .touchUpInside)
-        view.addSubview(avatar)
-
-        // The chip count was pinned 36pt from the top edge, which puts it
-        // under the status bar on notched phones. Hang it (and so the
-        // avatar level with it) just below the safe area instead.
-        if let chips = labelTotalCoins.superview, let holder = chips.superview {
-            holder.constraints
-                .filter { ($0.firstItem === chips && $0.firstAttribute == .top)
-                    || ($0.secondItem === chips && $0.secondAttribute == .top) }
-                .forEach { $0.isActive = false }
-            chips.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 6).isActive = true
-        }
-
-        NSLayoutConstraint.activate([
-            avatar.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
-            avatar.centerYAnchor.constraint(equalTo: labelTotalCoins.centerYAnchor)
-        ])
-    }
-
-    @objc private func didTapProfile() {
-        present(ProfileViewController.sheet(), animated: true)
-    }
-
-    /// First launch: ask for a name before anything else.
-    private func showOnboardingIfNeeded() {
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
         guard !PlayerProfile.hasOnboarded, presentedViewController == nil else { return }
         let onboarding = OnboardingViewController()
         onboarding.modalPresentationStyle = .fullScreen
         present(onboarding, animated: false)
     }
 
-    private weak var disclaimerPill: UIView?
-    private weak var disclaimerInfoButton: UIButton?
-    private static let disclaimerSeenKey = "homeDisclaimerSeen.v1"
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        cancelGameLaunch()
+    }
 
-    private func setupDisclaimerLabel() {
-        // Expanded pill
-        let pill = UIView()
-        pill.backgroundColor = UIColor(red: 0.10, green: 0.08, blue: 0.06, alpha: 0.85)
-        pill.layer.cornerRadius = 10
-        pill.layer.borderWidth = 1
-        pill.layer.borderColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 0.55).cgColor
-        pill.translatesAutoresizingMaskIntoConstraints = false
-        pill.isUserInteractionEnabled = true
-        view.addSubview(pill)
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        let accessible = traitCollection.preferredContentSizeCategory.isAccessibilityCategory
+        header.axis = accessible ? .vertical : .horizontal
+        header.alignment = accessible ? .leading : .center
+        headerSpacer.isHidden = accessible
+        let wide = !accessible && view.safeAreaLayoutGuide.layoutFrame.width >= HomeDesign.wideBreakpoint
+        updateGameGrid(columns: wide ? 2 : 1)
+    }
 
-        let disclaimer = UILabel()
-        disclaimer.text = "For entertainment only. Virtual chips have no real-world value."
-        disclaimer.font = .systemFont(ofSize: 11, weight: .semibold)
-        disclaimer.textColor = UIColor(red: 1, green: 0.95, blue: 0.85, alpha: 1)
+    deinit { NotificationCenter.default.removeObserver(self) }
+
+    private func buildHome() {
+        let scroll = UIScrollView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.alwaysBounceVertical = false
+        scroll.showsVerticalScrollIndicator = false
+        view.addSubview(scroll)
+
+        let content = UIStackView()
+        content.axis = .vertical
+        content.spacing = HomeDesign.sectionGap
+        content.translatesAutoresizingMaskIntoConstraints = false
+        scroll.addSubview(content)
+        let preferredWidth = content.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor,
+                                                             constant: -HomeDesign.pageInset * 2)
+        preferredWidth.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor),
+            scroll.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
+            scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
+            content.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 12),
+            content.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24),
+            content.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: HomeDesign.pageInset),
+            content.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -HomeDesign.pageInset),
+            content.centerXAnchor.constraint(equalTo: scroll.frameLayoutGuide.centerXAnchor),
+            content.widthAnchor.constraint(lessThanOrEqualToConstant: HomeDesign.maxWidth),
+            preferredWidth
+        ])
+
+        content.addArrangedSubview(makeHeader())
+        let intro = UIStackView()
+        intro.axis = .vertical
+        intro.spacing = 8
+        let eyebrow = HomeDesign.label("THE GOOD HAND CLUB", size: 10, weight: .semibold, style: .caption2,
+                                       color: TDPTheme.accent)
+        eyebrow.attributedText = NSAttributedString(string: eyebrow.text ?? "", attributes: [.kern: 2])
+        let title = HomeDesign.label("Pick your table.", size: 34, weight: .semibold, style: .largeTitle)
+        title.accessibilityTraits = .header
+        let subtitle = HomeDesign.label("A few cards. A little friendly competition.", size: 14,
+                                        style: .subheadline, color: TDPTheme.inkSoft)
+        [eyebrow, title, subtitle].forEach { intro.addArrangedSubview($0) }
+        content.addArrangedSubview(intro)
+
+        games.axis = .vertical
+        games.spacing = HomeDesign.cardGap
+        gameButtons = catalog.map { item in
+            let button = HomeGameButton(game: item)
+            button.addTarget(self, action: #selector(openGame(_:)), for: .touchUpInside)
+            return button
+        }
+        updateGameGrid(columns: 1)
+        content.addArrangedSubview(games)
+
+        let footer = UIStackView()
+        footer.axis = .vertical
+        footer.alignment = .center
+        footer.spacing = 10
+        let offline = HomeDesign.label("Solo or with friends · Always a good time", size: 12,
+                                       style: .caption1, color: TDPTheme.inkSoft)
+        offline.textAlignment = .center
+        let disclaimer = HomeDesign.label("For entertainment only.\nVirtual chips have no real-world value.", size: 11,
+                                           style: .caption2, color: TDPTheme.inkSoft)
         disclaimer.textAlignment = .center
-        disclaimer.numberOfLines = 0
-        disclaimer.translatesAutoresizingMaskIntoConstraints = false
-        pill.addSubview(disclaimer)
+        footer.addArrangedSubview(offline)
+        footer.addArrangedSubview(disclaimer)
+        content.addArrangedSubview(footer)
+    }
 
-        let pillTap = UITapGestureRecognizer(target: self, action: #selector(collapseDisclaimer))
-        pill.addGestureRecognizer(pillTap)
-
-        // Collapsed info button (SF Symbol)
-        var cfg = UIButton.Configuration.plain()
-        cfg.image = UIImage(systemName: "info.circle.fill",
-                            withConfiguration: UIImage.SymbolConfiguration(pointSize: 18, weight: .regular))
-        cfg.baseForegroundColor = UIColor(red: 0.18, green: 0.14, blue: 0.10, alpha: 0.70)
-        cfg.contentInsets = .zero
-
-        let infoButton = UIButton(configuration: cfg)
-        infoButton.translatesAutoresizingMaskIntoConstraints = false
-        infoButton.backgroundColor = .clear
-        infoButton.accessibilityLabel = "Show disclaimer"
-        infoButton.alpha = 0
-        infoButton.addTarget(self, action: #selector(expandDisclaimer), for: .touchUpInside)
-        view.addSubview(infoButton)
-
-        NSLayoutConstraint.activate([
-            pill.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16),
-            pill.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-            pill.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -8),
-
-            disclaimer.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: 12),
-            disclaimer.trailingAnchor.constraint(equalTo: pill.trailingAnchor, constant: -12),
-            disclaimer.topAnchor.constraint(equalTo: pill.topAnchor, constant: 8),
-            disclaimer.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -8),
-
-            infoButton.widthAnchor.constraint(equalToConstant: 32),
-            infoButton.heightAnchor.constraint(equalToConstant: 32),
-            infoButton.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
-            infoButton.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -6)
-        ])
-
-        self.disclaimerPill = pill
-        self.disclaimerInfoButton = infoButton
-
-        // Decide initial state
-        let alreadySeen = UserDefaults.standard.bool(forKey: Self.disclaimerSeenKey)
-        if alreadySeen {
-            // Start collapsed
-            pill.alpha = 0
-            pill.isHidden = true
-            infoButton.alpha = 1
-        } else {
-            // Show full pill, auto-collapse after 4s
-            UserDefaults.standard.set(true, forKey: Self.disclaimerSeenKey)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) { [weak self] in
-                self?.collapseDisclaimer()
+    private func updateGameGrid(columns: Int) {
+        guard columns != gridColumns else { return }
+        cancelGameLaunch()
+        gridColumns = columns
+        gameButtons.forEach { $0.removeFromSuperview(); $0.isWideLayout = columns == 2 }
+        for row in games.arrangedSubviews {
+            games.removeArrangedSubview(row)
+            row.removeFromSuperview()
+        }
+        for index in stride(from: 0, to: gameButtons.count, by: columns) {
+            if columns == 1 {
+                games.addArrangedSubview(gameButtons[index])
+            } else {
+                let row = UIStackView()
+                row.axis = .horizontal
+                row.distribution = .fillEqually
+                row.spacing = HomeDesign.cardGap
+                row.addArrangedSubview(gameButtons[index])
+                row.addArrangedSubview(index + 1 < gameButtons.count ? gameButtons[index + 1] : UIView())
+                games.addArrangedSubview(row)
             }
         }
     }
 
-    @objc private func collapseDisclaimer() {
-        guard let pill = disclaimerPill, let button = disclaimerInfoButton, !pill.isHidden else { return }
-        UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut], animations: {
-            pill.alpha = 0
-            pill.transform = CGAffineTransform(scaleX: 0.6, y: 0.6).translatedBy(x: pill.bounds.width / 2 - 40, y: 0)
-            button.alpha = 1
-        }, completion: { _ in
-            pill.isHidden = true
-            pill.transform = .identity
-        })
+    private func makeHeader() -> UIView {
+        header.alignment = .center
+        header.spacing = 12
+        let brand = UIStackView()
+        brand.alignment = .center
+        brand.spacing = 8
+        let mark = UIImageView(image: UIImage(named: "TokiyoMark"))
+        mark.contentMode = .scaleAspectFit
+        mark.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([mark.widthAnchor.constraint(equalToConstant: 34), mark.heightAnchor.constraint(equalToConstant: 42)])
+        let words = UIStackView()
+        words.axis = .vertical
+        words.spacing = 0
+        let name = HomeDesign.label("tokiyo", size: 24, weight: .bold, style: .title2)
+        let cards = HomeDesign.label("C A R D S", size: 8, weight: .semibold, style: .caption2, color: TDPTheme.inkSoft)
+        // This is a wordmark, not body copy; retain the compact brand lockup.
+        name.font = .systemFont(ofSize: 24, weight: .bold)
+        name.adjustsFontForContentSizeCategory = false
+        name.numberOfLines = 1
+        cards.font = .systemFont(ofSize: 8, weight: .semibold)
+        cards.adjustsFontForContentSizeCategory = false
+        cards.numberOfLines = 1
+        words.addArrangedSubview(name)
+        words.addArrangedSubview(cards)
+        brand.addArrangedSubview(mark)
+        brand.addArrangedSubview(words)
+        brand.isAccessibilityElement = true
+        brand.accessibilityLabel = "Tokiyo Cards"
+        header.addArrangedSubview(brand)
+        headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        header.addArrangedSubview(headerSpacer)
+
+        let balance = UIStackView()
+        balance.alignment = .center
+        balance.spacing = 6
+        balance.isLayoutMarginsRelativeArrangement = true
+        balance.layoutMargins = UIEdgeInsets(top: 10, left: 12, bottom: 10, right: 12)
+        balance.backgroundColor = TDPTheme.raised
+        balance.layer.cornerRadius = 18
+        let chip = UIImageView(image: UIImage(systemName: "circle.hexagongrid.fill"))
+        chip.tintColor = TDPTheme.primary
+        chip.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([chip.widthAnchor.constraint(equalToConstant: 16), chip.heightAnchor.constraint(equalToConstant: 16)])
+        coinsLabel.numberOfLines = 1
+        coinsLabel.font = UIFontMetrics(forTextStyle: .subheadline).scaledFont(for: .monospacedDigitSystemFont(ofSize: 14, weight: .semibold))
+        coinsLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        balance.addArrangedSubview(chip)
+        balance.addArrangedSubview(coinsLabel)
+        header.addArrangedSubview(balance)
+        let avatar = ProfileAvatarView(diameter: 44)
+        avatar.followsProfile = true
+        avatar.accessibilityTraits = .button
+        avatar.accessibilityHint = "Opens your profile"
+        avatar.accessibilityIdentifier = "home.profile"
+        avatar.addTarget(self, action: #selector(openProfile), for: .touchUpInside)
+        header.addArrangedSubview(avatar)
+        return header
     }
 
-    @objc private func expandDisclaimer() {
-        guard let pill = disclaimerPill, let button = disclaimerInfoButton else { return }
-        pill.isHidden = false
-        pill.alpha = 0
-        pill.transform = CGAffineTransform(scaleX: 0.6, y: 0.6).translatedBy(x: pill.bounds.width / 2 - 40, y: 0)
-        UIView.animate(withDuration: 0.35, delay: 0, options: [.curveEaseInOut], animations: {
-            pill.alpha = 1
-            pill.transform = .identity
-            button.alpha = 0
-        })
-        // Auto-collapse again after a few seconds
-        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
-            self?.collapseDisclaimer()
+    private func grantInitialChipsIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.initialChipGrantKey) else { return }
+        CoinsManager.shared.addCoins(amount: 1000) { _ in
+            UserDefaults.standard.set(true, forKey: Self.initialChipGrantKey)
         }
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
+    @objc private func refreshCoins() {
         viewModel.fetchUserStats()
-        updateUI()
+        let amount = viewModel.totalCoins
+        coinsLabel.text = amount.formatted(.number.notation(.compactName))
+        coinsLabel.accessibilityLabel = "\(amount.formatted()) virtual chips"
     }
 
-    override func viewDidAppear(_ animated: Bool) {
-        super.viewDidAppear(animated)
-
-        // Daily-spin prompt path quarantined.
-        // if !hasShownDailySpinPrompt && viewModel.canSpinForCoins {
-        //     showDailySpinPrompt()
-        //     hasShownDailySpinPrompt = true
-        // }
-
-        startIdleAnimations()
-        showOnboardingIfNeeded()
+    @objc private func openProfile() {
+        cancelGameLaunch()
+        present(ProfileViewController.sheet(), animated: true)
     }
 
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        stopIdleAnimations()
+    @objc private func cancelGameLaunch() {
+        launchGeneration += 1
+        isOpeningGame = false
+        gameButtons.forEach { $0.resetPreview() }
     }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
-    // MARK: - Setup
-    private func setupGameCards() {
-        guard let stackView = findGameCardsStackView() else {
-            #if DEBUG
-            print("Warning: Could not find game cards stack view")
-            #endif
-            return
-        }
-
-        removeExistingStoryboardCards(from: stackView)
-
-        if DeviceLayout.isPad {
-            // The storyboard pins this stack to a fixed 295pt width tuned for
-            // iPhone. Relax it so the larger iPad cards can size themselves,
-            // and give them more breathing room vertically.
-            stackView.constraints
-                .filter { $0.firstItem === stackView && $0.firstAttribute == .width && $0.secondItem == nil }
-                .forEach { $0.isActive = false }
-            stackView.spacing = 26
-        }
-
-        let pokerCard = makeGameCard(
-            game: .poker,
-            title: "POKER",
-            imageName: "game1icon",
-            badgeText: nil
-        )
-
-        let teenDoPaanchCard = makeGameCard(
-            game: .teenDoPaanch,
-            title: "5-3-2",
-            imageName: "game2icon",
-            badgeText: "NEW"
-        )
-
-        [pokerCard, teenDoPaanchCard].forEach {
-            stackView.addArrangedSubview($0)
-            gameCards.append($0)
-        }
-    }
-
-    private func removeExistingStoryboardCards(from stackView: UIStackView) {
-        let cardViews = stackView.arrangedSubviews.filter { view in
-            view.subviews.contains { $0 is CustomShapeView }
-        }
-
-        cardViews.forEach {
-            stackView.removeArrangedSubview($0)
-            $0.removeFromSuperview()
-        }
-    }
-
-    private func makeGameCard(game: HomeGame,
-                              title: String,
-                              imageName: String,
-                              badgeText: String?) -> UIView {
-        // iPhone keeps its original tuning (s == 1); iPad scales every metric
-        // up so the cards fill the larger canvas instead of floating small.
-        let s = DeviceLayout.scale
-
-        let container = UIView()
-        container.tag = game.rawValue
-        container.translatesAutoresizingMaskIntoConstraints = false
-        container.isUserInteractionEnabled = true
-        container.isAccessibilityElement = true
-        container.accessibilityLabel = badgeText == nil ? title : "\(title), \(badgeText!)"
-        container.accessibilityTraits = .button
-
-        let tap = UITapGestureRecognizer(target: self, action: #selector(didTapGameCard(_:)))
-        container.addGestureRecognizer(tap)
-
-        let backgroundShape = CustomShapeView()
-        backgroundShape.translatesAutoresizingMaskIntoConstraints = false
-        backgroundShape.slant = 30 * s
-        backgroundShape.cornerRadius = 20 * s
-        backgroundShape.fillColor = UIColor(red: 0.31, green: 0.26, blue: 0.19, alpha: 1.0)
-        container.addSubview(backgroundShape)
-
-        let contentStack = UIStackView()
-        contentStack.axis = .horizontal
-        contentStack.alignment = .center
-        contentStack.spacing = 8 * s
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(contentStack)
-
-        // The character artwork gets an extra bump on iPad so it reads as the
-        // hero of the card rather than a small thumbnail next to a wide panel.
-        let iconSize = 100 * s * DeviceLayout.pick(1.0, pad: 1.32)
-        let artworkView = UIImageView(image: UIImage(named: imageName))
-        artworkView.contentMode = .scaleAspectFit
-        artworkView.translatesAutoresizingMaskIntoConstraints = false
-        artworkView.widthAnchor.constraint(equalToConstant: iconSize).isActive = true
-        artworkView.heightAnchor.constraint(equalToConstant: iconSize).isActive = true
-
-        let titleLabel = UILabel()
-        titleLabel.text = title
-        titleLabel.font = .boldSystemFont(ofSize: 17 * s)
-        titleLabel.textColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 1)
-        titleLabel.adjustsFontSizeToFitWidth = true
-        titleLabel.minimumScaleFactor = 0.75
-
-        let textStack = UIStackView()
-        textStack.axis = .vertical
-        textStack.alignment = .leading
-        textStack.spacing = 4 * s
-        textStack.addArrangedSubview(titleLabel)
-
-        if let badgeText {
-            let badgeLabel = UILabel()
-            badgeLabel.text = badgeText
-            badgeLabel.font = .boldSystemFont(ofSize: 10 * s)
-            badgeLabel.textColor = UIColor(red: 0.16, green: 0.11, blue: 0.06, alpha: 1)
-            badgeLabel.backgroundColor = UIColor(red: 1, green: 0.706, blue: 0.204, alpha: 1)
-            badgeLabel.layer.cornerRadius = 7 * s
-            badgeLabel.layer.masksToBounds = true
-            badgeLabel.textAlignment = .center
-            badgeLabel.translatesAutoresizingMaskIntoConstraints = false
-            badgeLabel.widthAnchor.constraint(greaterThanOrEqualToConstant: 88 * s).isActive = true
-            badgeLabel.heightAnchor.constraint(equalToConstant: 18 * s).isActive = true
-            textStack.addArrangedSubview(badgeLabel)
-        }
-
-        let buttonView = UIImageView(image: UIImage(named: "blueButton"))
-        buttonView.contentMode = .scaleAspectFit
-        buttonView.translatesAutoresizingMaskIntoConstraints = false
-        buttonView.widthAnchor.constraint(equalToConstant: 52 * s).isActive = true
-        buttonView.heightAnchor.constraint(equalToConstant: 50 * s).isActive = true
-
-        contentStack.addArrangedSubview(artworkView)
-        contentStack.addArrangedSubview(textStack)
-        contentStack.addArrangedSubview(buttonView)
-
-        NSLayoutConstraint.activate([
-            container.widthAnchor.constraint(equalToConstant: 295 * s),
-            container.heightAnchor.constraint(equalToConstant: 116 * s),
-
-            backgroundShape.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            backgroundShape.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -15 * s),
-            backgroundShape.topAnchor.constraint(equalTo: container.topAnchor, constant: 30 * s),
-            backgroundShape.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-
-            contentStack.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            contentStack.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            contentStack.topAnchor.constraint(equalTo: container.topAnchor),
-            contentStack.bottomAnchor.constraint(equalTo: container.bottomAnchor)
-        ])
-
-        return container
-    }
-
-    private func findGameCardsStackView() -> UIStackView? {
-        func findStackView(in view: UIView) -> UIStackView? {
-            if let stackView = view as? UIStackView,
-               stackView.axis == .vertical,
-               stackView.arrangedSubviews.contains(where: { arrangedView in
-                   arrangedView.subviews.contains { $0 is CustomShapeView }
-               }) {
-                return stackView
-            }
-
-            for subview in view.subviews {
-                if let found = findStackView(in: subview) {
-                    return found
-                }
-            }
-            return nil
-        }
-
-        return findStackView(in: view)
-    }
-
-    private func setupTapGestures() {
-        // Treasure chest tap retired with the daily-spin module.
-        // treasureChestImage.isUserInteractionEnabled = true
-        // treasureChestImage.accessibilityLabel = "Daily spins"
-        // treasureChestImage.accessibilityTraits = .button
-        //
-        // let chestTap = UITapGestureRecognizer(target: self, action: #selector(didTapTreasureChest))
-        // treasureChestImage.addGestureRecognizer(chestTap)
-    }
-
-    private func setupInitialAnimations() {
-        gameCards.forEach { card in
-            card.transform = CGAffineTransform(translationX: 0, y: 50).scaledBy(x: 0.8, y: 0.8)
-            card.alpha = 0
-        }
-
-        for (index, card) in gameCards.enumerated() {
-            UIView.animate(
-                withDuration: 0.8,
-                delay: 0.2 + (Double(index) * 0.2),
-                usingSpringWithDamping: 0.7,
-                initialSpringVelocity: 0.5
-            ) {
-                card.transform = .identity
-                card.alpha = 1
+    @objc private func openGame(_ button: HomeGameButton) {
+        guard !isOpeningGame, presentedViewController == nil else { return }
+        isOpeningGame = true
+        let token = launchGeneration
+        button.playPreview { [weak self] in
+            guard let self, self.launchGeneration == token, self.isOpeningGame,
+                  self.view.window != nil, self.presentedViewController == nil else { return }
+            let controller = button.game.makeViewController()
+            if let navigationController = self.navigationController {
+                // 5-3-2 uses the system back button; Poker hides it in its own lifecycle.
+                navigationController.setNavigationBarHidden(false, animated: true)
+                navigationController.pushViewController(controller, animated: true)
+            } else {
+                controller.modalPresentationStyle = .fullScreen
+                self.present(controller, animated: true)
             }
         }
     }
-
-    // MARK: - UI Update
-    private func updateUI() {
-        let newCoinText = "\(viewModel.totalCoins)"
-        if labelTotalCoins.text != newCoinText {
-            animateCoinUpdate(to: newCoinText)
-        }
-        // Treasure-chest visuals removed — chest is hidden in viewDidLoad.
-    }
-
-    @objc private func coinsDidChange() {
-        viewModel.fetchUserStats()
-        updateUI()
-    }
-
-    // MARK: - Actions
-    @objc private func didTapGameCard(_ sender: UITapGestureRecognizer) {
-        guard let card = sender.view else { return }
-
-        animateGameCardTap(card) {
-            switch HomeGame(rawValue: card.tag) {
-            case .poker:
-                self.openPokerGame()
-            case .teenDoPaanch:
-                self.openTeenDoPaanchGame()
-            case .none:
-                break
-            }
-        }
-    }
-
-    private func openPokerGame() {
-        let pokerVC = MenuViewController()
-        pokerVC.modalPresentationStyle = .fullScreen
-
-        if let navigationController = navigationController {
-            navigationController.pushViewController(pokerVC, animated: true)
-        } else {
-            present(pokerVC, animated: true)
-        }
-    }
-
-    private func openTeenDoPaanchGame() {
-        let entry = TDPEntryViewController()
-        if let navigationController = navigationController {
-            navigationController.pushViewController(entry, animated: true)
-        } else {
-            entry.modalPresentationStyle = .fullScreen
-            present(entry, animated: true)
-        }
-    }
-
-    private func openJackarooGame() {
-        let menu = JackarooMenuViewController()
-        if let navigationController = navigationController {
-            navigationController.pushViewController(menu, animated: true)
-        } else {
-            menu.modalPresentationStyle = .fullScreen
-            present(menu, animated: true)
-        }
-    }
-
-    // Daily-spin entry points retired.
-    // private func openDailySpinGame() {
-    //     performSegue(withIdentifier: K.toSlotVC, sender: nil)
-    // }
-
-    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
-        super.prepare(for: segue, sender: sender)
-    }
-
-    // @objc private func didTapTreasureChest() {
-    //     animateTreasureChestTap {
-    //         if self.viewModel.canSpinForCoins {
-    //             self.showDailySpinPrompt()
-    //         } else {
-    //             self.showNoSpinsAlert()
-    //         }
-    //     }
-    // }
-
-    // MARK: - Animations
-    private func animateGameCardTap(_ view: UIView, completion: @escaping () -> Void) {
-        UIView.animate(withDuration: 0.1, animations: {
-            view.transform = CGAffineTransform(scaleX: 0.95, y: 0.95).rotated(by: -0.02)
-        }) { _ in
-            UIView.animate(withDuration: 0.15, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.8) {
-                view.transform = CGAffineTransform(scaleX: 1.05, y: 1.05)
-            } completion: { _ in
-                UIView.animate(withDuration: 0.1) {
-                    view.transform = .identity
-                } completion: { _ in
-                    completion()
-                }
-            }
-        }
-    }
-
-    // Treasure-chest tap animation retired with the daily-spin module.
-    // private func animateTreasureChestTap(completion: @escaping () -> Void) {
-    //     let shakeAnimation = CAKeyframeAnimation(keyPath: "transform.rotation.z")
-    //     shakeAnimation.values = [0, -0.1, 0.1, -0.05, 0.05, 0]
-    //     shakeAnimation.duration = 0.3
-    //     shakeAnimation.repeatCount = 1
-    //
-    //     UIView.animate(withDuration: 0.1, animations: {
-    //         self.treasureChestImage.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-    //     }) { _ in
-    //         self.treasureChestImage.layer.add(shakeAnimation, forKey: "shake")
-    //         UIView.animate(withDuration: 0.2) {
-    //             self.treasureChestImage.transform = .identity
-    //         } completion: { _ in
-    //             completion()
-    //         }
-    //     }
-    // }
-
-    private func animateCoinUpdate(to newText: String) {
-        UIView.animate(withDuration: 0.15, animations: {
-            self.labelTotalCoins.transform = CGAffineTransform(scaleX: 1.2, y: 1.2)
-            self.labelTotalCoins.alpha = 0.7
-        }) { _ in
-            self.labelTotalCoins.text = newText
-            self.labelTotalCoins.font = UIFont(name: "Pocket Monk", size: 30)
-            UIView.animate(withDuration: 0.2, delay: 0, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5) {
-                self.labelTotalCoins.transform = .identity
-                self.labelTotalCoins.alpha = 1.0
-            }
-        }
-    }
-
-    // MARK: - Idle Animations
-    private func startIdleAnimations() {
-        for (index, card) in gameCards.enumerated() {
-            animateFloating(card, delay: Double(index))
-        }
-    }
-
-    private func stopIdleAnimations() {
-        gameCards.forEach { $0.layer.removeAllAnimations() }
-    }
-
-    private func animateFloating(_ view: UIView, delay: TimeInterval) {
-        UIView.animate(withDuration: 2.0, delay: delay, options: [.repeat, .autoreverse, .allowUserInteraction]) {
-            view.transform = CGAffineTransform(translationX: 0, y: -8)
-        }
-    }
-
-    // MARK: - Visual Effects (Daily-spin glow retired)
-    // private func addGlowEffect(to view: UIView) {
-    //     view.layer.shadowColor = UIColor.systemYellow.cgColor
-    //     view.layer.shadowRadius = 10
-    //     view.layer.shadowOpacity = 0.6
-    //     view.layer.shadowOffset = .zero
-    // }
-    //
-    // private func removeGlowEffect(from view: UIView) {
-    //     view.layer.shadowOpacity = 0
-    // }
-
-    // MARK: - Daily Spins (retired)
-    // private func showDailySpinPrompt() {
-    //     guard viewModel.canSpinForCoins else {
-    //         showNoSpinsAlert()
-    //         return
-    //     }
-    //
-    //     let remaining = viewModel.remainingDailySpins
-    //     let noun = remaining == 1 ? "spin" : "spins"
-    //     let alert = UIAlertController(
-    //         title: "Daily Spins",
-    //         message: "Spin to collect free virtual coins.\n\(remaining) \(noun) available today.\n\nCoins have no cash value.",
-    //         preferredStyle: .alert
-    //     )
-    //
-    //     let spinAction = UIAlertAction(title: "Go Spin", style: .default) { _ in
-    //         self.openDailySpinGame()
-    //     }
-    //     alert.addAction(spinAction)
-    //     alert.addAction(UIAlertAction(title: "Later", style: .cancel))
-    //     alert.preferredAction = spinAction
-    //
-    //     present(alert, animated: true)
-    // }
-    //
-    // private func showNoSpinsAlert() {
-    //     let alert = UIAlertController(
-    //         title: "Daily Spins",
-    //         message: "No spins left today. Come back tomorrow.",
-    //         preferredStyle: .alert
-    //     )
-    //     alert.addAction(UIAlertAction(title: "OK", style: .default))
-    //     present(alert, animated: true)
-    // }
 }

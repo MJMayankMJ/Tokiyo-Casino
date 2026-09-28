@@ -1,59 +1,59 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24506" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="01J-lp-oVM">
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="24506" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="YES" colorMatched="YES" initialViewController="launch-vc">
     <device id="retina6_12" orientation="portrait" appearance="light"/>
     <dependencies>
         <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="24504"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
         <capability name="Safe area layout guides" minToolsVersion="9.0"/>
-        <capability name="System colors in document resources" minToolsVersion="11.0"/>
         <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
     </dependencies>
     <scenes>
-        <!--View Controller-->
-        <scene sceneID="EHf-IW-A2E">
+        <scene sceneID="launch-scene">
             <objects>
-                <viewController id="01J-lp-oVM" sceneMemberID="viewController">
-                    <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
-                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                <viewController id="launch-vc" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="launch-view">
+                        <rect key="frame" x="0" y="0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" spacing="8" translatesAutoresizingMaskIntoConstraints="NO" id="hfT-Z3-BnN">
-                                <rect key="frame" x="100" y="348" width="193" height="156"/>
-                                <constraints>
-                                    <constraint firstAttribute="width" relation="lessThanOrEqual" constant="360" id="iPd-w0-cap"/>
-                                </constraints>
+                            <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" alignment="center" spacing="14" translatesAutoresizingMaskIntoConstraints="NO" id="brand-stack">
+                                <rect key="frame" x="96" y="316" width="201" height="200"/>
                                 <subviews>
-                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="TokiyoCards" translatesAutoresizingMaskIntoConstraints="NO" id="k3T-Lu-ZrG">
-                                        <rect key="frame" x="0.0" y="0.0" width="193" height="119"/>
+                                    <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" image="TokiyoMark" translatesAutoresizingMaskIntoConstraints="NO" id="brand-mark">
+                                        <rect key="frame" x="55" y="0" width="90" height="108"/>
                                         <constraints>
-                                            <constraint firstAttribute="width" secondItem="k3T-Lu-ZrG" secondAttribute="height" multiplier="187:115" id="B6E-Mo-01h"/>
+                                            <constraint firstAttribute="width" constant="90" id="mark-width"/>
+                                            <constraint firstAttribute="height" constant="108" id="mark-height"/>
                                         </constraints>
                                     </imageView>
-                                    <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="Ellipse" translatesAutoresizingMaskIntoConstraints="NO" id="hdP-Ym-hHI">
-                                        <rect key="frame" x="0.0" y="127" width="193" height="29"/>
-                                    </imageView>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" text="tokiyo" textAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="brand-name">
+                                        <rect key="frame" x="36" y="122" width="129" height="50"/>
+                                        <fontDescription key="fontDescription" type="system" weight="bold" pointSize="42"/>
+                                        <color key="textColor" name="HomeInk"/>
+                                    </label>
+                                    <label opaque="NO" userInteractionEnabled="NO" contentMode="left" text="C A R D S" textAlignment="center" translatesAutoresizingMaskIntoConstraints="NO" id="brand-cards">
+                                        <rect key="frame" x="65" y="186" width="71" height="14"/>
+                                        <fontDescription key="fontDescription" type="system" weight="semibold" pointSize="11"/>
+                                        <color key="textColor" name="HomeSoftInk"/>
+                                    </label>
                                 </subviews>
                             </stackView>
                         </subviews>
-                        <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
-                        <color key="backgroundColor" systemColor="systemYellowColor"/>
+                        <viewLayoutGuide key="safeArea" id="launch-safe"/>
+                        <color key="backgroundColor" name="HomePage"/>
                         <constraints>
-                            <constraint firstItem="hfT-Z3-BnN" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="8Ml-21-i9e"/>
-                            <constraint firstItem="hfT-Z3-BnN" firstAttribute="leading" secondItem="6Tk-OE-BBY" secondAttribute="leading" constant="100" priority="999" id="b0q-tG-liy"/>
-                            <constraint firstAttribute="trailing" secondItem="hfT-Z3-BnN" secondAttribute="trailing" constant="100" priority="999" id="gVR-xv-zos"/>
-                            <constraint firstItem="hfT-Z3-BnN" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="vZQ-0x-EnG"/>
+                            <constraint firstItem="brand-stack" firstAttribute="centerX" secondItem="launch-view" secondAttribute="centerX" id="brand-center-x"/>
+                            <constraint firstItem="brand-stack" firstAttribute="centerY" secondItem="launch-view" secondAttribute="centerY" constant="-10" id="brand-center-y"/>
                         </constraints>
                     </view>
                 </viewController>
-                <placeholder placeholderIdentifier="IBFirstResponder" id="iYj-Kq-Ea1" userLabel="First Responder" sceneMemberID="firstResponder"/>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="launch-responder" sceneMemberID="firstResponder"/>
             </objects>
-            <point key="canvasLocation" x="52.671755725190835" y="374.64788732394368"/>
         </scene>
     </scenes>
     <resources>
-        <image name="Ellipse" width="251" height="29"/>
-        <image name="TokiyoCards" width="534" height="327"/>
-        <systemColor name="systemYellowColor">
-            <color red="1" green="0.80000000000000004" blue="0.0" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-        </systemColor>
+        <image name="TokiyoMark" width="80" height="96"/>
+        <namedColor name="HomePage"><color red="0.945098" green="0.909804" blue="0.823529" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></namedColor>
+        <namedColor name="HomeInk"><color red="0.121569" green="0.101961" blue="0.070588" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></namedColor>
+        <namedColor name="HomeSoftInk"><color red="0.290196" green="0.258824" blue="0.192157" alpha="1" colorSpace="custom" customColorSpace="sRGB"/></namedColor>
     </resources>
 </document>
