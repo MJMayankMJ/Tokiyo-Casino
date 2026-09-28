@@ -1,0 +1,182 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@700&family=Playfair+Display:wght@800&display=swap">
+<style>
+  html, body { margin: 0; background: transparent; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<div id="out"></div>
+<script>
+const P = new URLSearchParams(location.search);
+const piece = P.get('piece') || 'icon';
+const mode = P.get('mode') || 'light';
+const dark = mode === 'dark';
+const tint = mode === 'tinted';
+const size = +(P.get('size') || 1024);
+
+const C = {
+  outline: '#3A1C11',
+  outlineDeep: '#2A120A',
+  rim: dark ? '#6A402B' : null,
+  face1: '#FFFFFF', face2: '#FFF0F8',
+  side1: '#F4D6EE', side2: '#D6A2D2',
+  card1: dark ? '#F6EEE1' : '#FFFEFA',
+  card2: dark ? '#E4D6BF' : '#F3E8D4',
+  cardEdge: dark ? '#CDBB9C' : '#E2D0B1',
+  frame: dark ? '#DCCAAD' : '#EADCC3',
+  red1: '#F0473B', red2: '#C41E1F',
+  blk1: '#3A3434', blk2: '#121010',
+  bg1: dark ? '#33271F' : '#FFF5E0',
+  bg2: dark ? '#120D0A' : '#F1D9AC',
+  wm: dark ? 'rgba(255, 210, 150, 0.075)' : 'rgba(206, 150, 78, 0.20)',
+  cardShadow: dark ? 'rgba(0,0,0,0.55)' : 'rgba(112, 70, 28, 0.30)',
+  wordShadow: dark ? 'rgba(0,0,0,0.6)' : 'rgba(96, 52, 20, 0.30)',
+};
+
+const SPADE = "M50 4 C40 20 8 36 8 58 C8 74 20 84 34 84 C41 84 46 80 48 75 C47 85 43 92 34 96 L66 96 C57 92 53 85 52 75 C54 80 59 84 66 84 C80 84 92 74 92 58 C92 36 60 20 50 4 Z";
+const HEART = "M50 93 C21 72 3 54 3 32 C3 15 15 5 29 5 C39 5 46 11 50 20 C54 11 61 5 71 5 C85 5 97 15 97 32 C97 54 79 72 50 93 Z";
+const DIAMOND = "M50 1 Q63 28 90 50 Q63 72 50 99 Q37 72 10 50 Q37 28 50 1 Z";
+const CLUB = "M50 6 C63 6 72 16 72 28 C72 33 70 37 68 40 C71 39 74 38 77 38 C89 38 98 48 98 60 C98 72 89 82 77 82 C67 82 59 76 55 67 C55 77 59 87 68 95 L32 95 C41 87 45 77 45 67 C41 76 33 82 23 82 C11 82 2 72 2 60 C2 48 11 38 23 38 C26 38 29 39 32 40 C30 37 28 33 28 28 C28 16 37 6 50 6 Z";
+const SPARK = "M0 -1 C0.1 -0.28 0.28 -0.1 1 0 C0.28 0.1 0.1 0.28 0 1 C-0.1 0.28 -0.28 0.1 -1 0 C-0.28 -0.1 -0.1 -0.28 0 -1 Z";
+
+function pip(d, cx, cy, s, fill) {
+  return `<path d="${d}" transform="translate(${cx - s / 2} ${cy - s / 2}) scale(${s / 100})" fill="${fill}"/>`;
+}
+
+const SUITS = { A: [SPADE, 'url(#blk)', C.blk2], K: [HEART, 'url(#red)', C.red2], Q: [DIAMOND, 'url(#red)', C.red2] };
+
+// One card, centred on 0,0, unrotated. `pipAt` places the big suit where it stays visible in the fan.
+function card(w, h, idx, pipAt, pipSize) {
+  const [d, fill, flat] = SUITS[idx];
+  const r = w * 0.105;
+  const inset = w * 0.058;
+  return `
+    <rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" rx="${r}" fill="url(#cardFace)" stroke="${C.cardEdge}" stroke-width="${w * 0.009}"/>
+    <rect x="${-w / 2 + inset}" y="${-h / 2 + inset}" width="${w - inset * 2}" height="${h - inset * 2}" rx="${r * 0.62}" fill="none" stroke="${C.frame}" stroke-width="${w * 0.011}"/>
+    <text x="${-w / 2 + w * 0.215}" y="${-h / 2 + w * 0.335}" font-family="Playfair Display" font-weight="800" font-size="${w * 0.3}" text-anchor="middle" fill="${flat}">${idx}</text>
+    ${pip(d, pipAt[0], pipAt[1], pipSize, fill)}`;
+}
+
+const DEFS = `
+  <defs>
+    <linearGradient id="cardFace" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.card1}"/><stop offset="1" stop-color="${C.card2}"/></linearGradient>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.red1}"/><stop offset="1" stop-color="${C.red2}"/></linearGradient>
+    <linearGradient id="blk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.blk1}"/><stop offset="1" stop-color="${C.blk2}"/></linearGradient>
+    <linearGradient id="face" x1="0" y1="0" x2="0" y2="1"><stop offset="0.35" stop-color="${C.face1}"/><stop offset="1" stop-color="${C.face2}"/></linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.side1}"/><stop offset="1" stop-color="${C.side2}"/></linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.42" r="0.75"><stop offset="0" stop-color="${C.bg1}"/><stop offset="1" stop-color="${C.bg2}"/></radialGradient>
+    <filter id="cardShadow" x="-30%" y="-30%" width="160%" height="160%"><feDropShadow dx="0" dy="SHADOW_DY" stdDeviation="SHADOW_BLUR" flood-color="${C.cardShadow}"/></filter>
+    <filter id="wordShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="WORD_DY" stdDeviation="WORD_BLUR" flood-color="${C.wordShadow}"/></filter>
+  </defs>`;
+
+// Fan geometry in icon units (1024 canvas).
+const FAN = {
+  side: [286, 400], centre: [318, 446],
+  left: { x: 262, y: 410, r: -14 }, right: { x: 762, y: 410, r: 14 }, mid: { x: 512, y: 366, r: 0 },
+};
+
+function fan(ox = 0, oy = 0, k = 1) {
+  const s = FAN.side, c = FAN.centre;
+  const g = (p, w, h, idx, at, ps) =>
+    `<g transform="translate(${ox + p.x * k} ${oy + p.y * k}) rotate(${p.r}) scale(${k})" filter="url(#cardShadow)">${card(w, h, idx, at, ps)}</g>`;
+  return g(FAN.left, s[0], s[1], 'A', [-30, 44], 128)
+       + g(FAN.right, s[0], s[1], 'Q', [34, 44], 120)
+       + g(FAN.mid, c[0], c[1], 'K', [0, 30], 178);
+}
+
+// ToKiyo: bouncy letters, white faces on a pink edge, one dark outline around both.
+const LETTERS = [
+  { ch: 'T', r: -7, dy: -10, s: 1.0 },
+  { ch: 'o', r: 4, dy: 10, s: 0.98 },
+  { ch: 'K', r: -4, dy: -12, s: 1.05 },
+  { ch: 'i', r: 4, dy: 6, s: 1.0 },
+  { ch: 'y', r: -3, dy: 10, s: 1.0 },
+  { ch: 'o', r: 7, dy: -2, s: 0.98 },
+];
+
+const DOT_Y = 0.80, DOT_R = 0.088;
+
+function measure(ch, F) {
+  const cv = measure.cv || (measure.cv = document.createElement('canvas').getContext('2d'));
+  cv.font = `700 ${F}px Fredoka`;
+  return cv.measureText(ch).width;
+}
+
+function word(cx, baseline, F) {
+  const track = -0.012 * F;
+  const widths = LETTERS.map(l => measure(l.ch, F) * l.s);
+  const total = widths.reduce((a, b) => a + b, 0) + track * (LETTERS.length - 1);
+  let x = cx - total / 2;
+  const O = 0.15 * F;        // outline width (half outside the glyph)
+  const E = 0.075 * F;       // pink edge depth
+  const layers = { rim: [], outline: [], side: [], face: [] };
+  LETTERS.forEach((l, i) => {
+    const w = widths[i];
+    const tx = x + w / 2, ty = baseline + l.dy;
+    // The i is drawn dotless with its own round dot, so the pink edge can't fill the gap.
+    const t = (dy, attrs) => l.ch === 'i'
+      ? `<text x="0" y="${dy}" text-anchor="middle" font-family="Fredoka" font-weight="700" font-size="${F}" stroke-linejoin="round" ${attrs}>ı</text>`
+        + `<circle cx="${0.012 * F}" cy="${dy - DOT_Y * F}" r="${DOT_R * F}" ${attrs}/>`
+      : `<text x="0" y="${dy}" text-anchor="middle" font-family="Fredoka" font-weight="700" font-size="${F}" stroke-linejoin="round" ${attrs}>${l.ch}</text>`;
+    const open = `<g transform="translate(${tx} ${ty}) rotate(${l.r}) scale(${l.s})">`;
+    if (C.rim) layers.rim.push(open + [0, E, E + 0.04 * F].map(dy => t(dy, `fill="${C.rim}" stroke="${C.rim}" stroke-width="${O + 0.06 * F}"`)).join('') + '</g>');
+    layers.outline.push(open
+      + t(E + 0.045 * F, `fill="${C.outlineDeep}" stroke="${C.outlineDeep}" stroke-width="${O}"`)
+      + [0, E / 2, E].map(dy => t(dy, `fill="${C.outline}" stroke="${C.outline}" stroke-width="${O}"`)).join('')
+      + '</g>');
+    layers.side.push(open + [E * 0.5, E].map(dy => t(dy, `fill="url(#side)"`)).join('') + '</g>');
+    layers.face.push(open + t(0, `fill="url(#face)"`) + '</g>');
+    x += w + track;
+  });
+  return `<g filter="url(#wordShadow)">${layers.rim.join('')}${layers.outline.join('')}</g>${layers.side.join('')}${layers.face.join('')}`;
+}
+
+function background() {
+  const m = (d, x, y, s, r) => `<g transform="translate(${x} ${y}) rotate(${r})">${pip(d, 0, 0, s, C.wm)}</g>`;
+  const spark = (x, y, s) => `<path d="${SPARK}" transform="translate(${x} ${y}) scale(${s})" fill="${C.wm}"/>`;
+  const dot = (x, y, r) => `<circle cx="${x}" cy="${y}" r="${r}" fill="${C.wm}"/>`;
+  return `<rect width="1024" height="1024" fill="url(#bg)"/>`
+    + m(SPADE, 150, 190, 210, -14) + m(CLUB, 880, 196, 190, 12) + m(HEART, 930, 690, 120, 16) + m(DIAMOND, 92, 690, 96, -10)
+    + spark(275, 118, 26) + spark(80, 560, 22) + spark(140, 930, 26) + spark(960, 470, 18) + spark(700, 110, 16)
+    + dot(860, 95, 9) + dot(90, 440, 8) + dot(930, 900, 9) + dot(610, 960, 7);
+}
+
+function svg(w, h, vb, body, shadow) {
+  const defs = DEFS.replace('SHADOW_DY', shadow.dy).replace('SHADOW_BLUR', shadow.blur)
+                   .replace('WORD_DY', shadow.wdy).replace('WORD_BLUR', shadow.wblur);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="${vb}">${defs}${body}</svg>`;
+}
+
+async function build() {
+  await Promise.all([document.fonts.load('700 100px Fredoka'), document.fonts.load('800 100px "Playfair Display"')]);
+  await document.fonts.ready;
+  let out = '';
+  const S = { dy: 12, blur: 16, wdy: 14, wblur: 12 };
+  if (piece === 'icon') {
+    out = svg(size, size, '0 0 1024 1024', background() + fan(0, -6) + word(512, 800, 238), S);
+  } else if (piece === 'logo') {
+    // Icon composition without the tile: launch screen and big lockups.
+    out = svg(size, size, '0 20 1024 1024', fan(0, -6) + word(512, 800, 238), S);
+  } else if (piece.startsWith('card')) {
+    const idx = piece.slice(4);
+    const [w, h] = idx === 'K' ? FAN.centre : FAN.side;
+    const at = { A: [-30, 44], Q: [34, 44], K: [0, 30] }[idx];
+    const ps = { A: 128, Q: 120, K: 178 }[idx];
+    out = svg(size, size * h / w, `${-w / 2} ${-h / 2} ${w} ${h}`, card(w, h, idx, at, ps), S);
+  } else if (piece === 'word') {
+    out = svg(size, size * 0.5, '0 480 1024 512', word(512, 800, 238), S);
+  } else if (piece === 'header') {
+    // A mock of the in-app lockup: fan left, word right (for review only).
+    out = svg(size, size * 0.3, '0 0 1400 420', `<g transform="translate(-40 -60) scale(0.48)">${fan()}</g>` + `<g transform="translate(-40 -445)">${word(900, 800, 238)}</g>`, S);
+  }
+  document.getElementById('out').innerHTML = out;
+  document.title = 'done';
+}
+build();
+</script>
+</body>
+</html>

@@ -81,7 +81,7 @@ final class HomeViewController: UIViewController {
             scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             content.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 12),
-            content.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -24),
+            content.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -16),
             content.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: HomeDesign.pageInset),
             content.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -HomeDesign.pageInset),
             content.centerXAnchor.constraint(equalTo: scroll.frameLayoutGuide.centerXAnchor),
@@ -90,18 +90,11 @@ final class HomeViewController: UIViewController {
         ])
 
         content.addArrangedSubview(makeHeader())
-        let intro = UIStackView()
-        intro.axis = .vertical
-        intro.spacing = 8
-        let eyebrow = HomeDesign.label("THE GOOD HAND CLUB", size: 10, weight: .semibold, style: .caption2,
-                                       color: TDPTheme.accent)
-        eyebrow.attributedText = NSAttributedString(string: eyebrow.text ?? "", attributes: [.kern: 2])
-        let title = HomeDesign.label("Pick your table.", size: 34, weight: .semibold, style: .largeTitle)
-        title.accessibilityTraits = .header
-        let subtitle = HomeDesign.label("A few cards. A little friendly competition.", size: 14,
-                                        style: .subheadline, color: TDPTheme.inkSoft)
-        [eyebrow, title, subtitle].forEach { intro.addArrangedSubview($0) }
-        content.addArrangedSubview(intro)
+        // Equal flexible space above and below keeps the games centred between the
+        // header and the disclaimer; both collapse once the library outgrows the screen.
+        let above = Self.flexibleSpace()
+        let below = Self.flexibleSpace()
+        content.addArrangedSubview(above)
 
         games.axis = .vertical
         games.spacing = HomeDesign.cardGap
@@ -112,20 +105,23 @@ final class HomeViewController: UIViewController {
         }
         updateGameGrid(columns: 1)
         content.addArrangedSubview(games)
-
-        let footer = UIStackView()
-        footer.axis = .vertical
-        footer.alignment = .center
-        footer.spacing = 10
-        let offline = HomeDesign.label("Solo or with friends · Always a good time", size: 12,
-                                       style: .caption1, color: TDPTheme.inkSoft)
-        offline.textAlignment = .center
+        content.addArrangedSubview(below)
+        content.setCustomSpacing(0, after: above)
+        content.setCustomSpacing(0, after: games)
+        below.heightAnchor.constraint(equalTo: above.heightAnchor).isActive = true
         let disclaimer = HomeDesign.label("For entertainment only.\nVirtual chips have no real-world value.", size: 11,
                                            style: .caption2, color: TDPTheme.inkSoft)
         disclaimer.textAlignment = .center
-        footer.addArrangedSubview(offline)
-        footer.addArrangedSubview(disclaimer)
-        content.addArrangedSubview(footer)
+        content.addArrangedSubview(disclaimer)
+        content.heightAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.heightAnchor,
+                                        constant: -(12 + 16)).isActive = true
+    }
+
+    private static func flexibleSpace() -> UIView {
+        let space = UIView()
+        space.setContentHuggingPriority(UILayoutPriority(1), for: .vertical)
+        space.setContentCompressionResistancePriority(UILayoutPriority(1), for: .vertical)
+        return space
     }
 
     private func updateGameGrid(columns: Int) {
@@ -155,31 +151,10 @@ final class HomeViewController: UIViewController {
     private func makeHeader() -> UIView {
         header.alignment = .center
         header.spacing = 12
-        let brand = UIStackView()
-        brand.alignment = .center
-        brand.spacing = 8
-        let mark = UIImageView(image: UIImage(named: "TokiyoMark"))
-        mark.contentMode = .scaleAspectFit
-        mark.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([mark.widthAnchor.constraint(equalToConstant: 34), mark.heightAnchor.constraint(equalToConstant: 42)])
-        let words = UIStackView()
-        words.axis = .vertical
-        words.spacing = 0
-        let name = HomeDesign.label("tokiyo", size: 24, weight: .bold, style: .title2)
-        let cards = HomeDesign.label("C A R D S", size: 8, weight: .semibold, style: .caption2, color: TDPTheme.inkSoft)
-        // This is a wordmark, not body copy; retain the compact brand lockup.
-        name.font = .systemFont(ofSize: 24, weight: .bold)
-        name.adjustsFontForContentSizeCategory = false
-        name.numberOfLines = 1
-        cards.font = .systemFont(ofSize: 8, weight: .semibold)
-        cards.adjustsFontForContentSizeCategory = false
-        cards.numberOfLines = 1
-        words.addArrangedSubview(name)
-        words.addArrangedSubview(cards)
-        brand.addArrangedSubview(mark)
-        brand.addArrangedSubview(words)
-        brand.isAccessibilityElement = true
-        brand.accessibilityLabel = "Tokiyo Cards"
+        // The app icon's hand and wordmark; a fixed-size lockup, not body copy.
+        let brand = TokiyoLogoView()
+        brand.setContentCompressionResistancePriority(.required, for: .horizontal)
+        brand.setContentHuggingPriority(.required, for: .horizontal)
         header.addArrangedSubview(brand)
         headerSpacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
         header.addArrangedSubview(headerSpacer)

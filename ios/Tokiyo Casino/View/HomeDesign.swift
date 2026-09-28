@@ -22,13 +22,6 @@ enum HomeDesign {
     }
 }
 
-private extension UILabel {
-    // Kept local to this file; the intro's tracking uses its own attributed copy.
-    func track(_ amount: CGFloat) {
-        attributedText = NSAttributedString(string: text ?? "", attributes: [.kern: amount])
-    }
-}
-
 final class HomeGameButton: UIControl {
     let game: HomeGameItem
     private let cardPreview: HomeCardPreview
@@ -55,8 +48,6 @@ final class HomeGameButton: UIControl {
         cardPreview = HomeCardPreview(kind: game.preview)
         let title = game.title
         let subtitle = game.subtitle
-        let detail = game.detail
-        let symbol = game.symbol
         let imageName = game.imageName
         let identifier = game.id
         super.init(frame: .zero)
@@ -97,50 +88,42 @@ final class HomeGameButton: UIControl {
         // Cards and their effects are above both the character and its fade.
         addSubview(cardPreview)
 
+        // Name, subtitle and Play sit together, centred beside the art.
         copy.axis = .vertical
         copy.alignment = .leading
-        copy.spacing = 5
+        copy.spacing = 4
         copy.isUserInteractionEnabled = false
         copy.translatesAutoresizingMaskIntoConstraints = false
         addSubview(copy)
-        let category = UIStackView()
-        category.alignment = .center
-        category.spacing = 6
-        let suit = UIImageView(image: UIImage(systemName: symbol))
-        suit.tintColor = TDPTheme.accent
-        suit.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([suit.widthAnchor.constraint(equalToConstant: 12), suit.heightAnchor.constraint(equalToConstant: 14)])
-        let mode = HomeDesign.label("CARD TABLE", size: 9, weight: .semibold, style: .caption2, color: TDPTheme.accent)
-        mode.track(1.2)
-        category.addArrangedSubview(suit)
-        category.addArrangedSubview(mode)
-        copy.addArrangedSubview(category)
-        copy.setCustomSpacing(10, after: category)
-        let name = HomeDesign.label(title, size: 32, weight: .semibold, style: .title1)
-        copy.addArrangedSubview(name)
-        copy.addArrangedSubview(HomeDesign.label(subtitle, size: 12, weight: .medium, style: .caption1, color: TDPTheme.inkSoft))
-        let description = HomeDesign.label(detail, size: 12, style: .caption1, color: TDPTheme.inkSoft)
-        copy.addArrangedSubview(description)
-        copy.setCustomSpacing(15, after: description)
+        copy.addArrangedSubview(HomeDesign.label(title, size: 34, weight: .semibold, style: .title1))
+        let tagline = HomeDesign.label(subtitle, size: 14, weight: .medium, style: .subheadline, color: TDPTheme.inkSoft)
+        copy.addArrangedSubview(tagline)
+        copy.setCustomSpacing(18, after: tagline)
 
+        // An ink capsule in the title's colour: quiet, and it inverts in dark mode.
         let play = UIStackView()
         play.alignment = .center
-        play.spacing = 14
+        play.spacing = 7
         play.isLayoutMarginsRelativeArrangement = true
-        play.layoutMargins = UIEdgeInsets(top: 10, left: 15, bottom: 10, right: 13)
-        play.backgroundColor = TDPTheme.primary
-        play.layer.cornerRadius = 18
-        play.addArrangedSubview(HomeDesign.label("Play", size: 13, weight: .semibold, style: .subheadline, color: TDPTheme.primaryInk))
-        let arrow = UIImageView(image: UIImage(systemName: "arrow.up.right", withConfiguration: UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)))
-        arrow.tintColor = TDPTheme.primaryInk
-        play.addArrangedSubview(arrow)
+        play.layoutMargins = UIEdgeInsets(top: 10, left: 16, bottom: 10, right: 19)
+        play.backgroundColor = TDPTheme.ink
+        play.layer.cornerRadius = 20
+        play.layer.cornerCurve = .continuous
+        let glyph = UIImageView(image: UIImage(systemName: "play.fill",
+                                               withConfiguration: UIImage.SymbolConfiguration(pointSize: 11, weight: .bold)))
+        glyph.tintColor = TDPTheme.raised
+        play.addArrangedSubview(glyph)
+        play.addArrangedSubview(HomeDesign.label("Play", size: 15, weight: .semibold, style: .subheadline, color: TDPTheme.raised))
         copy.addArrangedSubview(play)
         copyWidth = copy.widthAnchor.constraint(equalTo: widthAnchor, multiplier: 0.53, constant: -HomeDesign.cardInset)
         accessibleCopyWidth = copy.widthAnchor.constraint(equalTo: widthAnchor, constant: -HomeDesign.cardInset * 2)
+        let centred = copy.centerYAnchor.constraint(equalTo: centerYAnchor)
+        centred.priority = .defaultHigh
         NSLayoutConstraint.activate([
             copy.leadingAnchor.constraint(equalTo: leadingAnchor, constant: HomeDesign.cardInset),
-            copy.topAnchor.constraint(equalTo: topAnchor, constant: HomeDesign.cardInset),
+            copy.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: HomeDesign.cardInset),
             copy.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -HomeDesign.cardInset),
+            centred,
             copyWidth
         ])
         // One accessible button, including its decorative Play affordance.

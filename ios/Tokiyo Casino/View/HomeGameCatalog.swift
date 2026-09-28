@@ -6,18 +6,16 @@ struct HomeGameItem {
     let id: String
     let title: String
     let subtitle: String
-    let detail: String
-    let symbol: String
     let imageName: String
     let preview: HomeCardPreview.Kind
     let makeViewController: () -> UIViewController
 
     static let catalog: [HomeGameItem] = [
         .init(id: "home.poker", title: "Poker", subtitle: "Texas Hold’em",
-              detail: "Read the room.\nPlay your hand.", symbol: "suit.spade.fill", imageName: "HomePokerGirl",
+              imageName: "HomePokerGirl",
               preview: .royalFlush, makeViewController: { MenuViewController() }),
         .init(id: "home.532", title: "5 · 3 · 2", subtitle: "Teen Do Paanch",
-              detail: "Three players.\nEvery trick counts.", symbol: "suit.club.fill", imageName: "HomeMarin",
+              imageName: "HomeMarin",
               preview: .firstCut, makeViewController: { TDPEntryViewController() })
     ]
 }
