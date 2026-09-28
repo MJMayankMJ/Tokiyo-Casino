@@ -45,6 +45,8 @@ final class TDPTutorialViewController: UIViewController, UIScrollViewDelegate {
 
         backButton.addTarget(self, action: #selector(didTapBack), for: .touchUpInside)
         nextButton.addTarget(self, action: #selector(didTapNext), for: .touchUpInside)
+        // Keep their natural height; on a tall iPad the spare room belongs to the pages.
+        [backButton, nextButton].forEach { $0.setContentHuggingPriority(.required, for: .vertical) }
         let buttons = UIStackView(arrangedSubviews: [backButton, nextButton])
         buttons.spacing = 10
         buttons.distribution = .fillEqually
